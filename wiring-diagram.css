@@ -1,0 +1,129 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Yu Gothic UI", "Meiryo", sans-serif;
+  background: #f5f7fb;
+  color: #0f172a;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px 16px 40px;
+}
+
+.lead {
+  margin-top: 0;
+  color: #475569;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #dbe4f0;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.controls {
+  display: grid;
+  gap: 10px;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 220px;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  min-height: 40px;
+  border-radius: 8px;
+}
+
+input,
+select {
+  border: 1px solid #cbd5e1;
+  padding: 8px 10px;
+}
+
+button {
+  border: 0;
+  padding: 8px 12px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #1d4ed8;
+}
+
+article {
+  border-top: 1px dashed #dbe4f0;
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+article:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+pre {
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diagram-wrap {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  overflow: auto;
+}
+
+.legend {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #334155;
+}
+
+.sleeve-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+@media (max-width: 768px) {
+  .button-row {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  label {
+    max-width: 100%;
+  }
+  .sleeve-form {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}

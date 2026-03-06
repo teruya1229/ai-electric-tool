@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>複線図生成エンジン MVP</title>
+    <link rel="stylesheet" href="./wiring-diagram.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>ガミデンキ風 複線図生成エンジン MVP</h1>
+      <p class="lead">片切1灯 / 3路1灯のテンプレ回路を exam / field 表記でSVG表示します。</p>
+
+      <section class="card">
+        <h2>入力エリア</h2>
+        <div class="controls">
+          <label>
+            mode
+            <select id="mode-select">
+              <option value="exam">exam</option>
+              <option value="field">field</option>
+            </select>
+          </label>
+          <div class="button-row">
+            <button id="sample-single-btn" type="button">片切1灯サンプル</button>
+            <button id="sample-threeway-btn" type="button">3路1灯サンプル</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>出力エリア</h2>
+        <article>
+          <h3>グループ化結果</h3>
+          <pre id="group-result"></pre>
+        </article>
+        <article>
+          <h3>warnings</h3>
+          <pre id="warning-result"></pre>
+        </article>
+        <article>
+          <h3>SVG 複線図</h3>
+          <div id="diagram-canvas" class="diagram-wrap"></div>
+          <ul class="legend">
+            <li>L: 黒</li>
+            <li>N: 青</li>
+            <li>返り線(R): 赤</li>
+            <li>渡り線(T1/T2): 水色 / 濃い青</li>
+            <li>接地(E): 緑</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2>スリーブ判定テスト</h2>
+        <div class="sleeve-form">
+          <label>
+            wire16Count
+            <input id="wire16-count" type="number" min="0" value="2" />
+          </label>
+          <label>
+            wire20Count
+            <input id="wire20-count" type="number" min="0" value="0" />
+          </label>
+          <label>
+            wire26Count
+            <input id="wire26-count" type="number" min="0" value="0" />
+          </label>
+          <button id="sleeve-judge-btn" type="button">判定</button>
+        </div>
+        <pre id="sleeve-result"></pre>
+      </section>
+    </main>
+
+    <script type="module" src="./wiring-diagram.js"></script>
+  </body>
+</html>

@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phase1 コンセント増設AI</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Phase1 コンセント増設AI</h1>
+      <p class="lead">
+        木造住宅のコンセント増設工事向け。初心者電気工事士でも使える施工アシスタント。
+      </p>
+      <section class="card">
+        <h2>複線図MVP</h2>
+        <p>ガミデンキ風 複線図生成エンジン（片切1灯 / 3路1灯）を確認できます。</p>
+        <a href="./wiring-diagram.html">複線図プレイグラウンドを開く</a>
+      </section>
+
+      <section class="card">
+        <h2>入力フォーム</h2>
+        <div class="samples">
+          <p class="small-title">サンプル入力</p>
+          <div class="sample-buttons">
+            <button type="button" class="sample-btn" data-sample="light">小負荷の一般ケース</button>
+            <button type="button" class="sample-btn" data-sample="washer">洗濯機コンセント</button>
+            <button type="button" class="sample-btn" data-sample="microwave">電子レンジ（新設回路推奨）</button>
+          </div>
+        </div>
+        <form id="planner-form">
+          <div class="grid">
+            <label>
+              工事場所
+              <input type="text" name="site" placeholder="例: 2階 子供部屋 東側壁面" required />
+            </label>
+
+            <label>
+              増設コンセント数
+              <input type="number" name="outletCount" min="1" value="1" required />
+            </label>
+
+            <label>
+              使用予定機器
+              <input
+                type="text"
+                name="devices"
+                placeholder="例: デスクトップPC、モニター、プリンター"
+                required
+              />
+            </label>
+
+            <label>
+              電源の取り方
+              <select name="powerSource" required>
+                <option value="分電盤から新設">分電盤から新設</option>
+                <option value="既設回路から分岐">既設回路から分岐</option>
+                <option value="現地確認で判断">現地確認で判断</option>
+              </select>
+            </label>
+
+            <label>
+              分電盤の空き
+              <select name="breakerSpace" required>
+                <option value="あり">あり</option>
+                <option value="なし">なし</option>
+                <option value="不明">不明</option>
+              </select>
+            </label>
+
+            <label>
+              建物条件
+              <input type="text" name="building" value="木造住宅" required />
+            </label>
+
+            <label>
+              既設回路の種類
+              <select name="existingCircuit" required>
+                <option value="一般回路">一般回路</option>
+                <option value="専用回路っぽい">専用回路っぽい</option>
+                <option value="専用回路（エアコン）">専用回路（エアコン）</option>
+                <option value="専用回路（電子レンジ）">専用回路（電子レンジ）</option>
+                <option value="専用回路（IH）">専用回路（IH）</option>
+                <option value="不明">不明</option>
+              </select>
+            </label>
+
+            <label>
+              接地の必要性
+              <select name="grounding" required>
+                <option value="必要">必要</option>
+                <option value="不要">不要</option>
+                <option value="不明">不明</option>
+              </select>
+            </label>
+
+            <label>
+              露出配線可否
+              <select name="exposed" required>
+                <option value="不可（隠ぺい優先）">不可（隠ぺい優先）</option>
+                <option value="可">可</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="full">
+            補足メモ
+            <textarea
+              name="memo"
+              rows="4"
+              placeholder="例: 押入れ上から天井裏へアクセス可、壁内に断熱材あり"
+            ></textarea>
+          </label>
+
+          <fieldset class="full checklist">
+            <legend>施工前確認チェック</legend>
+            <label><input type="checkbox" name="precheck" value="分電盤に空きブレーカーがあるか" /> 分電盤に空きブレーカーがあるか</label>
+            <label><input type="checkbox" name="precheck" value="既設コンセントが専用回路ではないか" /> 既設コンセントが専用回路ではないか</label>
+            <label><input type="checkbox" name="precheck" value="既設回路の負荷状況" /> 既設回路の負荷状況</label>
+            <label><input type="checkbox" name="precheck" value="接地が必要な機器か" /> 接地が必要な機器か</label>
+            <label><input type="checkbox" name="precheck" value="無電圧確認を行ったか" /> 無電圧確認を行ったか</label>
+          </fieldset>
+
+          <button type="submit">施工プランを作成</button>
+        </form>
+      </section>
+
+      <section class="card" id="result-card" hidden>
+        <h2>結果表示</h2>
+        <article>
+          <h3>①判定結果</h3>
+          <div id="judgement" class="judgement"></div>
+        </article>
+        <article>
+          <h3>②まず最初にやること</h3>
+          <p id="first-actions" class="multiline"></p>
+        </article>
+        <article>
+          <h3>③判定理由</h3>
+          <p id="judgement-reason" class="multiline"></p>
+        </article>
+        <article>
+          <h3>④工事概要</h3>
+          <p id="overview"></p>
+        </article>
+        <article>
+          <h3>⑤簡易施工図</h3>
+          <pre id="simple-diagram"></pre>
+        </article>
+        <article>
+          <h3>⑥配線ルート</h3>
+          <p id="route" class="route-text"></p>
+          <p id="route-trade-note" class="callout-note" hidden></p>
+        </article>
+        <article>
+          <h3>⑦建築干渉チェック</h3>
+          <ul id="building-interference"></ul>
+        </article>
+        <article>
+          <h3>⑧結線で特に注意すること</h3>
+          <ul id="wiring-cautions"></ul>
+        </article>
+        <article>
+          <h3>⑨完成イメージ図</h3>
+          <pre id="image"></pre>
+        </article>
+        <article>
+          <h3>⑩使用材料</h3>
+          <ul id="materials"></ul>
+        </article>
+        <article>
+          <h3>⑪持参推奨工具・確認道具</h3>
+          <ul id="tools"></ul>
+        </article>
+        <article>
+          <h3>⑫施工手順</h3>
+          <ol id="steps"></ol>
+        </article>
+        <article>
+          <h3>⑬このケースで特に危ないポイント</h3>
+          <ul id="risk-points"></ul>
+        </article>
+        <article>
+          <h3>⑭この工事で起こりやすい現場ミス</h3>
+          <ul id="field-mistakes"></ul>
+        </article>
+        <article>
+          <h3>⑮施工ミス注意点</h3>
+          <ul id="cautions"></ul>
+        </article>
+        <article>
+          <h3>⑯写真で確認したいポイント</h3>
+          <ul id="photo-points"></ul>
+        </article>
+        <article>
+          <h3>⑰追加で確認したいこと</h3>
+          <ul id="extra-checks"></ul>
+        </article>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phase1 3路スイッチAI</title>
+    <link rel="stylesheet" href="./threeway-switch.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Phase1 3路スイッチAI</h1>
+      <p class="lead">
+        3路スイッチ2か所で照明1灯を操作する基本ケース向け。初心者が回路の流れと結線注意を整理するための補助ツール。
+      </p>
+
+      <section class="card">
+        <h2>入力フォーム</h2>
+        <form id="threeway-form">
+          <div class="grid">
+            <label>
+              電源位置
+              <select name="powerPosition" required>
+                <option value="照明側">照明側</option>
+                <option value="スイッチ側">スイッチ側</option>
+                <option value="不明">不明</option>
+              </select>
+            </label>
+
+            <label>
+              照明数
+              <input type="number" name="lightCount" min="1" value="1" required />
+            </label>
+
+            <label>
+              スイッチ数
+              <input type="number" name="switchCount" min="2" value="2" required />
+            </label>
+
+            <label>
+              建物条件
+              <input type="text" name="building" value="木造住宅" required />
+            </label>
+
+            <label>
+              配線方法
+              <select name="wiringMethod" required>
+                <option value="壁内配線（PF管）">壁内配線（PF管）</option>
+                <option value="天井内転がし（VVF）">天井内転がし（VVF）</option>
+                <option value="現場確認で判断">現場確認で判断</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="full">
+            補足メモ
+            <textarea
+              name="memo"
+              rows="4"
+              placeholder="例: 点検口なし、スイッチ間は廊下経由、壁内に断熱材あり"
+            ></textarea>
+          </label>
+
+          <button type="submit">3路スイッチ施工プランを作成</button>
+        </form>
+      </section>
+
+      <section class="card" id="result-card" hidden>
+        <h2>結果表示</h2>
+        <article>
+          <h3>①判定結果</h3>
+          <div id="judgement" class="judgement"></div>
+        </article>
+        <article>
+          <h3>②まず最初にやること</h3>
+          <p id="first-actions" class="multiline"></p>
+        </article>
+        <article>
+          <h3>③回路の流れ</h3>
+          <p id="flow" class="multiline"></p>
+        </article>
+        <article>
+          <h3>④必要な線のイメージ</h3>
+          <ul id="wires"></ul>
+        </article>
+        <article>
+          <h3>⑤簡易結線図</h3>
+          <pre id="diagram"></pre>
+        </article>
+        <article>
+          <h3>⑥配線ルート</h3>
+          <p id="route"></p>
+        </article>
+        <article>
+          <h3>⑦結線で特に注意すること</h3>
+          <ul id="wiring-cautions"></ul>
+        </article>
+        <article>
+          <h3>⑧施工手順</h3>
+          <ol id="steps"></ol>
+        </article>
+        <article>
+          <h3>⑨この工事で起こりやすい現場ミス</h3>
+          <ul id="mistakes"></ul>
+        </article>
+      </section>
+    </main>
+
+    <script src="./threeway-switch.js"></script>
+  </body>
+</html>
