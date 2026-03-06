@@ -21,6 +21,10 @@
  */
 
 const EXAM_LABELS = ["イ", "ロ", "ハ", "ニ", "ホ", "ヘ", "ト", "チ", "リ", "ヌ", "ル", "ヲ"];
+const MODE_LABEL = {
+  exam: "試験モード",
+  field: "現場モード",
+};
 const WIRE_COLORS = {
   L: "#111111",
   N: "#1d4ed8",
@@ -28,6 +32,15 @@ const WIRE_COLORS = {
   T1: "#0ea5e9",
   T2: "#1e40af",
   E: "#16a34a",
+};
+
+const EMPTY_DIAGRAM = {
+  mode: "exam",
+  groups: [],
+  devices: [],
+  wires: [],
+  joints: [],
+  warnings: [],
 };
 
 /** @type {InputDevice[]} */
@@ -95,6 +108,10 @@ function groupDevicesByControlWithWarnings(devices, mode) {
     byControl.set(device.controlId, list);
   });
 
+  if (byControl.size === 0) {
+    warnings.push("controlId付きデバイスがありません。");
+  }
+
   /** @type {CircuitGroup[]} */
   const groups = [];
   [...byControl.entries()]
@@ -109,18 +126,24 @@ function groupDevicesByControlWithWarnings(devices, mode) {
       const switch3wayCount = groupDevices.filter((d) => d.kind === "switch_3way").length;
       const lightCount = groupDevices.filter((d) => d.kind === "light").length;
 
-      if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 1) {
+      if (switchSingleCount === 1 && lightCount === 1 && switch3wayCount === 0) {
         groups.push({ controlId, controlLabel, templateId: "single_switch_1light", devices: groupDevices });
         return;
       }
-      if (switchSingleCount === 0 && switch3wayCount === 2 && lightCount === 1) {
+
+      if (switch3wayCount === 2 && lightCount === 1 && switchSingleCount === 0) {
         groups.push({ controlId, controlLabel, templateId: "three_way_1light", devices: groupDevices });
         return;
       }
 
-      warnings.push(
-        `未対応構成: control=${controlLabel} (single=${switchSingleCount}, threeWay=${switch3wayCount}, light=${lightCount})`
-      );
+      warnings.push(`controlId=${controlId} は 片切1灯/3路1灯 の条件を満たしていません`);
+      if (!(switchSingleCount === 1 && lightCount === 1 && switch3wayCount === 0)) {
+        warnings.push(`controlId=${controlId}: 片切1灯条件 single=${switchSingleCount}, light=${lightCount}, threeWay=${switch3wayCount}`);
+      }
+      if (!(switch3wayCount === 2 && lightCount === 1 && switchSingleCount === 0)) {
+        if (switch3wayCount !== 2) warnings.push(`controlId=${controlId}: switch_3way が2個必要です`);
+        if (lightCount !== 1) warnings.push(`controlId=${controlId}: light が1個必要です`);
+      }
     });
 
   return { groups, warnings };
@@ -216,11 +239,11 @@ function generateDiagram(devices, mode) {
 
   let lightSerial = 1;
   grouped.groups.forEach((group, index) => {
-    const baseY = 40 + index * 220;
+    const baseY = 40 + index * 190;
     const yL = baseY + 20;
-    const yN = baseY + 150;
+    const yN = baseY + 135;
     const powerX = 90;
-    const powerY = baseY + 85;
+    const powerY = baseY + 72;
 
     diagramDevices.push({ id: `power-${index}`, kind: "power", label: "電源", x: powerX, y: powerY });
     wires.push({ id: `bus-l-${group.controlId}`, conductor: "L", points: [{ x: 60, y: yL }, { x: 780, y: yL }] });
@@ -230,20 +253,16 @@ function generateDiagram(devices, mode) {
 
     if (group.templateId === "single_switch_1light") {
       const swX = 320;
-      const swY = baseY + 120;
+      const swY = baseY + 105;
       const lightX = 620;
-      const lightY = baseY + 90;
+      const lightY = baseY + 78;
 
       diagramDevices.push({ id: `sw-${group.controlId}`, kind: "switch_single", label: `SW（${group.controlLabel}）`, x: swX, y: swY });
       diagramDevices.push({ id: `light-${group.controlId}`, kind: "light", label: `R${lightSerial}（${group.controlLabel}）`, x: lightX, y: lightY });
       lightSerial += 1;
 
       wires.push({ id: `l-sw-${group.controlId}`, conductor: "L", points: [{ x: swX, y: yL }, { x: swX, y: swY - 18 }] });
-      wires.push({
-        id: `r-light-${group.controlId}`,
-        conductor: "R",
-        points: [{ x: swX, y: swY + 18 }, { x: swX + 100, y: swY + 18 }, { x: swX + 100, y: lightY }, { x: lightX - 24, y: lightY }],
-      });
+      wires.push({ id: `r-light-${group.controlId}`, conductor: "R", points: [{ x: swX, y: swY + 18 }, { x: swX + 95, y: swY + 18 }, { x: swX + 95, y: lightY }, { x: lightX - 24, y: lightY }] });
       wires.push({ id: `n-light-${group.controlId}`, conductor: "N", points: [{ x: lightX, y: yN }, { x: lightX, y: lightY + 24 }] });
       joints.push(makeJoint(`joint-l-${group.controlId}`, swX, yL, 2, 0, 0));
       joints.push(makeJoint(`joint-n-${group.controlId}`, lightX, yN, 2, 0, 0));
@@ -253,16 +272,18 @@ function generateDiagram(devices, mode) {
     const sws = group.devices
       .filter((d) => d.kind === "switch_3way")
       .sort((a, b) => (a.position || 999) - (b.position || 999));
+
     if (sws.length !== 2) {
-      warnings.push(`control=${group.controlLabel} の3路スイッチ数が不正です。`);
+      warnings.push(`controlId=${group.controlId}: switch_3way が2個必要です`);
       return;
     }
 
     const sw1X = 280;
     const sw2X = 500;
-    const swY = baseY + 105;
+    const swY = baseY + 95;
     const lightX = 700;
-    const lightY = baseY + 85;
+    const lightY = baseY + 78;
+
     diagramDevices.push({ id: `sw1-${group.controlId}`, kind: "switch_3way", label: `SW（${group.controlLabel}）`, x: sw1X, y: swY, meta: { terminals: [0, 1, 3], position: sws[0].position || 1 } });
     diagramDevices.push({ id: `sw2-${group.controlId}`, kind: "switch_3way", label: `SW（${group.controlLabel}）`, x: sw2X, y: swY, meta: { terminals: [0, 1, 3], position: sws[1].position || 2 } });
     diagramDevices.push({ id: `light-${group.controlId}`, kind: "light", label: `R${lightSerial}（${group.controlLabel}）`, x: lightX, y: lightY });
@@ -271,11 +292,7 @@ function generateDiagram(devices, mode) {
     wires.push({ id: `l-sw1-${group.controlId}`, conductor: "L", points: [{ x: sw1X, y: yL }, { x: sw1X, y: swY - 24 }] });
     wires.push({ id: `t1-${group.controlId}`, conductor: "T1", points: [{ x: sw1X + 24, y: swY - 12 }, { x: sw2X - 24, y: swY - 12 }] });
     wires.push({ id: `t2-${group.controlId}`, conductor: "T2", points: [{ x: sw1X + 24, y: swY + 12 }, { x: sw2X - 24, y: swY + 12 }] });
-    wires.push({
-      id: `r-light-${group.controlId}`,
-      conductor: "R",
-      points: [{ x: sw2X, y: swY - 24 }, { x: sw2X + 90, y: swY - 24 }, { x: sw2X + 90, y: lightY }, { x: lightX - 24, y: lightY }],
-    });
+    wires.push({ id: `r-light-${group.controlId}`, conductor: "R", points: [{ x: sw2X, y: swY - 24 }, { x: sw2X + 90, y: swY - 24 }, { x: sw2X + 90, y: lightY }, { x: lightX - 24, y: lightY }] });
     wires.push({ id: `n-light-${group.controlId}`, conductor: "N", points: [{ x: lightX, y: yN }, { x: lightX, y: lightY + 24 }] });
     joints.push(makeJoint(`joint-l-${group.controlId}`, sw1X, yL, 2, 0, 0));
     joints.push(makeJoint(`joint-n-${group.controlId}`, lightX, yN, 2, 0, 0));
@@ -304,67 +321,89 @@ function makeJoint(id, x, y, wire16Count, wire20Count, wire26Count) {
 }
 
 /**
- * @param {GeneratedDiagram} diagram
+ * @param {unknown} raw
+ * @param {DiagramMode} fallbackMode
+ * @returns {GeneratedDiagram}
  */
-function renderDiagram(diagram) {
+function normalizeDiagram(raw, fallbackMode) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  return {
+    mode: typeof source.mode === "string" ? source.mode : fallbackMode,
+    groups: Array.isArray(source.groups) ? source.groups : [],
+    devices: Array.isArray(source.devices) ? source.devices : [],
+    wires: Array.isArray(source.wires) ? source.wires : [],
+    joints: Array.isArray(source.joints) ? source.joints : [],
+    warnings: Array.isArray(source.warnings) ? source.warnings : [],
+  };
+}
+
+/**
+ * @param {GeneratedDiagram} diagram
+ * @param {string} renderError
+ */
+function renderDiagram(diagram, renderError) {
   const canvas = document.getElementById("diagram-canvas");
   if (!canvas) return;
   canvas.innerHTML = "";
 
-  const height = Math.max(260, diagram.groups.length * 220 + 60);
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", `0 0 840 ${height}`);
-  svg.setAttribute("width", "100%");
-  svg.setAttribute("height", `${height}`);
+  svg.setAttribute("viewBox", "0 0 840 360");
+  svg.setAttribute("width", "840");
+  svg.setAttribute("height", "360");
 
   const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
   bg.setAttribute("x", "0");
   bg.setAttribute("y", "0");
   bg.setAttribute("width", "840");
-  bg.setAttribute("height", String(height));
+  bg.setAttribute("height", "360");
   bg.setAttribute("fill", "#f8fafc");
+  bg.setAttribute("stroke", "#cbd5e1");
+  bg.setAttribute("stroke-width", "1");
   svg.appendChild(bg);
 
+  const hasData = diagram.devices.length > 0 || diagram.wires.length > 0;
+  if (!hasData || renderError) {
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", "420");
+    text.setAttribute("y", "180");
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", "18");
+    text.setAttribute("fill", "#475569");
+    text.textContent = renderError || "複線図データなし";
+    svg.appendChild(text);
+    canvas.appendChild(svg);
+    return;
+  }
+
   diagram.wires.forEach((wire) => {
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    const d = wire.points.map((point, i) => `${i === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-    path.setAttribute("d", d);
-    path.setAttribute("stroke", WIRE_COLORS[wire.conductor]);
-    path.setAttribute("stroke-width", "3");
-    path.setAttribute("fill", "none");
-    svg.appendChild(path);
+    const points = wire.points.map((point) => `${point.x},${point.y}`).join(" ");
+    if (!points) return;
+    const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    polyline.setAttribute("points", points);
+    polyline.setAttribute("stroke", WIRE_COLORS[wire.conductor] || "#334155");
+    polyline.setAttribute("stroke-width", "3");
+    polyline.setAttribute("fill", "none");
+    svg.appendChild(polyline);
   });
 
   diagram.joints.forEach((joint) => {
-    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("cx", String(joint.x));
-    circle.setAttribute("cy", String(joint.y));
-    circle.setAttribute("r", "5");
-    circle.setAttribute("fill", "#111827");
-    svg.appendChild(circle);
-
-    if (joint.sleeveInfo && joint.sleeveInfo.length > 0) {
-      const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      txt.setAttribute("x", String(joint.x + 8));
-      txt.setAttribute("y", String(joint.y - 8));
-      txt.setAttribute("font-size", "10");
-      txt.setAttribute("fill", "#334155");
-      txt.textContent = joint.sleeveInfo.join(" / ");
-      svg.appendChild(txt);
-    }
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("cx", String(joint.x));
+    dot.setAttribute("cy", String(joint.y));
+    dot.setAttribute("r", "4");
+    dot.setAttribute("fill", "#111827");
+    svg.appendChild(dot);
   });
 
   diagram.devices.forEach((device) => {
     const width = device.kind === "power" ? 64 : 96;
-    const heightBox = device.kind === "light" ? 44 : 36;
-    const x = device.x - width / 2;
-    const y = device.y - heightBox / 2;
+    const height = device.kind === "light" ? 44 : 36;
 
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", String(x));
-    rect.setAttribute("y", String(y));
+    rect.setAttribute("x", String(device.x - width / 2));
+    rect.setAttribute("y", String(device.y - height / 2));
     rect.setAttribute("width", String(width));
-    rect.setAttribute("height", String(heightBox));
+    rect.setAttribute("height", String(height));
     rect.setAttribute("rx", "6");
     rect.setAttribute("fill", "#ffffff");
     rect.setAttribute("stroke", "#334155");
@@ -373,7 +412,7 @@ function renderDiagram(diagram) {
 
     const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
     label.setAttribute("x", String(device.x));
-    label.setAttribute("y", String(device.y + 5));
+    label.setAttribute("y", String(device.y + 4));
     label.setAttribute("text-anchor", "middle");
     label.setAttribute("font-size", "12");
     label.setAttribute("fill", "#0f172a");
@@ -383,7 +422,7 @@ function renderDiagram(diagram) {
     if (device.kind === "switch_3way") {
       const terminals = document.createElementNS("http://www.w3.org/2000/svg", "text");
       terminals.setAttribute("x", String(device.x));
-      terminals.setAttribute("y", String(device.y + 20));
+      terminals.setAttribute("y", String(device.y + 19));
       terminals.setAttribute("text-anchor", "middle");
       terminals.setAttribute("font-size", "11");
       terminals.setAttribute("fill", "#475569");
@@ -398,11 +437,11 @@ function renderDiagram(diagram) {
 /**
  * @param {GeneratedDiagram} diagram
  */
-function renderInfo(diagram) {
+function renderGroupAndWarnings(diagram) {
   const groupsEl = document.getElementById("group-result");
   const warningsEl = document.getElementById("warning-result");
-  if (groupsEl) groupsEl.textContent = JSON.stringify(diagram.groups, null, 2);
-  if (warningsEl) warningsEl.textContent = diagram.warnings.length ? diagram.warnings.join("\n") : "warning はありません。";
+  if (groupsEl) groupsEl.textContent = diagram.groups.length ? JSON.stringify(diagram.groups, null, 2) : "グループ化結果なし";
+  if (warningsEl) warningsEl.textContent = diagram.warnings.length ? diagram.warnings.join("\n") : "警告なし";
 }
 
 /**
@@ -414,39 +453,91 @@ function renderSleeveResult(result) {
   sleeveEl.textContent = JSON.stringify(result, null, 2);
 }
 
+/**
+ * @param {{mode:DiagramMode;sampleName:string;devices:InputDevice[];diagram:GeneratedDiagram;error:string}} state
+ */
+function renderDebug(state) {
+  const debugEl = document.getElementById("debug-result");
+  if (!debugEl) return;
+  debugEl.textContent = JSON.stringify(
+    {
+      現在のmode: MODE_LABEL[state.mode],
+      現在のsample: state.sampleName,
+      現在のdevices: state.devices,
+      generateDiagram戻り値: state.diagram,
+      エラー: state.error || "なし",
+    },
+    null,
+    2
+  );
+}
+
 function initPlayground() {
+  /** @type {HTMLSelectElement | null} */
   const modeEl = document.getElementById("mode-select");
+  /** @type {HTMLButtonElement | null} */
   const sampleSingleBtn = document.getElementById("sample-single-btn");
+  /** @type {HTMLButtonElement | null} */
   const sampleThreeWayBtn = document.getElementById("sample-threeway-btn");
+  /** @type {HTMLButtonElement | null} */
   const sleeveBtn = document.getElementById("sleeve-judge-btn");
+  /** @type {HTMLInputElement | null} */
   const wire16El = document.getElementById("wire16-count");
+  /** @type {HTMLInputElement | null} */
   const wire20El = document.getElementById("wire20-count");
+  /** @type {HTMLInputElement | null} */
   const wire26El = document.getElementById("wire26-count");
 
-  /** @type {InputDevice[]} */
-  let currentDevices = sampleSingle;
+  if (!modeEl || !sampleSingleBtn || !sampleThreeWayBtn) return;
 
-  const refresh = () => {
-    /** @type {DiagramMode} */
-    const mode = modeEl && modeEl.value === "field" ? "field" : "exam";
-    const diagram = generateDiagram(currentDevices, mode);
-    renderInfo(diagram);
-    renderDiagram(diagram);
+  const state = {
+    mode: "exam",
+    sampleName: "片切1灯サンプル",
+    devices: JSON.parse(JSON.stringify(sampleSingle)),
+    diagram: normalizeDiagram(EMPTY_DIAGRAM, "exam"),
+    error: "",
   };
 
-  if (sampleSingleBtn) {
-    sampleSingleBtn.addEventListener("click", () => {
-      currentDevices = sampleSingle;
-      refresh();
-    });
-  }
-  if (sampleThreeWayBtn) {
-    sampleThreeWayBtn.addEventListener("click", () => {
-      currentDevices = sampleThreeWay;
-      refresh();
-    });
-  }
-  if (modeEl) modeEl.addEventListener("change", refresh);
+  const applyActiveStyle = () => {
+    sampleSingleBtn.classList.toggle("sample-btn-active", state.sampleName === "片切1灯サンプル");
+    sampleThreeWayBtn.classList.toggle("sample-btn-active", state.sampleName === "3路1灯サンプル");
+  };
+
+  const generateAndRender = () => {
+    state.error = "";
+    try {
+      const generated = generateDiagram(state.devices, state.mode);
+      state.diagram = normalizeDiagram(generated, state.mode);
+      if (!state.diagram.devices.length && !state.diagram.wires.length) {
+        state.error = "複線図データなし";
+      }
+    } catch (_error) {
+      state.diagram = normalizeDiagram(EMPTY_DIAGRAM, state.mode);
+      state.error = "複線図生成に失敗しました";
+    }
+
+    renderGroupAndWarnings(state.diagram);
+    renderDiagram(state.diagram, state.error);
+    renderDebug(state);
+    applyActiveStyle();
+  };
+
+  sampleSingleBtn.addEventListener("click", () => {
+    state.sampleName = "片切1灯サンプル";
+    state.devices = JSON.parse(JSON.stringify(sampleSingle));
+    generateAndRender();
+  });
+
+  sampleThreeWayBtn.addEventListener("click", () => {
+    state.sampleName = "3路1灯サンプル";
+    state.devices = JSON.parse(JSON.stringify(sampleThreeWay));
+    generateAndRender();
+  });
+
+  modeEl.addEventListener("change", () => {
+    state.mode = modeEl.value === "field" ? "field" : "exam";
+    generateAndRender();
+  });
 
   if (sleeveBtn && wire16El && wire20El && wire26El) {
     sleeveBtn.addEventListener("click", () => {
@@ -459,8 +550,8 @@ function initPlayground() {
     });
   }
 
-  refresh();
   renderSleeveResult(judgeSleeve({ wire16Count: 2, wire20Count: 0, wire26Count: 0 }));
+  generateAndRender();
 }
 
 initPlayground();

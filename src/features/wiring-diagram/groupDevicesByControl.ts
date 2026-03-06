@@ -22,6 +22,9 @@ export function groupDevicesByControlWithWarnings(devices: InputDevice[], mode: 
   }
 
   const groups: CircuitGroup[] = [];
+  if (byControl.size === 0) {
+    warnings.push("controlId付きデバイスがありません。");
+  }
   for (const [controlId, groupDevices] of [...byControl.entries()].sort((a, b) => a[0] - b[0])) {
     const control = getControlLabelDetail(controlId, mode);
     if (control.warning) warnings.push(control.warning);
@@ -50,9 +53,12 @@ export function groupDevicesByControlWithWarnings(devices: InputDevice[], mode: 
       continue;
     }
 
+    warnings.push(`controlId=${controlId} は 片切1灯/3路1灯 の条件を満たしていません`);
     warnings.push(
-      `control=${control.label} は未対応構成です (single=${switchSingleCount}, threeWay=${switch3wayCount}, light=${lightCount})`
+      `controlId=${controlId}: 片切1灯条件 single=${switchSingleCount}, light=${lightCount}, threeWay=${switch3wayCount}`
     );
+    if (switch3wayCount !== 2) warnings.push(`controlId=${controlId}: switch_3way が2個必要です`);
+    if (lightCount !== 1) warnings.push(`controlId=${controlId}: light が1個必要です`);
   }
 
   return { groups, warnings };

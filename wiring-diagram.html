@@ -9,16 +9,16 @@
   <body>
     <main class="container">
       <h1>ガミデンキ風 複線図生成エンジン MVP</h1>
-      <p class="lead">片切1灯 / 3路1灯のテンプレ回路を exam / field 表記でSVG表示します。</p>
+      <p class="lead">片切1灯 / 3路1灯のテンプレ回路を、試験モード / 現場モードでSVG表示します。</p>
 
       <section class="card">
         <h2>入力エリア</h2>
         <div class="controls">
           <label>
-            mode
+            表示モード
             <select id="mode-select">
-              <option value="exam">exam</option>
-              <option value="field">field</option>
+              <option value="exam">試験モード</option>
+              <option value="field">現場モード</option>
             </select>
           </label>
           <div class="button-row">
@@ -35,7 +35,7 @@
           <pre id="group-result"></pre>
         </article>
         <article>
-          <h3>warnings</h3>
+          <h3>警告</h3>
           <pre id="warning-result"></pre>
         </article>
         <article>
@@ -48,6 +48,10 @@
             <li>渡り線(T1/T2): 水色 / 濃い青</li>
             <li>接地(E): 緑</li>
           </ul>
+        </article>
+        <article>
+          <h3>デバッグ情報</h3>
+          <pre id="debug-result"></pre>
         </article>
       </section>
 
@@ -72,6 +76,6 @@
       </section>
     </main>
 
-    <script type="module" src="./wiring-diagram.js"></script>
+    <script src="./wiring-diagram.js"></script>
   </body>
 </html>

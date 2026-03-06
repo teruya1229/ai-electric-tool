@@ -72,6 +72,15 @@ button:hover {
   background: #1d4ed8;
 }
 
+.sample-btn-active {
+  background: #0f172a;
+  box-shadow: 0 0 0 2px #93c5fd inset;
+}
+
+.sample-btn-active:hover {
+  background: #1e293b;
+}
+
 article {
   border-top: 1px dashed #dbe4f0;
   padding-top: 10px;
@@ -99,6 +108,8 @@ pre {
   border-radius: 10px;
   background: #f8fafc;
   overflow: auto;
+  min-height: 280px;
+  padding: 4px;
 }
 
 .legend {
