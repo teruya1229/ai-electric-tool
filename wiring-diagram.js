@@ -9,6 +9,8 @@ import {
 import {
   createCircuitsFromGroups,
   createConnectionPointsFromCircuits,
+  createCircuitGraphFromCircuits,
+  createDiagramLayoutsFromGraphs,
   judgeSleevesFromConnectionPoints,
 } from "./js/engine/circuit-engine.js";
 import { createMaterialsFromCircuits } from "./js/engine/material-engine.js";
@@ -310,6 +312,55 @@ function renderParseDebugResult(sceneModel) {
   });
 }
 
+function renderLayoutDebug(sceneModel) {
+  const panel = document.getElementById("layout-debug-result");
+  if (!panel) return;
+
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+
+  panel.innerHTML = "";
+  if (!groups.length) {
+    panel.textContent = "回路なし";
+    return;
+  }
+
+  const circuits = createCircuitsFromGroups(groups);
+  const graphs = createCircuitGraphFromCircuits(circuits);
+  if (!graphs.length) {
+    panel.textContent = "graphなし";
+    return;
+  }
+
+  const layouts = createDiagramLayoutsFromGraphs(graphs);
+  if (!layouts.length) {
+    panel.textContent = "layoutなし";
+    return;
+  }
+
+  layouts.forEach((layout) => {
+    const card = document.createElement("article");
+    card.className = "layout-debug-item";
+
+    const lines = [`回路${layout?.circuitId || "-"} layout`, "", "nodes"];
+    (layout?.nodes || []).forEach((node) => {
+      lines.push(`${node.id} (${node.x},${node.y})`);
+    });
+    lines.push("", "edges");
+    (layout?.edges || []).forEach((edge) => {
+      lines.push(`${edge.from} -> ${edge.to} (${edge.role || "-"})`);
+    });
+
+    card.textContent = lines.join("\n");
+    panel.appendChild(card);
+  });
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
@@ -317,6 +368,7 @@ function setupCircuitListAutoRender() {
   renderCircuitMaterialList();
   renderSleeveJudgeList();
   renderParseDebugResult();
+  renderLayoutDebug();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
@@ -324,6 +376,7 @@ function setupCircuitListAutoRender() {
     renderCircuitMaterialList();
     renderSleeveJudgeList();
     renderParseDebugResult();
+    renderLayoutDebug();
   });
   observer.observe(target, {
     childList: true,
@@ -339,6 +392,7 @@ window.renderMaterialList = renderMaterialList;
 window.renderCircuitMaterialList = renderCircuitMaterialList;
 window.renderSleeveJudgeList = renderSleeveJudgeList;
 window.renderParseDebugResult = renderParseDebugResult;
+window.renderLayoutDebug = renderLayoutDebug;
 
 initPlayground();
 setupCircuitListAutoRender();
