@@ -109,7 +109,12 @@ function createMaterialsForCircuit(circuit) {
 }
 
 function getCircuitMaterialSummaryLabel(material) {
-  return `${material.name} / ${material.type} / ${material.quantity}`;
+  const parts = [material.name];
+  if (material.type) parts.push(material.type);
+  if (typeof material.quantity !== "undefined" && material.quantity !== null && material.quantity !== "") {
+    parts.push(String(material.quantity));
+  }
+  return parts.join(" / ");
 }
 
 function renderMaterialList(sceneModel) {
@@ -159,7 +164,7 @@ function renderCircuitMaterialList(sceneModel) {
   const circuits = createCircuitsFromGroups(groups);
   panel.innerHTML = "";
   if (!circuits.length) {
-    panel.textContent = "回路別材料なし";
+    panel.textContent = "回路なし";
     return;
   }
 
