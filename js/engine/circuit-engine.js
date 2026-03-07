@@ -234,3 +234,120 @@ export function judgeSleevesFromConnectionPoints(connectionPoints) {
   });
   return results;
 }
+
+export function createCircuitGraphFromCircuit(circuit) {
+  const graph = {
+    circuitId: typeof circuit?.id === "number" ? circuit.id : null,
+    nodes: [],
+    edges: [],
+  };
+  if (!circuit || !Array.isArray(circuit.groups) || !circuit.groups.length) return graph;
+
+  const circuitId = graph.circuitId;
+  const powerNodeId = `power-${circuitId || "x"}`;
+  graph.nodes.push({
+    id: powerNodeId,
+    type: "source",
+    circuitId,
+  });
+
+  circuit.groups.forEach((group, groupIndex) => {
+    const switchType = group?.switchType === "threeway" ? "threeway" : "single";
+    const switchNodeId = `switch-${circuitId || "x"}-${groupIndex + 1}`;
+
+    graph.nodes.push({
+      id: switchNodeId,
+      type: "device",
+      deviceType: "switch",
+      switchType,
+      purpose: group?.purpose || "unknown",
+      controlId: group?.controlId || null,
+      circuitId,
+    });
+    graph.edges.push({
+      from: powerNodeId,
+      to: switchNodeId,
+      role: "line",
+    });
+
+    if (switchType === "threeway") {
+      const subSwitchNodeId = `switch-${circuitId || "x"}-${groupIndex + 1}-sub`;
+      graph.nodes.push({
+        id: subSwitchNodeId,
+        type: "device",
+        deviceType: "switch",
+        switchType: "threeway",
+        purpose: group?.purpose || "unknown",
+        controlId: group?.controlId || null,
+        circuitId,
+      });
+      graph.edges.push({
+        from: switchNodeId,
+        to: subSwitchNodeId,
+        role: "traveler_1",
+      });
+      graph.edges.push({
+        from: switchNodeId,
+        to: subSwitchNodeId,
+        role: "traveler_2",
+      });
+    }
+
+    const lightCount = getGroupQuantity(group, "light");
+    for (let i = 0; i < lightCount; i += 1) {
+      const lightNodeId = `light-${circuitId || "x"}-${groupIndex + 1}-${i + 1}`;
+      graph.nodes.push({
+        id: lightNodeId,
+        type: "device",
+        deviceType: "light",
+        purpose: group?.purpose || "light",
+        controlId: group?.controlId || null,
+        circuitId,
+      });
+      graph.edges.push({
+        from: switchNodeId,
+        to: lightNodeId,
+        role: "switch_return",
+      });
+      graph.edges.push({
+        from: powerNodeId,
+        to: lightNodeId,
+        role: "neutral",
+      });
+    }
+
+    const outletCount = getGroupQuantity(group, "outlet");
+    for (let i = 0; i < outletCount; i += 1) {
+      const outletNodeId = `outlet-${circuitId || "x"}-${groupIndex + 1}-${i + 1}`;
+      graph.nodes.push({
+        id: outletNodeId,
+        type: "device",
+        deviceType: circuit?.type === "ac" || group?.purpose === "ac_outlet" ? "ac_outlet" : "outlet",
+        purpose: group?.purpose || "outlet",
+        controlId: group?.controlId || null,
+        circuitId,
+      });
+      graph.edges.push({
+        from: powerNodeId,
+        to: outletNodeId,
+        role: "line_load",
+      });
+      graph.edges.push({
+        from: powerNodeId,
+        to: outletNodeId,
+        role: "neutral",
+      });
+    }
+  });
+
+  return graph;
+}
+
+export function createCircuitGraphFromCircuits(circuits) {
+  if (!Array.isArray(circuits) || !circuits.length) return [];
+  const graphs = [];
+  circuits.forEach((circuit) => {
+    graphs.push(createCircuitGraphFromCircuit(circuit));
+  });
+  return graphs;
+}
