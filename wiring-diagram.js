@@ -672,7 +672,9 @@ function renderAiDiagramGamidenki(sceneModel) {
   const wirePaths = createWirePathsFromLayouts(layouts);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) return;
-  const connectionPoints = createConnectionPointsFromCircuits(circuits);
+  const connectionPoints =
+    (sceneModel && Array.isArray(sceneModel.connectionPoints) && sceneModel.connectionPoints) ||
+    createConnectionPointsFromCircuits(circuits);
   const allSleeveResults =
     (sceneModel && Array.isArray(sceneModel.sleeveResults) && sceneModel.sleeveResults) ||
     (sceneModel && Array.isArray(sceneModel.sleeves) && sceneModel.sleeves) ||
@@ -810,6 +812,25 @@ function renderAiDiagramGamidenki(sceneModel) {
         sleeveItems = groupedByCircuitId[layoutIndex];
       }
     }
+    let connectionPointItems = Array.isArray(connectionPoints)
+      ? connectionPoints.filter((point) => point?.circuitId === resolvedCircuitId)
+      : [];
+    if (!connectionPointItems.length && Array.isArray(connectionPoints) && connectionPoints.length) {
+      const groupedByCircuitId = [];
+      const groupedMap = new Map();
+      connectionPoints.forEach((point) => {
+        const key = point?.circuitId;
+        if (typeof key === "undefined" || key === null) return;
+        if (!groupedMap.has(key)) {
+          groupedMap.set(key, []);
+          groupedByCircuitId.push(groupedMap.get(key));
+        }
+        groupedMap.get(key).push(point);
+      });
+      if (groupedByCircuitId[layoutIndex]) {
+        connectionPointItems = groupedByCircuitId[layoutIndex];
+      }
+    }
 
     const sleeveSummaryMap = new Map();
     sleeveItems.forEach((item) => {
@@ -883,6 +904,118 @@ function renderAiDiagramGamidenki(sceneModel) {
       svg.appendChild(sleeveText);
     });
 
+    const drawOffsetY = -8;
+    const sleeveByConnectionPointId = new Map();
+    (sleeveItems || []).forEach((item, idx) => {
+      const key = item?.connectionPointId || `idx-${idx}`;
+      sleeveByConnectionPointId.set(key, item);
+    });
+    const connectionPointWires = (wirePath?.wires || []).filter((wire) => Array.isArray(wire?.path) && wire.path.length > 0);
+    const markerItems = (connectionPointItems || []).slice(0, 6);
+    const usedNodeIds = new Set();
+    markerItems.forEach((point, idx) => {
+      let x = Number(point?.x);
+      let y = Number(point?.y);
+      const isDirectXY = Number.isFinite(x) && Number.isFinite(y);
+      if (!isDirectXY) {
+        const deviceType = point?.deviceType;
+        let candidateNodes = [];
+        if (deviceType === "light") {
+          candidateNodes = (layout?.nodes || []).filter((node) => node?.deviceType === "light");
+        } else if (deviceType === "outlet" || deviceType === "ac_outlet") {
+          candidateNodes = (layout?.nodes || []).filter((node) => node?.deviceType === "outlet" || node?.deviceType === "ac_outlet");
+        } else if (deviceType === "switch") {
+          candidateNodes = (layout?.nodes || []).filter((node) => node?.deviceType === "switch");
+        } else if (deviceType === "junction") {
+          candidateNodes = (layout?.nodes || []).filter((node) => node?.type === "source" || node?.deviceType === "switch");
+        }
+        let nodeHit = candidateNodes.find((node) => !usedNodeIds.has(node?.id));
+        if (!nodeHit && point?.deviceId) {
+          nodeHit = (layout?.nodes || []).find((node) => typeof node?.id === "string" && String(node.id).includes(String(point.deviceId)));
+        }
+        if (nodeHit && Number.isFinite(Number(nodeHit?.x)) && Number.isFinite(Number(nodeHit?.y))) {
+          x = Number(nodeHit.x) + 14;
+          y = Number(nodeHit.y);
+          if (nodeHit?.id) usedNodeIds.add(nodeHit.id);
+        }
+      }
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        const roleList = Array.isArray(point?.wires) ? point.wires.map((wire) => wire?.role).filter(Boolean) : [];
+        const wireHit =
+          connectionPointWires.find((wire) => roleList.some((role) => role === wire?.role)) ||
+          connectionPointWires[idx] ||
+          null;
+        const path = Array.isArray(wireHit?.path) ? wireHit.path : [];
+        if (path.length) {
+          const mid = path[Math.floor(path.length / 2)];
+          if (Number.isFinite(Number(mid?.x)) && Number.isFinite(Number(mid?.y))) {
+            x = Number(mid.x);
+            y = Number(mid.y);
+          }
+        }
+      }
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      y += drawOffsetY;
+      x += (idx % 2) * 6;
+      y += Math.floor(idx / 2) * 2;
+
+      const cpIdText = point?.id ? String(point.id).replace(/^cp-/i, "CP-") : `CP${idx + 1}`;
+      const cpIdShort = cpIdText.length > 8 ? cpIdText.slice(0, 8) : cpIdText;
+      const sleeveRaw =
+        sleeveByConnectionPointId.get(point?.id || "") ||
+        sleeveByConnectionPointId.get(`idx-${idx}`) ||
+        sleeveItems[idx] ||
+        null;
+      const sleeveRawLabel =
+        sleeveRaw?.sleeveType ||
+        sleeveRaw?.sleeveName ||
+        sleeveRaw?.label ||
+        sleeveRaw?.name ||
+        sleeveRaw?.size ||
+        sleeveRaw?.sleeveSize ||
+        sleeveRaw?.recommendedConnector ||
+        sleeveRaw?.result ||
+        sleeveRaw?.judgement ||
+        sleeveRaw?.judge ||
+        "";
+      const sleeveRawText = String(sleeveRawLabel || "").toLowerCase();
+      let sleeveShort = "";
+      if (sleeveRawText) {
+        if (sleeveRawText.includes("small") || sleeveRawText.includes("小") || sleeveRawText === "s") sleeveShort = "小";
+        else if (sleeveRawText.includes("medium") || sleeveRawText.includes("中") || sleeveRawText === "m") sleeveShort = "中";
+        else if (sleeveRawText.includes("large") || sleeveRawText.includes("大") || sleeveRawText === "l") sleeveShort = "大";
+        else if (sleeveRawText.includes("unknown") || sleeveRawText.includes("未判定") || sleeveRawText.includes("要確認")) sleeveShort = "要確認";
+        else sleeveShort = String(sleeveRawLabel).slice(0, 6);
+      }
+      const isAlertShort = sleeveShort === "要確認";
+
+      const marker = document.createElementNS(NS, "circle");
+      marker.setAttribute("cx", String(x));
+      marker.setAttribute("cy", String(y));
+      marker.setAttribute("r", "4");
+      marker.setAttribute("fill", "#ffe082");
+      marker.setAttribute("stroke", "#333");
+      svg.appendChild(marker);
+
+      const cpText = document.createElementNS(NS, "text");
+      cpText.setAttribute("x", String(x + 6));
+      cpText.setAttribute("y", String(y - 2));
+      cpText.setAttribute("font-size", "9");
+      cpText.setAttribute("fill", "#fff2b3");
+      cpText.textContent = cpIdShort;
+      svg.appendChild(cpText);
+
+      if (sleeveShort) {
+        const sleeveText = document.createElementNS(NS, "text");
+        sleeveText.setAttribute("x", String(x + 6));
+        sleeveText.setAttribute("y", String(y + 9));
+        sleeveText.setAttribute("font-size", "9");
+        sleeveText.setAttribute("fill", isAlertShort ? "#ffb86b" : "#ffd966");
+        sleeveText.textContent = sleeveShort;
+        svg.appendChild(sleeveText);
+      }
+    });
+
     const hasThreeway = (wirePath?.wires || []).some((wire) => wire?.role === "traveler_1" || wire?.role === "traveler_2");
     if (hasThreeway) {
       const threewayText = document.createElementNS(NS, "text");
@@ -894,7 +1027,6 @@ function renderAiDiagramGamidenki(sceneModel) {
       svg.appendChild(threewayText);
     }
 
-    const drawOffsetY = -8;
     let lineNoteCount = 0;
     const lineNoteLabels = {
       line: "L",
