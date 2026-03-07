@@ -26,6 +26,11 @@ window.renderDiagram = renderDiagram;
 
 let aiDiagramPreviewMode = "exam_style";
 let aiDiagramDeveloperMode = false;
+let aiDiagramRenderState = {
+  circuits: "-",
+  layouts: "-",
+  message: "",
+};
 
 function getCircuitSummaryLabel(circuit) {
   return `回路${circuit.id} / ${circuit.type}`;
@@ -1403,19 +1408,92 @@ function ensureAiDiagramModeSwitcher() {
     btn.style.color = active ? "#ffffff" : "#dddddd";
   });
   examBtn.style.fontWeight = "600";
+
+  const helper = document.createElement("div");
+  helper.setAttribute("style", "font-size:11px;color:#aeb4bb;margin-top:2px;");
+  if (aiDiagramDeveloperMode) {
+    helper.textContent = `開発者表示: mode=${aiDiagramPreviewMode} / circuits=${aiDiagramRenderState.circuits} / layouts=${aiDiagramRenderState.layouts}`;
+  } else {
+    helper.textContent = "試験式複線図を表示中";
+  }
+  switcher.appendChild(helper);
 }
 
 function renderAiDiagramByMode(sceneModel) {
+  const panel = document.getElementById("ai-diagram-preview-result");
+  if (!panel) return;
+
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+
+  let circuits = [];
+  let layouts = [];
+  if (groups.length) {
+    circuits = createCircuitsFromGroups(groups);
+    const graphs = createCircuitGraphFromCircuits(circuits);
+    layouts = createDiagramLayoutsFromGraphs(graphs);
+  }
+  aiDiagramRenderState = {
+    circuits: circuits.length,
+    layouts: layouts.length,
+    message: "",
+  };
+
   ensureAiDiagramModeSwitcher();
-  if (aiDiagramPreviewMode === "preview") {
-    renderAiDiagramPreview(sceneModel);
+  if (!groups.length || !circuits.length || !layouts.length) {
+    panel.innerHTML = "";
+    const empty = document.createElement("div");
+    empty.setAttribute(
+      "style",
+      "padding:10px 12px;border:1px solid #555;border-radius:6px;background:#262626;color:#d8d8d8;line-height:1.5;"
+    );
+    const title = document.createElement("div");
+    title.setAttribute("style", "font-size:12px;color:#ffffff;margin-bottom:2px;");
+    title.textContent = "複線図を表示できません";
+    const desc = document.createElement("div");
+    desc.setAttribute("style", "font-size:11px;color:#bbbbbb;");
+    desc.textContent = "回路情報が不足しています";
+    empty.appendChild(title);
+    empty.appendChild(desc);
+    panel.appendChild(empty);
+    aiDiagramRenderState.message = "empty";
+    ensureAiDiagramModeSwitcher();
     return;
   }
-  if (aiDiagramPreviewMode === "enhanced") {
-    renderAiDiagramEnhanced(sceneModel);
-    return;
+
+  try {
+    if (aiDiagramPreviewMode === "preview") {
+      renderAiDiagramPreview(sceneModel);
+    } else if (aiDiagramPreviewMode === "enhanced") {
+      renderAiDiagramEnhanced(sceneModel);
+    } else {
+      renderAiDiagramExamStyle(sceneModel);
+    }
+  } catch (_error) {
+    panel.innerHTML = "";
+    const fallback = document.createElement("div");
+    fallback.setAttribute(
+      "style",
+      "padding:10px 12px;border:1px solid #555;border-radius:6px;background:#262626;color:#d8d8d8;line-height:1.5;"
+    );
+    const title = document.createElement("div");
+    title.setAttribute("style", "font-size:12px;color:#ffffff;margin-bottom:2px;");
+    title.textContent = "複線図を表示できません";
+    const desc = document.createElement("div");
+    desc.setAttribute("style", "font-size:11px;color:#bbbbbb;");
+    desc.textContent = "描画中に状態を復旧しました";
+    fallback.appendChild(title);
+    fallback.appendChild(desc);
+    panel.appendChild(fallback);
+    aiDiagramRenderState.message = "fallback";
   }
-  renderAiDiagramExamStyle(sceneModel);
+
+  ensureAiDiagramModeSwitcher();
 }
 
 function setupCircuitListAutoRender() {
