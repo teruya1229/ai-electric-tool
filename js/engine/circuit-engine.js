@@ -153,3 +153,84 @@ export function createConnectionPointsFromCircuits(circuits) {
   });
   return points;
 }
+
+function buildConnectionPointReason(baseReason, wires, sourceType) {
+  const notes = [];
+  if (sourceType === "device") notes.push("器具側接続");
+  if (Array.isArray(wires) && wires.some((wire) => wire?.role === "earth")) notes.push("接地線含む");
+  if (Array.isArray(wires) && wires.some((wire) => wire?.role === "traveler_1" || wire?.role === "traveler_2")) {
+    notes.push("3路系配線を含む");
+  }
+  if (!notes.length) return baseReason;
+  return `${baseReason}（${notes.join(" / ")}）`;
+}
+
+export function judgeConnectionPointSleeve(connectionPoint) {
+  if (!connectionPoint || typeof connectionPoint !== "object") return null;
+
+  const wireCount = Number(connectionPoint.wireCount || 0);
+  const wires = Array.isArray(connectionPoint.wires) ? connectionPoint.wires : [];
+  const sourceType = connectionPoint.sourceType || "unknown";
+
+  const result = {
+    connectionPointId: connectionPoint.id || null,
+    circuitId: typeof connectionPoint.circuitId === "number" ? connectionPoint.circuitId : null,
+    purpose: connectionPoint.purpose || "unknown",
+    sourceType,
+    wireCount,
+    recommendedConnector: "none",
+    sleeveSize: null,
+    reason: "",
+    isTarget: false,
+  };
+
+  if (sourceType === "device") {
+    result.recommendedConnector = "direct-or-device";
+    result.reason = buildConnectionPointReason("器具接続または直結想定", wires, sourceType);
+    return result;
+  }
+
+  if (wireCount <= 1) {
+    result.recommendedConnector = "none";
+    result.reason = buildConnectionPointReason("接続本数が不足のため対象外", wires, sourceType);
+    return result;
+  }
+
+  if (wireCount === 2) {
+    result.recommendedConnector = "direct-or-device";
+    result.reason = buildConnectionPointReason("器具接続または直結想定", wires, sourceType);
+    return result;
+  }
+
+  if (wireCount === 3) {
+    result.isTarget = true;
+    result.recommendedConnector = "ring-sleeve";
+    result.sleeveSize = "small";
+    result.reason = buildConnectionPointReason("3本接続のため小スリーブ候補", wires, sourceType);
+    return result;
+  }
+
+  if (wireCount === 4) {
+    result.isTarget = true;
+    result.recommendedConnector = "ring-sleeve";
+    result.sleeveSize = "medium";
+    result.reason = buildConnectionPointReason("4本接続のため中スリーブ候補", wires, sourceType);
+    return result;
+  }
+
+  result.isTarget = true;
+  result.recommendedConnector = "check-required";
+  result.sleeveSize = null;
+  result.reason = buildConnectionPointReason("本数超過または要確認", wires, sourceType);
+  return result;
+}
+
+export function judgeSleevesFromConnectionPoints(connectionPoints) {
+  if (!Array.isArray(connectionPoints) || !connectionPoints.length) return [];
+  const results = [];
+  connectionPoints.forEach((point) => {
+    const judged = judgeConnectionPointSleeve(point);
+    if (judged) results.push(judged);
+  });
+  return results;
+}
