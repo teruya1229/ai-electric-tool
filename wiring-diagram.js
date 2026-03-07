@@ -25,6 +25,7 @@ window.judgeSleeve = judgeSleeve;
 window.renderDiagram = renderDiagram;
 
 let aiDiagramPreviewMode = "exam_style";
+let aiDiagramDeveloperMode = false;
 
 function getCircuitSummaryLabel(circuit) {
   return `回路${circuit.id} / ${circuit.type}`;
@@ -1326,6 +1327,9 @@ function renderAiDiagramExamStyle(sceneModel) {
 function ensureAiDiagramModeSwitcher() {
   const panel = document.getElementById("ai-diagram-preview-result");
   if (!panel || !panel.parentElement) return;
+  if (!aiDiagramDeveloperMode && aiDiagramPreviewMode !== "exam_style") {
+    aiDiagramPreviewMode = "exam_style";
+  }
 
   let switcher = document.getElementById("ai-diagram-mode-switcher");
   if (!switcher) {
@@ -1336,37 +1340,69 @@ function ensureAiDiagramModeSwitcher() {
       "display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 8px 0;"
     );
     panel.parentElement.insertBefore(switcher, panel);
-
-    const modes = [
-      { key: "preview", label: "Preview" },
-      { key: "enhanced", label: "Enhanced" },
-      { key: "exam_style", label: "試験式複線図" },
-    ];
-    modes.forEach((mode) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.dataset.mode = mode.key;
-      btn.textContent = mode.label;
-      btn.setAttribute(
-        "style",
-        "padding:4px 10px;border:1px solid #555;border-radius:6px;background:#2b2b2b;color:#ddd;cursor:pointer;font-size:12px;"
-      );
-      btn.addEventListener("click", () => {
-        aiDiagramPreviewMode = mode.key;
-        ensureAiDiagramModeSwitcher();
-        renderAiDiagramByMode();
-      });
-      switcher.appendChild(btn);
-    });
   }
+  switcher.innerHTML = "";
+
+  const modeButtonsWrap = document.createElement("div");
+  modeButtonsWrap.setAttribute("style", "display:flex;gap:6px;flex-wrap:wrap;align-items:center;");
+  switcher.appendChild(modeButtonsWrap);
+
+  const createModeButton = (modeKey, label) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.dataset.mode = modeKey;
+    btn.textContent = label;
+    btn.setAttribute(
+      "style",
+      "padding:4px 10px;border:1px solid #555;border-radius:6px;background:#2b2b2b;color:#ddd;cursor:pointer;font-size:12px;"
+    );
+    btn.addEventListener("click", () => {
+      aiDiagramPreviewMode = modeKey;
+      ensureAiDiagramModeSwitcher();
+      renderAiDiagramByMode();
+    });
+    modeButtonsWrap.appendChild(btn);
+    return btn;
+  };
+
+  const examBtn = createModeButton("exam_style", "試験式複線図");
+  if (aiDiagramDeveloperMode) {
+    createModeButton("preview", "Preview");
+    createModeButton("enhanced", "Enhanced");
+  }
+
+  const developerBtn = document.createElement("button");
+  developerBtn.type = "button";
+  developerBtn.dataset.mode = "developer";
+  developerBtn.textContent = "開発者表示";
+  developerBtn.setAttribute(
+    "style",
+    "padding:3px 8px;border:1px solid #555;border-radius:6px;background:#222;color:#bbb;cursor:pointer;font-size:11px;"
+  );
+  developerBtn.addEventListener("click", () => {
+    aiDiagramDeveloperMode = !aiDiagramDeveloperMode;
+    if (!aiDiagramDeveloperMode && aiDiagramPreviewMode !== "exam_style") {
+      aiDiagramPreviewMode = "exam_style";
+    }
+    ensureAiDiagramModeSwitcher();
+    renderAiDiagramByMode();
+  });
+  modeButtonsWrap.appendChild(developerBtn);
 
   const buttons = Array.from(switcher.querySelectorAll("button[data-mode]"));
   buttons.forEach((btn) => {
+    if (btn.dataset.mode === "developer") {
+      btn.style.background = aiDiagramDeveloperMode ? "#3c3c3c" : "#222";
+      btn.style.borderColor = aiDiagramDeveloperMode ? "#9aa0a6" : "#555";
+      btn.style.color = aiDiagramDeveloperMode ? "#ffffff" : "#bbbbbb";
+      return;
+    }
     const active = btn.dataset.mode === aiDiagramPreviewMode;
     btn.style.background = active ? "#4a6fa1" : "#2b2b2b";
     btn.style.borderColor = active ? "#8fb3e0" : "#555";
     btn.style.color = active ? "#ffffff" : "#dddddd";
   });
+  examBtn.style.fontWeight = "600";
 }
 
 function renderAiDiagramByMode(sceneModel) {
