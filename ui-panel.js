@@ -113,16 +113,35 @@ function uiBack() {
 function uiGenerate() {
   if (!UI.circuit || !UI.condition || !UI.mode) return;
 
-  // ── 既存 generateDiagram() の引数仕様に合わせる ──────────
-  const devices = _buildDevicesFromCondition(UI.condition.id);
+  const circuitType = UI.circuit === "3路" ? "threeway" : "single";
+  const devices =
+    typeof window.buildDevicesFromSelection === "function"
+      ? window.buildDevicesFromSelection(circuitType, UI.condition.id)
+      : _buildDevicesFromCondition(UI.condition.id);
   const mode = UI.mode === "現場" ? "field" : "exam";
-  if (typeof window.generateDiagram === "function") {
-    window.generateDiagram(devices, mode);
-  }
-  // ─────────────────────────────────────────────
+  let diagram = null;
+  let renderError = "";
 
-  // 既存UI側のイベントを使って描画まで実行（既存ロジックを流用）
-  _syncToExistingUiAndGenerate();
+  if (typeof window.generateDiagram === "function") {
+    try {
+      diagram = window.generateDiagram(devices, mode);
+      if (!diagram || (!diagram.devices?.length && !diagram.wires?.length)) {
+        renderError = "複線図データなし";
+      }
+    } catch (_error) {
+      renderError = "複線図生成に失敗しました";
+    }
+  } else {
+    renderError = "generateDiagram が見つかりません";
+  }
+
+  _renderToExistingOutput({
+    circuitType,
+    mode,
+    devices,
+    diagram: diagram || { groups: [], devices: [], wires: [], warnings: [] },
+    renderError,
+  });
 
   // パネルを閉じてSVGを見せる
   const panel = document.getElementById("ui-panel");
@@ -133,6 +152,66 @@ function uiGenerate() {
   setTimeout(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, 200);
+}
+
+function _renderToExistingOutput(payload) {
+  const selectionEl = document.getElementById("selection-result");
+  const groupEl = document.getElementById("group-result");
+  const warningEl = document.getElementById("warning-result");
+  const debugEl = document.getElementById("debug-result");
+  const requiredEl = document.getElementById("required-cables");
+  const notesEl = document.getElementById("notes-result");
+
+  if (selectionEl) {
+    selectionEl.textContent = JSON.stringify(
+      {
+        回路を選ぶ: payload.circuitType === "threeway" ? "3路" : "片切",
+        条件を選ぶ: UI.condition ? UI.condition.label : "未選択",
+        表示モード: payload.mode === "exam" ? "試験モード" : "現場モード",
+      },
+      null,
+      2
+    );
+  }
+
+  if (groupEl) {
+    groupEl.textContent = payload.diagram.groups?.length
+      ? JSON.stringify(payload.diagram.groups, null, 2)
+      : "グループ化結果なし";
+  }
+
+  if (warningEl) {
+    const warnings = Array.isArray(payload.diagram.warnings) ? payload.diagram.warnings : [];
+    warningEl.textContent = warnings.length ? warnings.join("\n") : "警告なし";
+  }
+
+  if (typeof window.renderDiagram === "function") {
+    window.renderDiagram(payload.diagram, payload.renderError);
+  }
+
+  if (requiredEl && notesEl && typeof window.buildRequiredAndNotes === "function") {
+    const meta = window.buildRequiredAndNotes(UI.condition ? UI.condition.id : null);
+    requiredEl.textContent = (meta.required || []).join("\n");
+    notesEl.textContent = (meta.notes || []).join("\n");
+  }
+
+  if (debugEl) {
+    debugEl.textContent = JSON.stringify(
+      {
+        buildDevicesFromSelection: payload.devices,
+        generateDiagramResult: payload.diagram,
+        counts: {
+          groups: payload.diagram.groups?.length || 0,
+          devices: payload.diagram.devices?.length || 0,
+          wires: payload.diagram.wires?.length || 0,
+          warnings: payload.diagram.warnings?.length || 0,
+        },
+        renderError: payload.renderError || "なし",
+      },
+      null,
+      2
+    );
+  }
 }
 
 // ── 内部処理 ──────────────────────────────────
