@@ -350,3 +350,5 @@ AIは、一般論だけでなく
 generateDiagram()
 groupDevicesByControl()
 judgeSleeve()
+
+変更する前に、対象ファイルの現在のコード構造を必ず確認する。
