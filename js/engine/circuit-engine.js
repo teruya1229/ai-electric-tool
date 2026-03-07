@@ -9,6 +9,16 @@ function resolveCircuitTypeFromPurpose(purpose) {
   return "outlet";
 }
 
+function getGroupQuantity(group, type) {
+  const list = Array.isArray(group?.devices) ? group.devices : [];
+  const hit = list.find((item) => item?.type === type);
+  return Number(hit?.quantity || 0);
+}
+
+function createWire(role, color) {
+  return { role, color };
+}
+
 export function createCircuitsFromGroups(groups) {
   const sourceGroups = Array.isArray(groups) ? groups : [];
   const bucket = {
@@ -52,4 +62,94 @@ export function createCircuitsFromGroups(groups) {
   }
 
   return circuits;
+}
+
+export function createConnectionPointsFromCircuit(circuit) {
+  if (!circuit || !Array.isArray(circuit.groups) || !circuit.groups.length) return [];
+
+  const points = [];
+  let sequence = 1;
+
+  const pushPoint = (partial) => {
+    const wires = Array.isArray(partial.wires) ? partial.wires : [];
+    points.push({
+      id: `cp-${circuit.id}-${sequence}`,
+      circuitId: circuit.id,
+      purpose: partial.purpose || "unknown",
+      deviceId: typeof partial.deviceId === "undefined" ? null : partial.deviceId,
+      deviceType: partial.deviceType || "unknown",
+      wireCount: wires.length,
+      wires,
+      sourceType: partial.sourceType || "device",
+    });
+    sequence += 1;
+  };
+
+  circuit.groups.forEach((group, groupIndex) => {
+    const purpose = group?.purpose || circuit.type || "unknown";
+    const switchType = group?.switchType === "threeway" ? "threeway" : "single";
+    const lightCount = getGroupQuantity(group, "light");
+    const outletCount = getGroupQuantity(group, "outlet");
+    const hasLoads = lightCount > 0 || outletCount > 0;
+    if (!hasLoads) return;
+
+    const junctionWires = [createWire("line", "black"), createWire("neutral", "white")];
+    if (lightCount > 0) {
+      junctionWires.push(createWire("switch_return", "red"));
+      if (switchType === "threeway") {
+        junctionWires.push(createWire("traveler_1", "blue"));
+        junctionWires.push(createWire("traveler_2", "yellow"));
+      }
+    }
+    if (outletCount > 0) {
+      junctionWires.push(createWire("line_load", "black"));
+      junctionWires.push(createWire("neutral_load", "white"));
+    }
+    if (circuit.type === "ac" || purpose === "ac_outlet") {
+      junctionWires.push(createWire("earth", "green"));
+    }
+
+    pushPoint({
+      purpose,
+      deviceId: null,
+      deviceType: "junction",
+      wires: junctionWires,
+      sourceType: "junction",
+    });
+
+    for (let i = 0; i < lightCount; i += 1) {
+      pushPoint({
+        purpose,
+        deviceId: `${group?.controlId || `group-${groupIndex + 1}`}-light-${i + 1}`,
+        deviceType: "light",
+        wires: [createWire("switch_return", "red"), createWire("neutral", "white")],
+        sourceType: "device",
+      });
+    }
+
+    for (let i = 0; i < outletCount; i += 1) {
+      const outletWires = [createWire("line", "black"), createWire("neutral", "white")];
+      if (circuit.type === "ac" || purpose === "ac_outlet") {
+        outletWires.push(createWire("earth", "green"));
+      }
+      pushPoint({
+        purpose,
+        deviceId: `${group?.controlId || `group-${groupIndex + 1}`}-outlet-${i + 1}`,
+        deviceType: circuit.type === "ac" || purpose === "ac_outlet" ? "ac_outlet" : "outlet",
+        wires: outletWires,
+        sourceType: "device",
+      });
+    }
+  });
+
+  return points;
+}
+
+export function createConnectionPointsFromCircuits(circuits) {
+  if (!Array.isArray(circuits) || !circuits.length) return [];
+  const points = [];
+  circuits.forEach((circuit) => {
+    points.push(...createConnectionPointsFromCircuit(circuit));
+  });
+  return points;
 }
