@@ -527,6 +527,128 @@ function renderAiDiagramPreview(sceneModel) {
   });
 }
 
+function renderAiDiagramEnhanced(sceneModel) {
+  const panel = document.getElementById("ai-diagram-preview-result");
+  if (!panel) return;
+
+  Array.from(panel.querySelectorAll(".ai-diagram-enhanced-item")).forEach((item) => item.remove());
+
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+  if (!groups.length) return;
+
+  const circuits = createCircuitsFromGroups(groups);
+  const graphs = createCircuitGraphFromCircuits(circuits);
+  const layouts = createDiagramLayoutsFromGraphs(graphs);
+  if (!layouts.length) return;
+
+  const wirePaths = createWirePathsFromLayouts(layouts);
+  const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
+  if (!hasWire) return;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const roleColors = {
+    line: "#f5c842",
+    neutral: "#4aa3ff",
+    switch_return: "#ff6b6b",
+    traveler_1: "#9b59b6",
+    traveler_2: "#9b59b6",
+  };
+
+  layouts.forEach((layout) => {
+    const wirePath = wirePaths.find((item) => item?.circuitId === layout?.circuitId);
+    const card = document.createElement("article");
+    card.className = "ai-diagram-enhanced-item";
+
+    const title = document.createElement("div");
+    title.className = "circuit-item-title";
+    title.textContent = `回路${layout?.circuitId ?? "-"} AI enhanced`;
+    card.appendChild(title);
+
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("width", "700");
+    svg.setAttribute("height", "320");
+
+    (wirePath?.wires || []).forEach((wire) => {
+      const points = (wire?.path || [])
+        .filter((point) => typeof point?.x === "number" && typeof point?.y === "number")
+        .map((point) => `${point.x},${point.y}`)
+        .join(" ");
+      if (!points) return;
+
+      const polyline = document.createElementNS(NS, "polyline");
+      polyline.setAttribute("points", points);
+      polyline.setAttribute("stroke", roleColors[wire?.role] || "#f5c842");
+      polyline.setAttribute("stroke-width", "2");
+      polyline.setAttribute("fill", "none");
+      svg.appendChild(polyline);
+    });
+
+    (layout?.nodes || []).forEach((node) => {
+      if (typeof node?.x !== "number" || typeof node?.y !== "number") return;
+
+      const x = node.x;
+      const y = node.y;
+      const nodeKind =
+        node?.type === "source"
+          ? "source"
+          : node?.deviceType === "switch"
+            ? "switch"
+            : node?.deviceType === "light"
+              ? "light"
+              : node?.deviceType === "outlet" || node?.deviceType === "ac_outlet"
+                ? "outlet"
+                : "light";
+
+      if (nodeKind === "source") {
+        const rect = document.createElementNS(NS, "rect");
+        rect.setAttribute("x", String(x - 7));
+        rect.setAttribute("y", String(y - 7));
+        rect.setAttribute("width", "14");
+        rect.setAttribute("height", "14");
+        rect.setAttribute("fill", "#2c2c2c");
+        svg.appendChild(rect);
+      } else if (nodeKind === "switch") {
+        const rect = document.createElementNS(NS, "rect");
+        rect.setAttribute("x", String(x - 7));
+        rect.setAttribute("y", String(y - 7));
+        rect.setAttribute("width", "14");
+        rect.setAttribute("height", "14");
+        rect.setAttribute("fill", "#3a3a3a");
+        svg.appendChild(rect);
+      } else if (nodeKind === "outlet") {
+        const polygon = document.createElementNS(NS, "polygon");
+        polygon.setAttribute("points", `${x},${y - 8} ${x + 8},${y} ${x},${y + 8} ${x - 8},${y}`);
+        polygon.setAttribute("fill", "#444");
+        svg.appendChild(polygon);
+      } else {
+        const circle = document.createElementNS(NS, "circle");
+        circle.setAttribute("cx", String(x));
+        circle.setAttribute("cy", String(y));
+        circle.setAttribute("r", "6");
+        circle.setAttribute("fill", "#444");
+        svg.appendChild(circle);
+      }
+
+      const text = document.createElementNS(NS, "text");
+      text.setAttribute("x", String(x + 8));
+      text.setAttribute("y", String(y - 8));
+      text.setAttribute("font-size", "11");
+      text.setAttribute("fill", "#cccccc");
+      text.textContent = String(node?.id || "-");
+      svg.appendChild(text);
+    });
+
+    card.appendChild(svg);
+    panel.appendChild(card);
+  });
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
@@ -537,6 +659,7 @@ function setupCircuitListAutoRender() {
   renderLayoutDebug();
   renderWirePathDebug();
   renderAiDiagramPreview();
+  renderAiDiagramEnhanced();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
@@ -547,6 +670,7 @@ function setupCircuitListAutoRender() {
     renderLayoutDebug();
     renderWirePathDebug();
     renderAiDiagramPreview();
+    renderAiDiagramEnhanced();
   });
   observer.observe(target, {
     childList: true,
@@ -565,6 +689,7 @@ window.renderParseDebugResult = renderParseDebugResult;
 window.renderLayoutDebug = renderLayoutDebug;
 window.renderWirePathDebug = renderWirePathDebug;
 window.renderAiDiagramPreview = renderAiDiagramPreview;
+window.renderAiDiagramEnhanced = renderAiDiagramEnhanced;
 
 initPlayground();
 setupCircuitListAutoRender();
