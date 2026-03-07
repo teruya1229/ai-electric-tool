@@ -28,6 +28,24 @@ const CONDITION_OPTIONS = {
 };
 
 const EMPTY_DIAGRAM = { mode: "exam", groups: [], devices: [], wires: [], joints: [], warnings: [] };
+const PARSE_RULES = {
+  circuitType: [
+    { value: "single", rule: "circuit:single", patterns: [/片切/, /single/] },
+    { value: "threeway", rule: "circuit:threeway", patterns: [/3路/, /三路/, /threeway/, /3-way/] },
+  ],
+  lightCount: [
+    { value: 1, rule: "light:1", patterns: [/1灯/, /一灯/] },
+    { value: 2, rule: "light:2", patterns: [/2灯/, /二灯/] },
+  ],
+  sameTime: { rule: "sameTime:true", patterns: [/同時/, /同時点灯/, /まとめて/, /一括/] },
+  hasOutlet: { rule: "outlet:true", patterns: [/コンセント/] },
+};
+const UNSUPPORTED_PATTERNS = [
+  { patterns: [/4路/, /四路/], message: "4路は今回の対応範囲外です。" },
+  { patterns: [/タイマ/, /タイマー/, /timer/], message: "タイマ回路は今回の対応範囲外です。" },
+  { patterns: [/パイロットランプ/], message: "パイロットランプ回路は今回の対応範囲外です。" },
+  { patterns: [/換気扇連動/], message: "換気扇連動回路は今回の対応範囲外です。" },
+];
 
 /**
  * @param {number} controlId
@@ -304,6 +322,29 @@ function normalizeProblemText(text) {
     .toLowerCase();
 }
 
+function _matchesAny(patterns, text) {
+  return patterns.some((re) => re.test(text));
+}
+
+function _pickSingleByRule(rules, normalizedText) {
+  const hits = rules.filter((rule) => _matchesAny(rule.patterns, normalizedText));
+  return {
+    hit: hits.length === 1 ? hits[0] : null,
+    hitCount: hits.length,
+  };
+}
+
+function _calcParseConfidence(parsed) {
+  const scoreRaw =
+    (parsed.circuitType ? 40 : 0) +
+    (parsed.lightCount ? 40 : 0) +
+    (parsed.sameTime ? 10 : 0) +
+    (parsed.hasOutlet ? 10 : 0) -
+    parsed.errors.length * 20 -
+    parsed.warnings.length * 5;
+  return Math.max(0, Math.min(100, scoreRaw));
+}
+
 /**
  * @param {string} text
  */
@@ -329,83 +370,91 @@ function parseProblemText(text) {
 
   if (!normalized) {
     parsed.errors.push("問題文が空です。");
+    parsed.confidence = _calcParseConfidence(parsed);
     return parsed;
   }
 
-  const unsupportedRules = [
-    { re: /4路|四路/, message: "4路は今回の対応範囲外です。" },
-    { re: /タイマ|タイマー|timer/, message: "タイマ回路は今回の対応範囲外です。" },
-    { re: /パイロットランプ/, message: "パイロットランプ回路は今回の対応範囲外です。" },
-    { re: /換気扇連動/, message: "換気扇連動回路は今回の対応範囲外です。" },
-  ];
-  unsupportedRules.forEach((rule) => {
-    if (rule.re.test(normalized)) parsed.errors.push(rule.message);
-  });
-
-  const hasSingle = /(片切|単極|single)/.test(normalized);
-  const hasThreeway = /(3路|threeway|3-way)/.test(normalized);
-  if (hasSingle && hasThreeway) {
+  const circuitPicked = _pickSingleByRule(PARSE_RULES.circuitType, normalized);
+  if (circuitPicked.hitCount > 1) {
     parsed.errors.push("片切と3路の両方が含まれています。");
-  } else if (hasSingle) {
-    parsed.circuitType = "single";
-    addRule("circuit:single");
-  } else if (hasThreeway) {
-    parsed.circuitType = "threeway";
-    addRule("circuit:threeway");
-  } else {
-    parsed.errors.push("回路種別（片切 / 3路）を判定できません。");
+  } else if (circuitPicked.hit) {
+    parsed.circuitType = circuitPicked.hit.value;
+    addRule(circuitPicked.hit.rule);
   }
 
-  const has1Light = /1灯/.test(normalized);
-  const has2Light = /2灯/.test(normalized);
-  if (has1Light && has2Light) {
+  const lightPicked = _pickSingleByRule(PARSE_RULES.lightCount, normalized);
+  if (lightPicked.hitCount > 1) {
     parsed.errors.push("灯数が1灯と2灯で矛盾しています。");
-  } else if (has2Light) {
-    parsed.lightCount = 2;
-    addRule("light:2");
-  } else if (has1Light) {
-    parsed.lightCount = 1;
-    addRule("light:1");
-  } else {
-    parsed.errors.push("灯数（1灯 / 2灯同時）を判定できません。");
+  } else if (lightPicked.hit) {
+    parsed.lightCount = lightPicked.hit.value;
+    addRule(lightPicked.hit.rule);
   }
 
-  if (/同時|同時点灯|同時on|同時off|まとめて|一括/.test(normalized)) {
+  if (_matchesAny(PARSE_RULES.sameTime.patterns, normalized)) {
     parsed.sameTime = true;
-    addRule("sameTime:true");
+    addRule(PARSE_RULES.sameTime.rule);
   }
 
-  if (/コンセント/.test(normalized)) {
+  if (_matchesAny(PARSE_RULES.hasOutlet.patterns, normalized)) {
     parsed.hasOutlet = true;
-    addRule("outlet:true");
+    addRule(PARSE_RULES.hasOutlet.rule);
   }
 
-  if (parsed.circuitType === "single" && parsed.lightCount === 2 && !parsed.sameTime) {
-    parsed.errors.push("2灯だが同時条件が曖昧で今回未対応です。");
-  }
-  if (parsed.circuitType === "single" && parsed.lightCount === 1 && parsed.sameTime) {
-    parsed.warnings.push("1灯条件では同時点灯指定は不要のため無視します。");
-  }
-  if (parsed.circuitType === "single" && parsed.lightCount === 2 && parsed.hasOutlet) {
-    parsed.errors.push("片切の2灯同時 + コンセントあり は今回の対応範囲外です。");
-  }
-  if (parsed.circuitType === "threeway" && parsed.lightCount === 2) {
-    parsed.errors.push("3路の2灯同時は今回の対応範囲外です。");
-  }
-  if (parsed.circuitType === "threeway" && parsed.hasOutlet) {
-    parsed.errors.push("3路 + コンセントあり は今回の対応範囲外です。");
-  }
+  const validated = validateParsedCombination(parsed);
+  parsed.warnings.push(...validated.warnings);
+  parsed.errors.push(...validated.errors);
 
-  const scoreRaw =
-    (parsed.circuitType ? 40 : 0) +
-    (parsed.lightCount ? 40 : 0) +
-    (parsed.sameTime ? 10 : 0) +
-    (parsed.hasOutlet ? 10 : 0) -
-    parsed.errors.length * 20 -
-    parsed.warnings.length * 5;
-  parsed.confidence = Math.max(0, Math.min(100, scoreRaw));
+  parsed.confidence = _calcParseConfidence(parsed);
 
   return parsed;
+}
+
+/**
+ * @param {{normalizedText:string,circuitType:"single"|"threeway"|null,lightCount:1|2|null,sameTime:boolean,hasOutlet:boolean}} parsed
+ */
+function validateParsedCombination(parsed) {
+  const result = { warnings: [], errors: [] };
+
+  UNSUPPORTED_PATTERNS.forEach((item) => {
+    if (_matchesAny(item.patterns, parsed.normalizedText)) result.errors.push(item.message);
+  });
+
+  if (!parsed.circuitType) {
+    result.errors.push("回路種別（片切 / 3路）を判定できません。");
+  }
+  if (!parsed.lightCount) {
+    result.errors.push("灯数（1灯 / 2灯同時）を判定できません。");
+  }
+  if (parsed.circuitType === "single" && parsed.lightCount === 2 && !parsed.sameTime) {
+    result.errors.push("2灯だが同時条件が曖昧で今回未対応です。");
+  }
+  if (parsed.circuitType === "single" && parsed.lightCount === 1 && parsed.sameTime) {
+    result.warnings.push("1灯条件では同時点灯指定は不要のため無視します。");
+  }
+  if (parsed.circuitType === "threeway" && parsed.lightCount === 2) {
+    result.errors.push("3路の2灯同時は今回の対応範囲外です。");
+  }
+  if (parsed.circuitType === "threeway" && parsed.hasOutlet) {
+    result.errors.push("3路 + コンセントあり は今回の対応範囲外です。");
+  }
+  if (parsed.circuitType === "single" && parsed.lightCount === 2 && parsed.hasOutlet) {
+    result.errors.push("片切の2灯同時 + コンセントあり は今回の対応範囲外です。");
+  }
+
+  return result;
+}
+
+/**
+ * @param {ReturnType<typeof parseProblemText>} parsed
+ */
+function toDiagramFormState(parsed) {
+  return {
+    circuitType: parsed.circuitType,
+    lightCount: parsed.lightCount,
+    hasOutlet: parsed.hasOutlet,
+    sameTime: parsed.sameTime,
+    controlCount: parsed.controlCount,
+  };
 }
 
 /**
@@ -424,31 +473,29 @@ function applyParsedResult(parsed) {
     result.errors.push("解析結果が不正です。");
     return result;
   }
-  if (parsed.errors.length) {
-    result.errors.push(...parsed.errors);
-    return result;
-  }
-  if (!parsed.circuitType || !parsed.lightCount) {
+
+  const formState = toDiagramFormState(parsed);
+  if (!formState.circuitType || !formState.lightCount) {
     result.errors.push("回路種別または灯数が不足しています。");
     return result;
   }
 
-  result.circuitType = parsed.circuitType;
-  if (parsed.circuitType === "threeway") {
-    if (parsed.lightCount !== 1 || parsed.hasOutlet) {
+  result.circuitType = formState.circuitType;
+  if (formState.circuitType === "threeway") {
+    if (formState.lightCount !== 1 || formState.hasOutlet) {
       result.errors.push("3路は1灯のみ対応です。");
       return result;
     }
     result.conditionId = "threeway_1light";
-  } else if (parsed.hasOutlet) {
-    if (parsed.lightCount !== 1) {
+  } else if (formState.hasOutlet) {
+    if (formState.lightCount !== 1) {
       result.errors.push("コンセントありは片切1灯のみ対応です。");
       return result;
     }
     result.conditionId = "single_1light_1outlet";
-  } else if (parsed.lightCount === 2) {
+  } else if (formState.lightCount === 2) {
     result.conditionId = "single_2lights_same";
-  } else if (parsed.lightCount === 1) {
+  } else if (formState.lightCount === 1) {
     result.conditionId = "single_1light";
   } else {
     result.errors.push("条件を判定できません。");
@@ -941,9 +988,11 @@ function initPlayground() {
   function parseAndApplyProblemText() {
     if (!(problemTextInput instanceof HTMLTextAreaElement)) return;
     const parsed = parseProblemText(problemTextInput.value);
+    const diagramFormState = toDiagramFormState(parsed);
     console.info("[problem-parser] normalizedText:", parsed.normalizedText);
     console.info("[problem-parser] parsedResult:", parsed);
     console.info("[problem-parser] matchedRules:", parsed.matchedRules);
+    console.info("[problem-parser] diagramFormState:", diagramFormState);
     const applied = applyParsedResult(parsed);
     if (applied.warnings.length) parsed.warnings.push(...applied.warnings);
     if (applied.errors.length) parsed.errors.push(...applied.errors);
