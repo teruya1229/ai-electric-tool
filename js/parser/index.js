@@ -61,6 +61,24 @@ export function normalizeProblemText(text) {
     .replace(/四個/g, "4個")
     .replace(/五個/g, "5個")
     .replace(/六個/g, "6個")
+    .replace(/一箇所/g, "1箇所")
+    .replace(/二箇所/g, "2箇所")
+    .replace(/三箇所/g, "3箇所")
+    .replace(/四箇所/g, "4箇所")
+    .replace(/五箇所/g, "5箇所")
+    .replace(/六箇所/g, "6箇所")
+    .replace(/一台/g, "1台")
+    .replace(/二台/g, "2台")
+    .replace(/三台/g, "3台")
+    .replace(/四台/g, "4台")
+    .replace(/五台/g, "5台")
+    .replace(/六台/g, "6台")
+    .replace(/一口/g, "1口")
+    .replace(/二口/g, "2口")
+    .replace(/三口/g, "3口")
+    .replace(/四口/g, "4口")
+    .replace(/五口/g, "5口")
+    .replace(/六口/g, "6口")
     .replace(/三路/g, "3路")
     .replace(/四路/g, "4路")
     .replace(/片切り/g, "片切")
@@ -463,6 +481,25 @@ function detectAssistFeatures(line) {
   return features;
 }
 
+function extractPositionHints(line) {
+  const hints = [];
+  const addIfMatch = (pattern, label) => {
+    if (pattern.test(line) && !hints.includes(label)) hints.push(label);
+  };
+  addIfMatch(/玄関側/, "玄関側");
+  addIfMatch(/ldk側/, "LDK側");
+  addIfMatch(/入口横/, "入口横");
+  addIfMatch(/廊下側/, "廊下側");
+  addIfMatch(/トイレ側/, "トイレ側");
+  addIfMatch(/室内側/, "室内側");
+  addIfMatch(/屋外側/, "屋外側");
+  addIfMatch(/右/, "右");
+  addIfMatch(/左/, "左");
+  addIfMatch(/上/, "上");
+  addIfMatch(/下/, "下");
+  return hints;
+}
+
 function extractNumericOnlyQuantityFromLine(line) {
   const normalized = String(line || "").trim();
   const allNumbers = normalized.match(/[0-9]+/g);
@@ -471,21 +508,24 @@ function extractNumericOnlyQuantityFromLine(line) {
 }
 
 function detectQuantity(line) {
-  const numMatch = line.match(/([1-6])\s*(灯|個)/);
+  const numMatch = line.match(/([1-6])\s*(灯|個|箇所|台|口)/);
   if (numMatch) return Number(numMatch[1]);
 
   const jpMap = [
-    { re: /一(灯|個)/, value: 1 },
-    { re: /二(灯|個)/, value: 2 },
-    { re: /三(灯|個)/, value: 3 },
-    { re: /四(灯|個)/, value: 4 },
-    { re: /五(灯|個)/, value: 5 },
-    { re: /六(灯|個)/, value: 6 },
+    { re: /一(灯|個|箇所|台|口)/, value: 1 },
+    { re: /二(灯|個|箇所|台|口)/, value: 2 },
+    { re: /三(灯|個|箇所|台|口)/, value: 3 },
+    { re: /四(灯|個|箇所|台|口)/, value: 4 },
+    { re: /五(灯|個|箇所|台|口)/, value: 5 },
+    { re: /六(灯|個|箇所|台|口)/, value: 6 },
   ];
   const hit = jpMap.find((item) => item.re.test(line));
   if (hit) return hit.value;
 
-  const over = line.match(/([0-9]+)\s*(灯|個)/);
+  const switchCount = line.match(/(?:片切|3路|4路)(?:スイッチ)?\s*([1-6])/);
+  if (switchCount) return Number(switchCount[1]);
+
+  const over = line.match(/([0-9]+)\s*(灯|個|箇所|台|口)/);
   if (over) return Number(over[1]);
 
   const numericOnly = extractNumericOnlyQuantityFromLine(line);
@@ -498,12 +538,12 @@ function extractGroupLabel(line) {
   return String(line || "")
     .replace(/\s+/g, "")
     .replace(
-      /(照明|ライト|ランプ|シーリング|ダウンライト|蛍光灯|引掛シーリング|一般コンセント|ダブルコンセント|2口コンセント|二口コンセント|接地極付コンセント|コンセント|エアコン用|エアコンコンセント|エアコン|AC|ac|クーラー|換気扇|換気|ファン|ベント|浴室換気|トイレ換気|電子レンジ|レンジ|冷蔵庫|洗面|洗濯機|外部|外|庭|ベランダ|片切|スイッチ|パイロットランプ|ほたる|ホタル|タイマ|タイマー|遅れスイッチ|遅延スイッチ|人感|センサー)/g,
+      /(照明|ライト|ランプ|シーリング|ダウンライト|蛍光灯|引掛シーリング|一般コンセント|ダブルコンセント|2口コンセント|二口コンセント|接地極付コンセント|コンセント|エアコン用|エアコンコンセント|エアコン|AC|ac|クーラー|換気扇|換気|ファン|ベント|浴室換気|トイレ換気|電子レンジ|レンジ|冷蔵庫|洗面|洗濯機|外部|外|庭|ベランダ|玄関側|LDK側|ldk側|入口横|廊下側|トイレ側|室内側|屋外側|右|左|上|下|片切|スイッチ|パイロットランプ|ほたる|ホタル|タイマ|タイマー|遅れスイッチ|遅延スイッチ|人感|センサー)/g,
       ""
     )
     .replace(/(3路|三路|4路|四路)/g, "")
-    .replace(/([1-9][0-9]*)(灯|個)/g, "")
-    .replace(/([一二三四五六七八九十]+)(灯|個)/g, "")
+    .replace(/([1-9][0-9]*)(灯|個|箇所|台|口)/g, "")
+    .replace(/([一二三四五六七八九十]+)(灯|個|箇所|台|口)/g, "")
     .trim();
 }
 
@@ -594,6 +634,7 @@ function parseFieldLine(line) {
   const purpose = detectPurpose(normalizedLine);
   const detectedDeviceType = detectDeviceType(normalizedLine) || purposeToDeviceType(purpose, switchType);
   const assistFeatures = detectAssistFeatures(normalizedLine);
+  const positionHints = extractPositionHints(normalizedLine);
   const parsed = {
     rawLine: line,
     normalizedLine,
@@ -602,6 +643,8 @@ function parseFieldLine(line) {
     switchType,
     quantity: detectQuantity(normalizedLine),
     label: normalizeGroupLabel(extractGroupLabel(line)),
+    assistFeatures,
+    positionHints,
     warnings: [],
     errors: [],
   };
@@ -615,8 +658,11 @@ function parseFieldLine(line) {
   if (assistFeatures.length) {
     parsed.warnings.push(`補助器具語を検出: ${assistFeatures.join(" / ")}`);
   }
+  if (positionHints.length) {
+    parsed.warnings.push(`位置ヒントを検出: ${positionHints.join(" / ")}`);
+  }
   if (
-    !/(照明|ライト|ランプ|シーリング|ダウンライト|蛍光灯|引掛シーリング|コンセント|一般コンセント|ダブルコンセント|2口コンセント|二口コンセント|接地極付コンセント|エアコン|ac|クーラー|換気扇|換気|ファン|ベント|浴室換気|トイレ換気|片切|3路|三路|4路|四路|[1-6]灯|[1-6]個|一灯|二灯|三灯|四灯|五灯|六灯|一個|二個|三個|四個|五個|六個|パイロットランプ|ほたる|タイマ|タイマー|人感|センサー)/.test(normalizedLine)
+    !/(照明|ライト|ランプ|シーリング|ダウンライト|蛍光灯|引掛シーリング|コンセント|一般コンセント|ダブルコンセント|2口コンセント|二口コンセント|接地極付コンセント|エアコン|ac|クーラー|換気扇|換気|ファン|ベント|浴室換気|トイレ換気|片切|3路|三路|4路|四路|[1-6](灯|個|箇所|台|口)|一(灯|個|箇所|台|口)|二(灯|個|箇所|台|口)|三(灯|個|箇所|台|口)|四(灯|個|箇所|台|口)|五(灯|個|箇所|台|口)|六(灯|個|箇所|台|口)|玄関側|ldk側|入口横|廊下側|トイレ側|室内側|屋外側|右|左|上|下|パイロットランプ|ほたる|タイマ|タイマー|人感|センサー)/.test(normalizedLine)
   ) {
     parsed.warnings.push("未知語句を含みます。");
   }
@@ -633,6 +679,15 @@ function createGroupFromLine(parsed) {
   group.sameTime = parsed.deviceType === "light" && parsed.quantity >= 2;
   _setGroupQuantity(group, "light", parsed.deviceType === "light" ? parsed.quantity : 0);
   _setGroupQuantity(group, "outlet", parsed.deviceType === "outlet" ? parsed.quantity : 0);
+  if (Array.isArray(parsed.assistFeatures) && parsed.assistFeatures.length) {
+    group.assistFeatures = [...parsed.assistFeatures];
+  }
+  if (Array.isArray(parsed.positionHints) && parsed.positionHints.length) {
+    group.positionHints = [...parsed.positionHints];
+  }
+  if (Array.isArray(parsed.warnings) && parsed.warnings.length) {
+    group.warnings = [...parsed.warnings];
+  }
   return group;
 }
 
