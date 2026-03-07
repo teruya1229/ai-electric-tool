@@ -717,8 +717,44 @@ function renderAiDiagramExamStyle(sceneModel) {
     traveler_2: "#9b59b6",
   };
   const selectedCircuit = getSelectedCircuitFromList();
+  const renderLayoutIndexes = layouts.map((_, index) => index);
+  if (selectedCircuit.hasSelection) {
+    let selectedLayoutIndex = -1;
+    if (selectedCircuit.selectedCircuitId !== null) {
+      selectedLayoutIndex = renderLayoutIndexes.find((index) => {
+        const layout = layouts[index];
+        const wirePath = wirePaths.find((item) => item?.circuitId === layout?.circuitId) || wirePaths[index] || null;
+        const graph =
+          graphs.find((item) => item?.circuitId === layout?.circuitId) ||
+          graphs.find((item) => item?.circuitId === wirePath?.circuitId) ||
+          graphs[index] ||
+          null;
+        const circuit =
+          circuits.find((item) => item?.id === layout?.circuitId) ||
+          circuits.find((item) => item?.id === graph?.circuitId) ||
+          circuits.find((item) => item?.id === wirePath?.circuitId) ||
+          circuits[index] ||
+          null;
+        return [circuit?.id, layout?.circuitId, graph?.circuitId, wirePath?.circuitId].some(
+          (value) => Number.isFinite(Number(value)) && Number(value) === selectedCircuit.selectedCircuitId
+        );
+      });
+    }
+    if (
+      selectedLayoutIndex < 0 &&
+      selectedCircuit.selectedIndex >= 0 &&
+      selectedCircuit.selectedIndex < renderLayoutIndexes.length
+    ) {
+      selectedLayoutIndex = selectedCircuit.selectedIndex;
+    }
+    if (selectedLayoutIndex > 0) {
+      renderLayoutIndexes.splice(selectedLayoutIndex, 1);
+      renderLayoutIndexes.unshift(selectedLayoutIndex);
+    }
+  }
 
-  layouts.forEach((layout, layoutIndex) => {
+  renderLayoutIndexes.forEach((layoutIndex) => {
+    const layout = layouts[layoutIndex];
     const wirePath = wirePaths.find((item) => item?.circuitId === layout?.circuitId) || wirePaths[layoutIndex] || null;
     const graph =
       graphs.find((item) => item?.circuitId === layout?.circuitId) ||
