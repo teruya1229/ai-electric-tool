@@ -835,6 +835,83 @@ function extractGroupLabel(line) {
     .trim();
 }
 
+function normalizeGroupLabel(label) {
+  return String(label || "").replace(/\s+/g, "").trim();
+}
+
+function canMergeGroups(a, b) {
+  const aLabel = normalizeGroupLabel(a?.label);
+  const bLabel = normalizeGroupLabel(b?.label);
+  if (!aLabel || !bLabel) return { ok: false, reason: "empty_label" };
+  if (aLabel !== bLabel) return { ok: false, reason: "label_mismatch" };
+  if (a.switchType !== b.switchType) return { ok: false, reason: "switch_mismatch" };
+  const mergedLight = _getGroupQuantity(a, "light") + _getGroupQuantity(b, "light");
+  const mergedOutlet = _getGroupQuantity(a, "outlet") + _getGroupQuantity(b, "outlet");
+  if (mergedLight > 6) return { ok: false, reason: "light_overflow" };
+  if (mergedOutlet > 6) return { ok: false, reason: "outlet_overflow" };
+  return { ok: true, reason: "" };
+}
+
+function mergeTwoGroups(a, b) {
+  const merged = {
+    ...a,
+    label: a.label || b.label || "",
+    devices: [
+      { type: "light", quantity: _getGroupQuantity(a, "light") + _getGroupQuantity(b, "light") },
+      { type: "outlet", quantity: _getGroupQuantity(a, "outlet") + _getGroupQuantity(b, "outlet") },
+    ],
+  };
+  merged.sameTime = !!a.sameTime || !!b.sameTime || _getGroupQuantity(merged, "light") >= 2;
+  return merged;
+}
+
+function mergeGroupsByLabel(groups) {
+  const result = {
+    groups: [],
+    warnings: [],
+    errors: [],
+  };
+  (groups || []).forEach((group) => {
+    const normalized = normalizeGroupLabel(group?.label);
+    if (!normalized) {
+      result.groups.push(group);
+      return;
+    }
+    const sameLabelGroups = result.groups.filter((g) => normalizeGroupLabel(g.label) === normalized);
+    const sameLabelSameSwitch = sameLabelGroups.find((g) => g.switchType === group.switchType);
+    if (!sameLabelSameSwitch) {
+      if (sameLabelGroups.length) {
+        result.warnings.push(`label="${normalized}" は switchType が異なるため統合しません。`);
+      }
+      result.groups.push(group);
+      return;
+    }
+    const check = canMergeGroups(sameLabelSameSwitch, group);
+    if (!check.ok) {
+      if (check.reason === "light_overflow") {
+        result.errors.push(`label="${normalized}" 統合後の照明数が6を超えます。`);
+      } else if (check.reason === "outlet_overflow") {
+        result.errors.push(`label="${normalized}" 統合後のコンセント数が6を超えます。`);
+      } else {
+        result.warnings.push(`label="${normalized}" は統合条件を満たさないため統合しません。`);
+      }
+      result.groups.push(group);
+      return;
+    }
+    const idx = result.groups.indexOf(sameLabelSameSwitch);
+    if (idx >= 0) {
+      result.groups[idx] = mergeTwoGroups(sameLabelSameSwitch, group);
+      result.warnings.push(`label="${normalized}" を統合しました。`);
+    } else {
+      result.groups.push(group);
+    }
+  });
+  result.groups.forEach((group, index) => {
+    group.controlId = EXAM_LABELS[index] || `#${index + 1}`;
+  });
+  return result;
+}
+
 function parseFieldLine(line) {
   const normalizedLine = normalizeProblemText(line);
   const switchType = detectSwitchType(normalizedLine);
@@ -845,7 +922,7 @@ function parseFieldLine(line) {
     deviceType: detectedDeviceType || (switchType === "threeway" ? "light" : null),
     switchType,
     quantity: detectQuantity(normalizedLine),
-    label: extractGroupLabel(line),
+    label: normalizeGroupLabel(extractGroupLabel(line)),
     warnings: [],
     errors: [],
   };
@@ -899,6 +976,11 @@ function parseFieldSceneText(text) {
     group.controlId = getNextControlId(result.groups);
     result.groups.push(group);
   });
+
+  const merged = mergeGroupsByLabel(result.groups);
+  result.groups = merged.groups;
+  result.warnings.push(...merged.warnings);
+  result.errors.push(...merged.errors);
 
   if (!result.groups.length) result.errors.push("有効な系統を生成できませんでした。");
   if (result.groups.length > 6) {
@@ -1569,6 +1651,11 @@ function initPlayground() {
   }
 
   function renderAll() {
+    if (!state.sceneModel.groups.length) {
+      state.sceneModel.activeGroupIndex = 0;
+    } else if (state.sceneModel.activeGroupIndex >= state.sceneModel.groups.length) {
+      state.sceneModel.activeGroupIndex = state.sceneModel.groups.length - 1;
+    }
     renderGroupList(state.sceneModel);
     renderGroupEditor(state.sceneModel, state.sceneModel.activeGroupIndex);
     renderSelection();
