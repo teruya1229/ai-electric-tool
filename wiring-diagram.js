@@ -1,5 +1,5 @@
 /**
- * @typedef {"exam" | "field"} DiagramMode
+ * @typedef {"exam" | "field" | "exam_gamidenki"} DiagramMode
  * @typedef {"single" | "threeway"} CircuitType
  * @typedef {"power"|"joint"|"switch_single"|"switch_3way"|"switch_4way"|"light"|"outlet"|"outlet_e"|"fan"|"earth"} DeviceKind
  * @typedef {{id:string,kind:DeviceKind,name:string,controlId?:number,position?:number}} InputDevice
@@ -364,6 +364,11 @@ function renderDiagram(diagram, renderError) {
   if (!canvas) return;
   canvas.innerHTML = "";
 
+  if (diagram.mode === "exam_gamidenki") {
+    renderExamStyleDiagram(diagram, renderError);
+    return;
+  }
+
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 900 460");
   svg.setAttribute("width", "900");
@@ -449,12 +454,121 @@ function renderDiagram(diagram, renderError) {
   canvas.appendChild(svg);
 }
 
+/**
+ * @param {GeneratedDiagram} diagram
+ * @param {string} renderError
+ */
+function renderExamStyleDiagram(diagram, renderError) {
+  const canvas = document.getElementById("diagram-canvas");
+  if (!canvas) return;
+  canvas.innerHTML = "";
+
+  const groupCount = Math.max(diagram.groups.length, 1);
+  const height = Math.max(420, groupCount * 300 + 80);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 900 ${height}`);
+  svg.setAttribute("width", "900");
+  svg.setAttribute("height", String(height));
+
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bg.setAttribute("x", "0");
+  bg.setAttribute("y", "0");
+  bg.setAttribute("width", "900");
+  bg.setAttribute("height", String(height));
+  bg.setAttribute("fill", "#1f2937");
+  bg.setAttribute("stroke", "#111827");
+  bg.setAttribute("stroke-width", "1");
+  svg.appendChild(bg);
+
+  const hasData = diagram.devices.length > 0 || diagram.wires.length > 0;
+  if (!hasData || renderError) {
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", "450");
+    text.setAttribute("y", String(Math.floor(height / 2)));
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", "18");
+    text.setAttribute("fill", "#e2e8f0");
+    text.textContent = renderError || "複線図データなし";
+    svg.appendChild(text);
+    canvas.appendChild(svg);
+    return;
+  }
+
+  const wireColor = { L: "#111111", N: "#ffffff", R: "#dc2626" };
+  const drawWire = (x1, y1, x2, y2, conductor) => {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", String(x1));
+    line.setAttribute("y1", String(y1));
+    line.setAttribute("x2", String(x2));
+    line.setAttribute("y2", String(y2));
+    line.setAttribute("stroke", wireColor[conductor] || "#94a3b8");
+    line.setAttribute("stroke-width", conductor === "N" ? "4" : "3");
+    svg.appendChild(line);
+  };
+
+  const drawBox = (x, y, w, h, label) => {
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", String(x - w / 2));
+    rect.setAttribute("y", String(y - h / 2));
+    rect.setAttribute("width", String(w));
+    rect.setAttribute("height", String(h));
+    rect.setAttribute("rx", "4");
+    rect.setAttribute("fill", "#f8fafc");
+    rect.setAttribute("stroke", "#0f172a");
+    rect.setAttribute("stroke-width", "2");
+    svg.appendChild(rect);
+
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", String(x));
+    text.setAttribute("y", String(y + 4));
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", "14");
+    text.setAttribute("fill", "#0f172a");
+    text.textContent = label;
+    svg.appendChild(text);
+  };
+
+  diagram.groups.forEach((group, index) => {
+    const centerX = 330 + (index % 2) * 260;
+    const topY = 70 + Math.floor(index / 2) * 300;
+    const powerY = topY;
+    const controlY = topY + 65;
+    const switchY = topY + 140;
+    const lightY = topY + 225;
+    const outletX = centerX + 180;
+    const outletY = switchY + 20;
+    const label = group.controlLabel;
+    const swCount = group.devices.filter((d) => d.kind === "switch_3way").length;
+    const lightDevice = group.devices.find((d) => d.kind === "light");
+    const outletDevice = diagram.devices.find((d) => d.kind === "outlet" && d.id.includes(`-${index}`));
+
+    drawWire(centerX, powerY + 18, centerX, controlY - 18, "L");
+    drawWire(centerX, controlY + 18, centerX, switchY - 18, "L");
+    drawWire(centerX, switchY + 18, centerX, lightY - 18, "R");
+    drawWire(centerX + 38, controlY + 18, centerX + 38, lightY - 18, "N");
+
+    drawBox(centerX, powerY, 88, 36, "電源");
+    drawBox(centerX, controlY, 72, 36, `(${label})`);
+    drawBox(centerX, switchY, 112, 40, swCount === 2 ? `SW1/SW2(${label})` : `SW(${label})`);
+    drawBox(centerX, lightY, 112, 40, `${lightDevice?.name || "R1"}(${label})`);
+
+    if (outletDevice) {
+      drawWire(centerX, controlY, outletX - 50, outletY - 6, "L");
+      drawWire(centerX + 38, controlY, outletX - 38, outletY + 6, "N");
+      drawBox(outletX, outletY, 96, 36, `${outletDevice.label || "C1"}`);
+    }
+  });
+
+  canvas.appendChild(svg);
+}
+
 function initPlayground() {
   const circuitSingleBtn = document.getElementById("circuit-single-btn");
   const circuitThreewayBtn = document.getElementById("circuit-threeway-btn");
   const conditionButtonsEl = document.getElementById("condition-buttons");
   const conditionHintEl = document.getElementById("condition-hint");
   const modeExamBtn = document.getElementById("mode-exam-btn");
+  const modeGamidenkiBtn = document.getElementById("mode-gamidenki-btn");
   const modeFieldBtn = document.getElementById("mode-field-btn");
   const generateBtn = document.getElementById("generate-btn");
 
@@ -477,6 +591,7 @@ function initPlayground() {
     !conditionButtonsEl ||
     !conditionHintEl ||
     !modeExamBtn ||
+    !modeGamidenkiBtn ||
     !modeFieldBtn ||
     !generateBtn ||
     !selectionEl ||
@@ -538,11 +653,17 @@ function initPlayground() {
 
   function renderSelection() {
     const circuitText = state.selectedCircuitType === "single" ? "片切" : state.selectedCircuitType === "threeway" ? "3路" : "未選択";
+    const modeText =
+      state.selectedMode === "exam"
+        ? "試験モード"
+        : state.selectedMode === "exam_gamidenki"
+          ? "ガミデンキモード"
+          : "現場モード";
     selectionEl.textContent = JSON.stringify(
       {
         回路を選ぶ: circuitText,
         条件を選ぶ: getConditionLabel(),
-        表示モード: state.selectedMode === "exam" ? "試験モード" : "現場モード",
+        表示モード: modeText,
       },
       null,
       2
@@ -553,6 +674,7 @@ function initPlayground() {
     circuitSingleBtn.classList.toggle("active", state.selectedCircuitType === "single");
     circuitThreewayBtn.classList.toggle("active", state.selectedCircuitType === "threeway");
     modeExamBtn.classList.toggle("active", state.selectedMode === "exam");
+    modeGamidenkiBtn.classList.toggle("active", state.selectedMode === "exam_gamidenki");
     modeFieldBtn.classList.toggle("active", state.selectedMode === "field");
   }
 
@@ -563,7 +685,8 @@ function initPlayground() {
     } else {
       state.error = "";
       try {
-        state.diagram = generateDiagram(state.devices, state.selectedMode);
+        const generationMode = state.selectedMode === "exam_gamidenki" ? "exam" : state.selectedMode;
+        state.diagram = { ...generateDiagram(state.devices, generationMode), mode: state.selectedMode };
         if (!state.diagram.devices.length && !state.diagram.wires.length) {
           state.error = "複線図データなし";
         }
@@ -619,6 +742,12 @@ function initPlayground() {
 
   modeExamBtn.addEventListener("click", () => {
     state.selectedMode = "exam";
+    renderAll();
+    if (isSelectionReady()) generateAndRender();
+  });
+
+  modeGamidenkiBtn.addEventListener("click", () => {
+    state.selectedMode = "exam_gamidenki";
     renderAll();
     if (isSelectionReady()) generateAndRender();
   });

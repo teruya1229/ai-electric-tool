@@ -33,6 +33,7 @@
         <h2>表示モード</h2>
         <div class="button-row" id="mode-buttons">
           <button id="mode-exam-btn" type="button">試験モード</button>
+          <button id="mode-gamidenki-btn" type="button">ガミデンキモード</button>
           <button id="mode-field-btn" type="button">現場モード</button>
         </div>
       </section>
@@ -149,6 +150,11 @@
             <span class="ui-btn-icon">📝</span>
             <span class="ui-btn-main">試験モード</span>
             <span class="ui-btn-sub">電工試験対策。凡例・色分けあり</span>
+          </button>
+          <button class="ui-btn" onclick="uiSelect('mode','ガミデンキ')">
+            <span class="ui-btn-icon">📐</span>
+            <span class="ui-btn-main">ガミデンキモード</span>
+            <span class="ui-btn-sub">縦配線中心の試験形式</span>
           </button>
           <button class="ui-btn" onclick="uiSelect('mode','現場')">
             <span class="ui-btn-icon">🔧</span>

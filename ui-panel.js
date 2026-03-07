@@ -14,7 +14,7 @@ const UI = {
   step: 1,
   circuit: null, // "片切" | "3路"
   condition: null, // 条件オブジェクト
-  mode: null, // "試験" | "現場"
+  mode: null, // "試験" | "ガミデンキ" | "現場"
 };
 
 // ── 条件マスタ ────────────────────────────────
@@ -119,13 +119,15 @@ function uiGenerate() {
     typeof window.buildDevicesFromSelection === "function"
       ? window.buildDevicesFromSelection(circuitType, conditionId)
       : _buildDevicesFromCondition(conditionId);
-  const mode = UI.mode === "現場" ? "field" : "exam";
+  const mode = _toDiagramMode(UI.mode);
+  const generationMode = mode === "exam_gamidenki" ? "exam" : mode;
   let diagram = null;
   let renderError = "";
 
   if (typeof window.generateDiagram === "function") {
     try {
-      diagram = window.generateDiagram(devices, mode);
+      diagram = window.generateDiagram(devices, generationMode);
+      if (diagram) diagram = { ...diagram, mode };
       if (!diagram || (!diagram.devices?.length && !diagram.wires?.length)) {
         renderError = "複線図データなし";
       }
@@ -174,7 +176,7 @@ function _renderToExistingOutput(payload) {
     selectionEl.textContent = [
       `回路を選ぶ: ${payload.circuitType === "threeway" ? "3路" : "片切"}`,
       `条件を選ぶ: ${UI.condition ? UI.condition.label : "未選択"}`,
-      `表示モード: ${payload.mode === "exam" ? "試験モード" : "現場モード"}`,
+      `表示モード: ${_toDisplayModeLabel(payload.mode)}`,
     ].join("\n");
   }
 
@@ -267,6 +269,18 @@ function _normalizeConditionId(conditionId) {
     threeway: "threeway_1light",
   };
   return aliases[conditionId] || conditionId;
+}
+
+function _toDiagramMode(uiMode) {
+  if (uiMode === "現場") return "field";
+  if (uiMode === "ガミデンキ") return "exam_gamidenki";
+  return "exam";
+}
+
+function _toDisplayModeLabel(mode) {
+  if (mode === "field") return "現場モード";
+  if (mode === "exam_gamidenki") return "ガミデンキモード";
+  return "試験モード";
 }
 
 // ── 内部処理 ──────────────────────────────────
