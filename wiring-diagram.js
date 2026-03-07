@@ -683,8 +683,10 @@ function renderAiDiagramGamidenki(sceneModel) {
     traveler_2: "#9b59b6",
   };
 
-  layouts.forEach((layout) => {
+  layouts.forEach((layout, layoutIndex) => {
     const wirePath = wirePaths.find((item) => item?.circuitId === layout?.circuitId);
+    const circuit = circuits.find((item) => item?.id === layout?.circuitId);
+    const graph = graphs.find((item) => item?.circuitId === layout?.circuitId);
     const card = document.createElement("article");
     card.className = "ai-diagram-gamidenki-item";
 
@@ -705,11 +707,58 @@ function renderAiDiagramGamidenki(sceneModel) {
     bg.setAttribute("fill", "#1f1f1f");
     svg.appendChild(bg);
 
+    const circuitLabel =
+      circuit?.id ??
+      graph?.id ??
+      (typeof layout?.circuitId !== "undefined" && layout?.circuitId !== null ? layout.circuitId : `circuit-${layoutIndex + 1}`);
+    const nodeCount = Array.isArray(layout?.nodes) ? layout.nodes.length : 0;
+    const wireCount = Array.isArray(wirePath?.wires) ? wirePath.wires.length : 0;
+
+    const headerTitle = document.createElementNS(NS, "text");
+    headerTitle.setAttribute("x", "16");
+    headerTitle.setAttribute("y", "20");
+    headerTitle.setAttribute("font-size", "13");
+    headerTitle.setAttribute("font-weight", "700");
+    headerTitle.setAttribute("fill", "#ffffff");
+    headerTitle.textContent = `回路: ${circuitLabel}`;
+    svg.appendChild(headerTitle);
+
+    const headerSub = document.createElementNS(NS, "text");
+    headerSub.setAttribute("x", "16");
+    headerSub.setAttribute("y", "35");
+    headerSub.setAttribute("font-size", "10");
+    headerSub.setAttribute("fill", "#bbbbbb");
+    headerSub.textContent = `器具数: ${nodeCount}  配線数: ${wireCount}`;
+    svg.appendChild(headerSub);
+
+    const hasThreeway = (wirePath?.wires || []).some((wire) => wire?.role === "traveler_1" || wire?.role === "traveler_2");
+    if (hasThreeway) {
+      const threewayText = document.createElementNS(NS, "text");
+      threewayText.setAttribute("x", "540");
+      threewayText.setAttribute("y", "20");
+      threewayText.setAttribute("font-size", "10");
+      threewayText.setAttribute("fill", "#c792ea");
+      threewayText.textContent = "3路配線あり";
+      svg.appendChild(threewayText);
+    }
+
+    const drawOffsetY = -8;
+    let lineNoteCount = 0;
+    const lineNoteLabels = {
+      line: "L",
+      line_load: "L",
+      neutral: "N",
+      switch_return: "返り",
+      traveler_1: "3路",
+      traveler_2: "3路",
+    };
+    const lineNoteUsed = new Set();
+
     (wirePath?.wires || []).forEach((wire) => {
       const yOffset = wire?.role === "traveler_1" ? -3 : wire?.role === "traveler_2" ? 3 : 0;
       const points = (wire?.path || [])
         .filter((point) => typeof point?.x === "number" && typeof point?.y === "number")
-        .map((point) => `${point.x},${point.y + yOffset}`)
+        .map((point) => `${point.x},${point.y + yOffset + drawOffsetY}`)
         .join(" ");
       if (!points) return;
 
@@ -720,13 +769,30 @@ function renderAiDiagramGamidenki(sceneModel) {
       polyline.setAttribute("fill", "none");
       polyline.setAttribute("stroke-linecap", "round");
       svg.appendChild(polyline);
+
+      const shortLabel = lineNoteLabels[wire?.role];
+      if (shortLabel && lineNoteCount < 2 && !lineNoteUsed.has(shortLabel)) {
+        const pointList = (wire?.path || []).filter((point) => typeof point?.x === "number" && typeof point?.y === "number");
+        if (pointList.length) {
+          const midPoint = pointList[Math.floor(pointList.length / 2)];
+          const lineText = document.createElementNS(NS, "text");
+          lineText.setAttribute("x", String(midPoint.x + 4));
+          lineText.setAttribute("y", String(midPoint.y + yOffset + drawOffsetY - 4));
+          lineText.setAttribute("font-size", "9");
+          lineText.setAttribute("fill", roleColors[wire?.role] || "#dddddd");
+          lineText.textContent = shortLabel;
+          svg.appendChild(lineText);
+          lineNoteCount += 1;
+          lineNoteUsed.add(shortLabel);
+        }
+      }
     });
 
     (layout?.nodes || []).forEach((node) => {
       if (typeof node?.x !== "number" || typeof node?.y !== "number") return;
 
       const x = node.x;
-      const y = node.y;
+      const y = node.y + drawOffsetY;
       const nodeKind =
         node?.type === "source"
           ? "source"
@@ -787,6 +853,23 @@ function renderAiDiagramGamidenki(sceneModel) {
       typeText.setAttribute("fill", "#aaaaaa");
       typeText.textContent = nodeKind;
       svg.appendChild(typeText);
+
+      const deviceLabelMap = {
+        source: "電源",
+        switch: "SW",
+        light: "照明",
+        outlet: "コンセント",
+      };
+      const deviceLabel = deviceLabelMap[nodeKind];
+      if (deviceLabel) {
+        const deviceText = document.createElementNS(NS, "text");
+        deviceText.setAttribute("x", String(x + 10));
+        deviceText.setAttribute("y", String(y + 14));
+        deviceText.setAttribute("font-size", "9");
+        deviceText.setAttribute("fill", "#ffd966");
+        deviceText.textContent = deviceLabel;
+        svg.appendChild(deviceText);
+      }
     });
 
     const legend = [
