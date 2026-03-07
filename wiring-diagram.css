@@ -157,6 +157,10 @@ pre {
   font-size: 14px;
 }
 
+#quantity-controls .button-row {
+  align-items: flex-end;
+}
+
 @media (max-width: 768px) {
   .button-row {
     display: grid;

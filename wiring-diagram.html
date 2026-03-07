@@ -27,6 +27,34 @@
         <h2>条件を選ぶ</h2>
         <p class="hint" id="condition-hint">先に回路を選んでください。</p>
         <div class="button-row" id="condition-buttons"></div>
+        <div class="controls" id="quantity-controls">
+          <div class="button-row">
+            <label for="light-count-select">
+              照明数
+              <select id="light-count-select">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+              </select>
+            </label>
+            <label for="outlet-count-select">
+              コンセント数
+              <select id="outlet-count-select">
+                <option value="0">0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint">現場向け拡張入力（1系統固定）。既存図は安全な範囲で簡略表示します。</p>
+        </div>
       </section>
 
       <section class="card">

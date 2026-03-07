@@ -36,9 +36,21 @@ const PARSE_RULES = {
   lightCount: [
     { value: 1, rule: "light:1", patterns: [/1灯/, /一灯/] },
     { value: 2, rule: "light:2", patterns: [/2灯/, /二灯/] },
+    { value: 3, rule: "light:3", patterns: [/3灯/, /三灯/] },
+    { value: 4, rule: "light:4", patterns: [/4灯/, /四灯/] },
+    { value: 5, rule: "light:5", patterns: [/5灯/, /五灯/] },
+    { value: 6, rule: "light:6", patterns: [/6灯/, /六灯/] },
   ],
+  outletCount: [
+    { value: 1, rule: "outlet:1", patterns: [/コンセント\s*1個/, /コンセント\s*一個/] },
+    { value: 2, rule: "outlet:2", patterns: [/コンセント\s*2個/, /コンセント\s*二個/] },
+    { value: 3, rule: "outlet:3", patterns: [/コンセント\s*3個/, /コンセント\s*三個/] },
+    { value: 4, rule: "outlet:4", patterns: [/コンセント\s*4個/, /コンセント\s*四個/] },
+    { value: 5, rule: "outlet:5", patterns: [/コンセント\s*5個/, /コンセント\s*五個/] },
+    { value: 6, rule: "outlet:6", patterns: [/コンセント\s*6個/, /コンセント\s*六個/] },
+  ],
+  outletAny: { rule: "outlet:any", patterns: [/コンセントあり/, /コンセント/] },
   sameTime: { rule: "sameTime:true", patterns: [/同時/, /同時点灯/, /まとめて/, /一括/] },
-  hasOutlet: { rule: "outlet:true", patterns: [/コンセント/] },
 };
 const UNSUPPORTED_PATTERNS = [
   { patterns: [/4路/, /四路/], message: "4路は今回の対応範囲外です。" },
@@ -313,9 +325,19 @@ function normalizeProblemText(text) {
   return text
     .normalize("NFKC")
     .replace(/[，、。,.]/g, " ")
-    .replace(/三路/g, "3路")
-    .replace(/二灯/g, "2灯")
     .replace(/一灯/g, "1灯")
+    .replace(/二灯/g, "2灯")
+    .replace(/三灯/g, "3灯")
+    .replace(/四灯/g, "4灯")
+    .replace(/五灯/g, "5灯")
+    .replace(/六灯/g, "6灯")
+    .replace(/一個/g, "1個")
+    .replace(/二個/g, "2個")
+    .replace(/三個/g, "3個")
+    .replace(/四個/g, "4個")
+    .replace(/五個/g, "5個")
+    .replace(/六個/g, "6個")
+    .replace(/三路/g, "3路")
     .replace(/片切り/g, "片切")
     .replace(/\s+/g, " ")
     .trim()
@@ -355,9 +377,11 @@ function parseProblemText(text) {
     normalizedText: normalized,
     circuitType: null,
     lightCount: null,
+    outletCount: 0,
     sameTime: false,
     hasOutlet: false,
     controlCount: 1,
+    devicesModel: null,
     confidence: 0,
     matchedRules: [],
     warnings: [],
@@ -384,33 +408,46 @@ function parseProblemText(text) {
 
   const lightPicked = _pickSingleByRule(PARSE_RULES.lightCount, normalized);
   if (lightPicked.hitCount > 1) {
-    parsed.errors.push("灯数が1灯と2灯で矛盾しています。");
+    parsed.errors.push("灯数が複数候補で矛盾しています。");
   } else if (lightPicked.hit) {
     parsed.lightCount = lightPicked.hit.value;
     addRule(lightPicked.hit.rule);
+  }
+
+  const outletPicked = _pickSingleByRule(PARSE_RULES.outletCount, normalized);
+  if (outletPicked.hitCount > 1) {
+    parsed.errors.push("コンセント数が複数候補で矛盾しています。");
+  } else if (outletPicked.hit) {
+    parsed.outletCount = outletPicked.hit.value;
+    addRule(outletPicked.hit.rule);
+  } else if (_matchesAny(PARSE_RULES.outletAny.patterns, normalized)) {
+    parsed.outletCount = 1;
+    addRule(PARSE_RULES.outletAny.rule);
   }
 
   if (_matchesAny(PARSE_RULES.sameTime.patterns, normalized)) {
     parsed.sameTime = true;
     addRule(PARSE_RULES.sameTime.rule);
   }
-
-  if (_matchesAny(PARSE_RULES.hasOutlet.patterns, normalized)) {
-    parsed.hasOutlet = true;
-    addRule(PARSE_RULES.hasOutlet.rule);
+  parsed.hasOutlet = parsed.outletCount > 0;
+  if (!parsed.lightCount && parsed.circuitType === "single" && parsed.outletCount > 0) {
+    parsed.lightCount = 1;
+    parsed.warnings.push("灯数未指定のため1灯として扱います。");
+    addRule("light:default1");
   }
 
   const validated = validateParsedCombination(parsed);
   parsed.warnings.push(...validated.warnings);
   parsed.errors.push(...validated.errors);
 
+  parsed.devicesModel = toDiagramFormState(parsed);
   parsed.confidence = _calcParseConfidence(parsed);
 
   return parsed;
 }
 
 /**
- * @param {{normalizedText:string,circuitType:"single"|"threeway"|null,lightCount:1|2|null,sameTime:boolean,hasOutlet:boolean}} parsed
+ * @param {{normalizedText:string,circuitType:"single"|"threeway"|null,lightCount:number|null,outletCount:number,sameTime:boolean}} parsed
  */
 function validateParsedCombination(parsed) {
   const result = { warnings: [], errors: [] };
@@ -425,20 +462,142 @@ function validateParsedCombination(parsed) {
   if (!parsed.lightCount) {
     result.errors.push("灯数（1灯 / 2灯同時）を判定できません。");
   }
-  if (parsed.circuitType === "single" && parsed.lightCount === 2 && !parsed.sameTime) {
-    result.errors.push("2灯だが同時条件が曖昧で今回未対応です。");
+  const overLight = parsed.normalizedText.match(/([0-9]+)灯/);
+  if (overLight && Number(overLight[1]) > 6) {
+    result.errors.push("照明数は6灯以下で入力してください。");
+  }
+  const overOutlet = parsed.normalizedText.match(/コンセント\s*([0-9]+)個/);
+  if (overOutlet && Number(overOutlet[1]) > 6) {
+    result.errors.push("コンセント数は6個以下で入力してください。");
+  }
+  if (parsed.lightCount && parsed.lightCount > 6) {
+    result.errors.push("照明数は6灯以下で入力してください。");
+  }
+  if (parsed.outletCount > 6) {
+    result.errors.push("コンセント数は6個以下で入力してください。");
+  }
+  if (parsed.circuitType === "single" && parsed.lightCount >= 2 && !parsed.sameTime) {
+    result.errors.push("2灯以上だが同時条件が曖昧で今回未対応です。");
   }
   if (parsed.circuitType === "single" && parsed.lightCount === 1 && parsed.sameTime) {
     result.warnings.push("1灯条件では同時点灯指定は不要のため無視します。");
   }
-  if (parsed.circuitType === "threeway" && parsed.lightCount === 2) {
-    result.errors.push("3路の2灯同時は今回の対応範囲外です。");
+  if (parsed.circuitType === "threeway" && parsed.lightCount !== null && parsed.lightCount !== 1) {
+    result.errors.push("3路 + 複数照明は現行描画仕様で未対応です。");
   }
-  if (parsed.circuitType === "threeway" && parsed.hasOutlet) {
-    result.errors.push("3路 + コンセントあり は今回の対応範囲外です。");
+  if (parsed.circuitType === "threeway" && parsed.outletCount > 0) {
+    result.errors.push("3路 + コンセントは現行描画仕様で未対応です。");
   }
-  if (parsed.circuitType === "single" && parsed.lightCount === 2 && parsed.hasOutlet) {
-    result.errors.push("片切の2灯同時 + コンセントあり は今回の対応範囲外です。");
+  if (parsed.circuitType === "single" && parsed.lightCount !== null && parsed.lightCount >= 2 && parsed.outletCount >= 1) {
+    result.warnings.push("片切の多灯+コンセントは図を簡略表示します。");
+  }
+  if (parsed.circuitType === "single" && parsed.lightCount !== null && parsed.lightCount > 2) {
+    result.warnings.push("現行SVGは照明2灯まで描画対応。残り照明は補助情報扱いです。");
+  }
+  if (parsed.circuitType === "single" && parsed.outletCount > 1) {
+    result.warnings.push("現行SVGはコンセント1個まで描画対応。残りコンセントは補助情報扱いです。");
+  }
+
+  return result;
+}
+
+function _extractDeviceQuantity(group, type) {
+  const hit = (group.devices || []).find((d) => d.type === type);
+  return Number(hit?.quantity || 0);
+}
+
+function _inferConditionIdFromCounts(circuitType, lightCount, outletCount, sameTime) {
+  if (circuitType === "threeway" && lightCount === 1 && outletCount === 0) return "threeway_1light";
+  if (circuitType !== "single") return null;
+  if (lightCount === 1 && outletCount === 0) return "single_1light";
+  if (lightCount === 2 && outletCount === 0 && sameTime) return "single_2lights_same";
+  if (lightCount === 1 && outletCount >= 1) return "single_1light_1outlet";
+  return null;
+}
+
+/**
+ * @param {{circuitType:"single"|"threeway"|null,mode?:DiagramMode,lightCount:number|null,outletCount:number,sameTime:boolean,controlCount?:number}} input
+ */
+function buildDeviceListFromUi(input) {
+  if (!input.circuitType || !input.lightCount) return null;
+  const controlId = input.circuitType === "threeway" ? "イ" : "イ";
+  const devices = [{ type: "light", quantity: input.lightCount }];
+  if (input.outletCount > 0) devices.push({ type: "outlet", quantity: input.outletCount });
+
+  return {
+    circuitType: input.circuitType,
+    mode: input.mode || "exam",
+    controlCount: input.controlCount || 1,
+    sameTime: input.sameTime,
+    groups: [{ controlId, switchType: input.circuitType === "threeway" ? "threeway" : "single", devices }],
+  };
+}
+
+/**
+ * @param {ReturnType<typeof buildDeviceListFromUi>} model
+ */
+function buildDiagramInputFromDevices(model) {
+  const result = {
+    devices: /** @type {InputDevice[]} */ ([]),
+    conditionId: /** @type {string | null} */ (null),
+    warnings: /** @type {string[]} */ ([]),
+    errors: /** @type {string[]} */ ([]),
+    resolved: { lightCount: 0, outletCount: 0 },
+  };
+
+  if (!model || !model.groups?.length) {
+    result.errors.push("器具構成モデルがありません。");
+    return result;
+  }
+
+  const group = model.groups[0];
+  const lightCount = _extractDeviceQuantity(group, "light");
+  const outletCount = _extractDeviceQuantity(group, "outlet");
+  result.resolved.lightCount = lightCount;
+  result.resolved.outletCount = outletCount;
+
+  if (lightCount < 1) result.errors.push("照明数は1灯以上が必要です。");
+  if (lightCount > 6) result.errors.push("照明数は6灯以下で入力してください。");
+  if (outletCount > 6) result.errors.push("コンセント数は6個以下で入力してください。");
+  if (result.errors.length) return result;
+
+  if (model.circuitType === "threeway" && lightCount !== 1) {
+    result.errors.push("3路 + 複数照明は現行描画仕様で未対応です。");
+    return result;
+  }
+  if (model.circuitType === "threeway" && outletCount > 0) {
+    result.errors.push("3路 + コンセントは現行描画仕様で未対応です。");
+    return result;
+  }
+  if (model.circuitType === "single" && lightCount >= 2 && !model.sameTime) {
+    result.errors.push("2灯以上は同時点灯条件が必要です。");
+    return result;
+  }
+
+  let renderLightCount = lightCount;
+  let renderOutletCount = outletCount;
+  if (model.circuitType === "single" && lightCount > 2) {
+    renderLightCount = 2;
+    result.warnings.push("照明3灯以上は2灯まで図示し、残りは補助情報として扱います。");
+  }
+  if (model.circuitType === "single" && outletCount > 1) {
+    renderOutletCount = 1;
+    result.warnings.push("コンセント2個以上は1個まで図示し、残りは補助情報として扱います。");
+  }
+
+  result.conditionId = _inferConditionIdFromCounts(model.circuitType, lightCount, outletCount, model.sameTime);
+  result.devices.push({ id: "power", kind: "power", name: "電源" });
+  if (model.circuitType === "threeway") {
+    result.devices.push({ id: "sw1", kind: "switch_3way", name: "SW1", controlId: 1, position: 1 });
+    result.devices.push({ id: "sw2", kind: "switch_3way", name: "SW2", controlId: 1, position: 2 });
+  } else {
+    result.devices.push({ id: "sw1", kind: "switch_single", name: "SW1", controlId: 1 });
+  }
+  for (let i = 0; i < renderLightCount; i += 1) {
+    result.devices.push({ id: `light${i + 1}`, kind: "light", name: `R${i + 1}`, controlId: 1 });
+  }
+  for (let i = 0; i < renderOutletCount; i += 1) {
+    result.devices.push({ id: `outlet${i + 1}`, kind: "outlet", name: `C${i + 1}` });
   }
 
   return result;
@@ -448,13 +607,14 @@ function validateParsedCombination(parsed) {
  * @param {ReturnType<typeof parseProblemText>} parsed
  */
 function toDiagramFormState(parsed) {
-  return {
+  return buildDeviceListFromUi({
     circuitType: parsed.circuitType,
+    mode: "exam",
     lightCount: parsed.lightCount,
-    hasOutlet: parsed.hasOutlet,
+    outletCount: parsed.outletCount || 0,
     sameTime: parsed.sameTime,
     controlCount: parsed.controlCount,
-  };
+  });
 }
 
 /**
@@ -475,37 +635,18 @@ function applyParsedResult(parsed) {
   }
 
   const formState = toDiagramFormState(parsed);
-  if (!formState.circuitType || !formState.lightCount) {
+  if (!formState) {
     result.errors.push("回路種別または灯数が不足しています。");
     return result;
   }
 
+  const built = buildDiagramInputFromDevices(formState);
   result.circuitType = formState.circuitType;
-  if (formState.circuitType === "threeway") {
-    if (formState.lightCount !== 1 || formState.hasOutlet) {
-      result.errors.push("3路は1灯のみ対応です。");
-      return result;
-    }
-    result.conditionId = "threeway_1light";
-  } else if (formState.hasOutlet) {
-    if (formState.lightCount !== 1) {
-      result.errors.push("コンセントありは片切1灯のみ対応です。");
-      return result;
-    }
-    result.conditionId = "single_1light_1outlet";
-  } else if (formState.lightCount === 2) {
-    result.conditionId = "single_2lights_same";
-  } else if (formState.lightCount === 1) {
-    result.conditionId = "single_1light";
-  } else {
-    result.errors.push("条件を判定できません。");
-    return result;
-  }
+  result.conditionId = built.conditionId;
+  result.devices = built.devices;
+  result.warnings.push(...built.warnings);
+  result.errors.push(...built.errors);
 
-  result.devices = buildDevicesFromSelection(result.circuitType, result.conditionId);
-  if (!result.devices.length) {
-    result.errors.push("解析結果から devices を構築できませんでした。");
-  }
   return result;
 }
 
@@ -519,7 +660,7 @@ function renderParseResult(parsed) {
   const circuitMap = { single: "片切", threeway: "3路" };
   const lightText = parsed.lightCount ? `${parsed.lightCount}灯` : "未判定";
   const modeText = parsed.sameTime ? "あり" : "なし";
-  const outletText = parsed.hasOutlet ? "あり" : "なし";
+  const outletText = parsed.outletCount ? `${parsed.outletCount}個` : "なし";
   const warningText = parsed.warnings.length ? parsed.warnings.join("\n- ") : "なし";
   const errorText = parsed.errors.length ? parsed.errors.join("\n- ") : "なし";
   const summary = parsed.errors.length ? "解析失敗（エラーあり）" : "解析成功";
@@ -534,7 +675,7 @@ function renderParseResult(parsed) {
     `回路種別: ${parsed.circuitType ? circuitMap[parsed.circuitType] : "未判定"}`,
     `灯数: ${lightText}`,
     `同時点灯: ${modeText}`,
-    `コンセント有無: ${outletText}`,
+    `コンセント数: ${outletText}`,
     `controlCount: ${parsed.controlCount}`,
     `confidence: ${parsed.confidence}`,
     `matchedRules: ${parsed.matchedRules.length ? parsed.matchedRules.join(", ") : "なし"}`,
@@ -828,6 +969,8 @@ function initPlayground() {
   const modeGamidenkiBtn = document.getElementById("mode-gamidenki-btn");
   const modeFieldBtn = document.getElementById("mode-field-btn");
   const generateBtn = document.getElementById("generate-btn");
+  const lightCountSelect = document.getElementById("light-count-select");
+  const outletCountSelect = document.getElementById("outlet-count-select");
   const problemTextInput = document.getElementById("problemTextInput");
   const parseProblemButton = document.getElementById("parseProblemButton");
 
@@ -853,6 +996,8 @@ function initPlayground() {
     !modeGamidenkiBtn ||
     !modeFieldBtn ||
     !generateBtn ||
+    !lightCountSelect ||
+    !outletCountSelect ||
     !selectionEl ||
     !groupEl ||
     !warningEl ||
@@ -873,18 +1018,87 @@ function initPlayground() {
     selectedCondition: /** @type {string | null} */ (null),
     selectedMode: /** @type {DiagramMode} */ ("exam"),
     devices: /** @type {InputDevice[]} */ ([]),
+    formState: null,
+    inputWarnings: /** @type {string[]} */ ([]),
+    inputErrors: /** @type {string[]} */ ([]),
+    simplified: { lightCount: 0, outletCount: 0 },
     diagram: /** @type {GeneratedDiagram} */ (EMPTY_DIAGRAM),
     error: "",
   };
 
   function isSelectionReady() {
-    return !!state.selectedCircuitType && !!state.selectedCondition;
+    return !!state.selectedCircuitType && state.devices.length > 0 && state.inputErrors.length === 0;
+  }
+
+  function readQuantityFromUi() {
+    return {
+      lightCount: Number(lightCountSelect.value),
+      outletCount: Number(outletCountSelect.value),
+    };
+  }
+
+  function syncQuantityUiFromCondition(conditionId) {
+    if (conditionId === "single_1light") {
+      lightCountSelect.value = "1";
+      outletCountSelect.value = "0";
+      return;
+    }
+    if (conditionId === "single_2lights_same") {
+      lightCountSelect.value = "2";
+      outletCountSelect.value = "0";
+      return;
+    }
+    if (conditionId === "single_1light_1outlet") {
+      lightCountSelect.value = "1";
+      outletCountSelect.value = "1";
+      return;
+    }
+    if (conditionId === "threeway_1light") {
+      lightCountSelect.value = "1";
+      outletCountSelect.value = "0";
+    }
+  }
+
+  function _currentSameTime(lightCount) {
+    return state.selectedCircuitType === "single" && lightCount >= 2;
+  }
+
+  function rebuildDevicesFromCurrentInput() {
+    if (!state.selectedCircuitType) {
+      state.formState = null;
+      state.devices = [];
+      state.inputWarnings = [];
+      state.inputErrors = [];
+      state.simplified = { lightCount: 0, outletCount: 0 };
+      return;
+    }
+    const quantity = readQuantityFromUi();
+    state.formState = buildDeviceListFromUi({
+      circuitType: state.selectedCircuitType,
+      mode: state.selectedMode,
+      lightCount: quantity.lightCount,
+      outletCount: quantity.outletCount,
+      sameTime: _currentSameTime(quantity.lightCount),
+      controlCount: 1,
+    });
+    const built = buildDiagramInputFromDevices(state.formState);
+    state.devices = built.devices;
+    state.inputWarnings = built.warnings;
+    state.inputErrors = built.errors;
+    state.simplified = built.resolved;
+    state.selectedCondition =
+      built.conditionId ||
+      _inferConditionIdFromCounts(state.selectedCircuitType, quantity.lightCount, quantity.outletCount, _currentSameTime(quantity.lightCount));
   }
 
   function getConditionLabel() {
-    if (!state.selectedCircuitType || !state.selectedCondition) return "未選択";
+    if (!state.selectedCircuitType) return "未選択";
+    if (!state.selectedCondition) {
+      const q = readQuantityFromUi();
+      return `照明${q.lightCount}灯 / コンセント${q.outletCount}個`;
+    }
     const hit = CONDITION_OPTIONS[state.selectedCircuitType].find((c) => c.id === state.selectedCondition);
-    return hit ? hit.label : "未選択";
+    return hit ? hit.label : "カスタム";
   }
 
   function renderConditionButtons() {
@@ -902,7 +1116,8 @@ function initPlayground() {
       if (state.selectedCondition === option.id) btn.classList.add("active");
       btn.addEventListener("click", () => {
         state.selectedCondition = option.id;
-        state.devices = buildDevicesFromSelection(state.selectedCircuitType, state.selectedCondition);
+        syncQuantityUiFromCondition(option.id);
+        rebuildDevicesFromCurrentInput();
         renderAll();
         if (isSelectionReady()) generateAndRender();
       });
@@ -912,6 +1127,7 @@ function initPlayground() {
 
   function renderSelection() {
     const circuitText = state.selectedCircuitType === "single" ? "片切" : state.selectedCircuitType === "threeway" ? "3路" : "未選択";
+    const quantity = readQuantityFromUi();
     const modeText =
       state.selectedMode === "exam"
         ? "試験モード"
@@ -922,6 +1138,8 @@ function initPlayground() {
       {
         回路を選ぶ: circuitText,
         条件を選ぶ: getConditionLabel(),
+        照明数: `${quantity.lightCount}灯`,
+        コンセント数: `${quantity.outletCount}個`,
         表示モード: modeText,
       },
       null,
@@ -939,7 +1157,7 @@ function initPlayground() {
 
   function generateAndRender() {
     if (!isSelectionReady()) {
-      state.error = "回路・条件を選択してください";
+      state.error = state.inputErrors.length ? state.inputErrors.join(" / ") : "回路・条件を選択してください";
       state.diagram = EMPTY_DIAGRAM;
     } else {
       state.error = "";
@@ -956,12 +1174,26 @@ function initPlayground() {
     }
 
     groupEl.textContent = state.diagram.groups.length ? JSON.stringify(state.diagram.groups, null, 2) : "グループ化結果なし";
-    warningEl.textContent = state.diagram.warnings.length ? state.diagram.warnings.join("\n") : "警告なし";
+    const allWarnings = [...state.inputWarnings, ...state.diagram.warnings];
+    warningEl.textContent = allWarnings.length ? allWarnings.join("\n") : "警告なし";
     renderDiagram(state.diagram, state.error);
 
-    const meta = buildRequiredAndNotes(state.selectedCondition);
+    const quantity = readQuantityFromUi();
+    const fallbackCondition = _inferConditionIdFromCounts(
+      state.selectedCircuitType,
+      quantity.lightCount,
+      quantity.outletCount,
+      _currentSameTime(quantity.lightCount)
+    );
+    const meta = buildRequiredAndNotes(fallbackCondition);
     requiredEl.textContent = meta.required.join("\n");
-    notesEl.textContent = meta.notes.join("\n");
+    notesEl.textContent = [
+      ...meta.notes,
+      state.simplified.lightCount < quantity.lightCount ? `照明${quantity.lightCount - state.simplified.lightCount}灯は補助情報扱い` : "",
+      state.simplified.outletCount < quantity.outletCount ? `コンセント${quantity.outletCount - state.simplified.outletCount}個は補助情報扱い` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     debugEl.textContent = JSON.stringify(
       {
@@ -971,6 +1203,7 @@ function initPlayground() {
           selectedMode: state.selectedMode,
         },
         devices: state.devices,
+        formState: state.formState,
         diagram: state.diagram,
         error: state.error || "なし",
       },
@@ -998,10 +1231,23 @@ function initPlayground() {
     if (applied.errors.length) parsed.errors.push(...applied.errors);
     renderParseResult(parsed);
 
-    if (parsed.errors.length || !applied.circuitType || !applied.conditionId) return;
+    if (parsed.errors.length || !applied.circuitType) {
+      state.inputErrors = [...parsed.errors];
+      state.inputWarnings = [...parsed.warnings];
+      return;
+    }
+    if (parsed.lightCount) lightCountSelect.value = String(parsed.lightCount);
+    outletCountSelect.value = String(parsed.outletCount || 0);
     state.selectedCircuitType = applied.circuitType;
-    state.selectedCondition = applied.conditionId;
+    state.selectedCondition = applied.conditionId || null;
+    state.formState = diagramFormState;
     state.devices = applied.devices;
+    state.inputWarnings = [...parsed.warnings];
+    state.inputErrors = [...parsed.errors];
+    state.simplified = {
+      lightCount: Math.min(parsed.lightCount || 0, 2),
+      outletCount: Math.min(parsed.outletCount || 0, 1),
+    };
     renderAll();
     generateAndRender();
   }
@@ -1009,33 +1255,48 @@ function initPlayground() {
   circuitSingleBtn.addEventListener("click", () => {
     state.selectedCircuitType = "single";
     state.selectedCondition = null;
-    state.devices = [];
+    rebuildDevicesFromCurrentInput();
     renderAll();
   });
 
   circuitThreewayBtn.addEventListener("click", () => {
     state.selectedCircuitType = "threeway";
     state.selectedCondition = null;
-    state.devices = [];
+    rebuildDevicesFromCurrentInput();
     renderAll();
   });
 
   modeExamBtn.addEventListener("click", () => {
     state.selectedMode = "exam";
+    rebuildDevicesFromCurrentInput();
     renderAll();
     if (isSelectionReady()) generateAndRender();
   });
 
   modeGamidenkiBtn.addEventListener("click", () => {
     state.selectedMode = "exam_gamidenki";
+    rebuildDevicesFromCurrentInput();
     renderAll();
     if (isSelectionReady()) generateAndRender();
   });
 
   modeFieldBtn.addEventListener("click", () => {
     state.selectedMode = "field";
+    rebuildDevicesFromCurrentInput();
     renderAll();
     if (isSelectionReady()) generateAndRender();
+  });
+
+  lightCountSelect.addEventListener("change", () => {
+    state.selectedCondition = null;
+    rebuildDevicesFromCurrentInput();
+    renderAll();
+  });
+
+  outletCountSelect.addEventListener("change", () => {
+    state.selectedCondition = null;
+    rebuildDevicesFromCurrentInput();
+    renderAll();
   });
 
   generateBtn.addEventListener("click", () => {
@@ -1058,6 +1319,7 @@ function initPlayground() {
   });
 
   sleeveEl.textContent = JSON.stringify(judgeSleeve({ wire16Count: 2, wire20Count: 0, wire26Count: 0 }), null, 2);
+  rebuildDevicesFromCurrentInput();
   renderAll();
   generateAndRender();
 }
