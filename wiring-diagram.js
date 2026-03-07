@@ -835,8 +835,11 @@ function purposeToDeviceType(purpose, switchType) {
 }
 
 function detectQuantity(line) {
+  // 既存優先: 「数字 + 灯/個」
   const numMatch = line.match(/([1-6])\s*(灯|個)/);
   if (numMatch) return Number(numMatch[1]);
+
+  // 既存優先: 「漢数字 + 灯/個」
   const jpMap = [
     { re: /一(灯|個)/, value: 1 },
     { re: /二(灯|個)/, value: 2 },
@@ -848,8 +851,14 @@ function detectQuantity(line) {
   const hit = jpMap.find((item) => item.re.test(line));
   if (hit) return hit.value;
 
+  // 上限超過チェック用（単位付き）
   const over = line.match(/([0-9]+)\s*(灯|個)/);
   if (over) return Number(over[1]);
+
+  // 追加対応: 数字のみ。複数ある場合は最初の数字を採用。
+  const numericOnly = line.match(/([0-9]+)/);
+  if (numericOnly) return Number(numericOnly[1]);
+
   return 1;
 }
 
@@ -962,6 +971,7 @@ function parseFieldLine(line) {
   };
 
   if (!parsed.deviceType) parsed.errors.push("器具種別を判定できません。");
+  if (parsed.quantity === 0) parsed.errors.push("数量は1以上で入力してください。");
   if (parsed.quantity > 6) parsed.errors.push("数量は6以下で入力してください。");
   if (!/(照明|ライト|ランプ|コンセント|3路|三路|[1-6]灯|[1-6]個|一灯|二灯|三灯|四灯|五灯|六灯|一個|二個|三個|四個|五個|六個)/.test(normalizedLine)) {
     parsed.warnings.push("未知語句を含みます。");
