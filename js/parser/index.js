@@ -448,7 +448,6 @@ function purposeToDeviceType(purpose, switchType) {
 
 function extractNumericOnlyQuantityFromLine(line) {
   const normalized = String(line || "").trim();
-  if (!/[0-9]$/.test(normalized)) return null;
   const allNumbers = normalized.match(/[0-9]+/g);
   if (!allNumbers || allNumbers.length === 0) return null;
   return Number(allNumbers[0]);
