@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>複線図プレイグラウンド</title>
     <link rel="stylesheet" href="./wiring-diagram.css" />
+    <link rel="stylesheet" href="ui-panel.css">
   </head>
   <body>
     <main class="container">
@@ -100,5 +101,76 @@
     </main>
 
     <script src="./wiring-diagram.js"></script>
+    <script src="ui-panel.js"></script>
+
+    <!-- スマホUIパネル -->
+    <div id="ui-panel">
+
+      <!-- ステップインジケーター -->
+      <div id="ui-steps">
+        <div class="ui-step active" data-step="1"><span class="ui-step-num">1</span><span class="ui-step-label">回路</span></div>
+        <div class="ui-step-line"></div>
+        <div class="ui-step" data-step="2"><span class="ui-step-num">2</span><span class="ui-step-label">条件</span></div>
+        <div class="ui-step-line"></div>
+        <div class="ui-step" data-step="3"><span class="ui-step-num">3</span><span class="ui-step-label">モード</span></div>
+        <div class="ui-step-line"></div>
+        <div class="ui-step" data-step="4"><span class="ui-step-num">4</span><span class="ui-step-label">生成</span></div>
+      </div>
+
+      <!-- STEP 1：回路選択 -->
+      <div class="ui-screen" id="ui-screen-1">
+        <p class="ui-screen-title">① 回路を選ぶ</p>
+        <div class="ui-choices">
+          <button class="ui-btn" onclick="uiSelect('circuit','片切')">
+            <span class="ui-btn-icon">💡</span>
+            <span class="ui-btn-main">片切スイッチ</span>
+            <span class="ui-btn-sub">1箇所でON/OFF</span>
+          </button>
+          <button class="ui-btn" onclick="uiSelect('circuit','3路')">
+            <span class="ui-btn-icon">🔀</span>
+            <span class="ui-btn-main">3路スイッチ</span>
+            <span class="ui-btn-sub">2箇所でON/OFF（階段・廊下）</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 2：条件選択（JS で動的に生成） -->
+      <div class="ui-screen" id="ui-screen-2" style="display:none">
+        <p class="ui-screen-title">② 条件を選ぶ</p>
+        <div class="ui-choices" id="ui-condition-list"></div>
+      </div>
+
+      <!-- STEP 3：表示モード -->
+      <div class="ui-screen" id="ui-screen-3" style="display:none">
+        <p class="ui-screen-title">③ 表示モードを選ぶ</p>
+        <div class="ui-choices">
+          <button class="ui-btn" onclick="uiSelect('mode','試験')">
+            <span class="ui-btn-icon">📝</span>
+            <span class="ui-btn-main">試験モード</span>
+            <span class="ui-btn-sub">電工試験対策。凡例・色分けあり</span>
+          </button>
+          <button class="ui-btn" onclick="uiSelect('mode','現場')">
+            <span class="ui-btn-icon">🔧</span>
+            <span class="ui-btn-main">現場モード</span>
+            <span class="ui-btn-sub">シンプル表示。現場判断に特化</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 4：確認＆生成 -->
+      <div class="ui-screen" id="ui-screen-4" style="display:none">
+        <p class="ui-screen-title">④ 確認して生成</p>
+        <div id="ui-summary"></div>
+        <button class="ui-generate-btn" onclick="uiGenerate()">
+          ⚡ 複線図を生成する
+        </button>
+      </div>
+
+      <!-- フッター（戻るボタン） -->
+      <div id="ui-footer">
+        <button id="ui-back-btn" onclick="uiBack()" style="display:none">← 戻る</button>
+      </div>
+
+    </div>
   </body>
 </html>
