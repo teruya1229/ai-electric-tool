@@ -256,6 +256,23 @@ pre {
   font-size: 13px;
 }
 
+#sleeve-judge-list-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#sleeve-judge-list-result .sleeve-judge-item {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #111827;
+  color: #e2e8f0;
+  white-space: pre-line;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 #field-scene-input {
   min-height: 120px;
 }
@@ -280,5 +297,10 @@ pre {
 @media (max-width: 600px) {
   #circuit-material-list-result .circuit-material-item {
     padding: 8px 10px;
+  }
+  #sleeve-judge-list-result .sleeve-judge-item {
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.55;
   }
 }
