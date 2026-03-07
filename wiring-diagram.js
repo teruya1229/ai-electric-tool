@@ -440,6 +440,93 @@ function renderWirePathDebug(sceneModel) {
   });
 }
 
+function renderAiDiagramPreview(sceneModel) {
+  const panel = document.getElementById("ai-diagram-preview-result");
+  if (!panel) return;
+
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+
+  panel.innerHTML = "";
+  if (!groups.length) {
+    panel.textContent = "回路なし";
+    return;
+  }
+
+  const circuits = createCircuitsFromGroups(groups);
+  const graphs = createCircuitGraphFromCircuits(circuits);
+  const layouts = createDiagramLayoutsFromGraphs(graphs);
+  if (!layouts.length) {
+    panel.textContent = "layoutなし";
+    return;
+  }
+
+  const wirePaths = createWirePathsFromLayouts(layouts);
+  const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
+  if (!hasWire) {
+    panel.textContent = "wireなし";
+    return;
+  }
+
+  const NS = "http://www.w3.org/2000/svg";
+  layouts.forEach((layout) => {
+    const wirePath = wirePaths.find((item) => item?.circuitId === layout?.circuitId);
+    const card = document.createElement("article");
+    card.className = "ai-diagram-preview-item";
+
+    const title = document.createElement("div");
+    title.className = "circuit-item-title";
+    title.textContent = `回路${layout?.circuitId ?? "-"} AI preview`;
+    card.appendChild(title);
+
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("width", "700");
+    svg.setAttribute("height", "300");
+
+    (wirePath?.wires || []).forEach((wire) => {
+      const points = (wire?.path || [])
+        .filter((point) => typeof point?.x === "number" && typeof point?.y === "number")
+        .map((point) => `${point.x},${point.y}`)
+        .join(" ");
+      if (!points) return;
+
+      const polyline = document.createElementNS(NS, "polyline");
+      polyline.setAttribute("points", points);
+      polyline.setAttribute("stroke", "#f5c842");
+      polyline.setAttribute("stroke-width", "2");
+      polyline.setAttribute("fill", "none");
+      svg.appendChild(polyline);
+    });
+
+    (layout?.nodes || []).forEach((node) => {
+      if (typeof node?.x !== "number" || typeof node?.y !== "number") return;
+
+      const circle = document.createElementNS(NS, "circle");
+      circle.setAttribute("cx", String(node.x));
+      circle.setAttribute("cy", String(node.y));
+      circle.setAttribute("r", "5");
+      circle.setAttribute("fill", "#ffffff");
+      svg.appendChild(circle);
+
+      const text = document.createElementNS(NS, "text");
+      text.setAttribute("x", String(node.x + 8));
+      text.setAttribute("y", String(node.y - 8));
+      text.setAttribute("font-size", "11");
+      text.setAttribute("fill", "#cccccc");
+      text.textContent = String(node?.id || "-");
+      svg.appendChild(text);
+    });
+
+    card.appendChild(svg);
+    panel.appendChild(card);
+  });
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
@@ -449,6 +536,7 @@ function setupCircuitListAutoRender() {
   renderParseDebugResult();
   renderLayoutDebug();
   renderWirePathDebug();
+  renderAiDiagramPreview();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
@@ -458,6 +546,7 @@ function setupCircuitListAutoRender() {
     renderParseDebugResult();
     renderLayoutDebug();
     renderWirePathDebug();
+    renderAiDiagramPreview();
   });
   observer.observe(target, {
     childList: true,
@@ -475,6 +564,7 @@ window.renderSleeveJudgeList = renderSleeveJudgeList;
 window.renderParseDebugResult = renderParseDebugResult;
 window.renderLayoutDebug = renderLayoutDebug;
 window.renderWirePathDebug = renderWirePathDebug;
+window.renderAiDiagramPreview = renderAiDiagramPreview;
 
 initPlayground();
 setupCircuitListAutoRender();
