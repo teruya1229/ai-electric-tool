@@ -227,15 +227,32 @@ pre {
   gap: 8px;
 }
 
-.circuit-material-item {
+#circuit-material-list-result .circuit-material-item {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  padding: 8px 10px;
-  background: #f8fafc;
+  padding: 10px 12px;
+  background: #111827;
 }
 
-.circuit-material-empty {
-  color: #64748b;
+#circuit-material-list-result .circuit-item-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+#circuit-material-list-result .material-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+#circuit-material-list-result .material-item {
+  color: #e2e8f0;
+  line-height: 1.65;
+}
+
+#circuit-material-list-result .circuit-material-empty {
+  color: #94a3b8;
   font-size: 13px;
 }
 
@@ -257,5 +274,11 @@ pre {
   .sleeve-form {
     display: grid;
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  #circuit-material-list-result .circuit-material-item {
+    padding: 8px 10px;
   }
 }
