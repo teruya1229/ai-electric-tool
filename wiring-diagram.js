@@ -684,9 +684,18 @@ function renderAiDiagramGamidenki(sceneModel) {
   };
 
   layouts.forEach((layout, layoutIndex) => {
-    const wirePath = wirePaths.find((item) => item?.circuitId === layout?.circuitId);
-    const circuit = circuits.find((item) => item?.id === layout?.circuitId);
-    const graph = graphs.find((item) => item?.circuitId === layout?.circuitId);
+    const wirePath = wirePaths.find((item) => item?.circuitId === layout?.circuitId) || wirePaths[layoutIndex] || null;
+    const graph =
+      graphs.find((item) => item?.circuitId === layout?.circuitId) ||
+      graphs.find((item) => item?.circuitId === wirePath?.circuitId) ||
+      graphs[layoutIndex] ||
+      null;
+    const circuit =
+      circuits.find((item) => item?.id === layout?.circuitId) ||
+      circuits.find((item) => item?.id === graph?.circuitId) ||
+      circuits.find((item) => item?.id === wirePath?.circuitId) ||
+      circuits[layoutIndex] ||
+      null;
     const card = document.createElement("article");
     card.className = "ai-diagram-gamidenki-item";
 
@@ -697,13 +706,13 @@ function renderAiDiagramGamidenki(sceneModel) {
 
     const svg = document.createElementNS(NS, "svg");
     svg.setAttribute("width", "700");
-    svg.setAttribute("height", "360");
+    svg.setAttribute("height", "390");
 
     const bg = document.createElementNS(NS, "rect");
     bg.setAttribute("x", "0");
     bg.setAttribute("y", "0");
     bg.setAttribute("width", "700");
-    bg.setAttribute("height", "360");
+    bg.setAttribute("height", "390");
     bg.setAttribute("fill", "#1f1f1f");
     svg.appendChild(bg);
 
@@ -730,6 +739,49 @@ function renderAiDiagramGamidenki(sceneModel) {
     headerSub.setAttribute("fill", "#bbbbbb");
     headerSub.textContent = `器具数: ${nodeCount}  配線数: ${wireCount}`;
     svg.appendChild(headerSub);
+
+    const circuitMaterials = circuit ? createMaterialsForCircuit(circuit) : [];
+    const materialLines =
+      circuitMaterials.length > 0
+        ? circuitMaterials
+            .slice(0, 5)
+            .map((material) => `${material?.name || "-"} × ${typeof material?.quantity === "number" ? material.quantity : material?.quantity || "-"}`)
+        : ["材料なし"];
+    if (circuitMaterials.length > 5) {
+      materialLines.push(`...他${circuitMaterials.length - 5}件`);
+    }
+    const materialBoxX = 470;
+    const materialBoxY = 44;
+    const materialBoxWidth = 210;
+    const materialBoxHeight = 28 + materialLines.length * 14;
+
+    const materialBox = document.createElementNS(NS, "rect");
+    materialBox.setAttribute("x", String(materialBoxX));
+    materialBox.setAttribute("y", String(materialBoxY));
+    materialBox.setAttribute("width", String(materialBoxWidth));
+    materialBox.setAttribute("height", String(materialBoxHeight));
+    materialBox.setAttribute("fill", "#262626");
+    materialBox.setAttribute("stroke", "#555");
+    materialBox.setAttribute("rx", "6");
+    svg.appendChild(materialBox);
+
+    const materialTitle = document.createElementNS(NS, "text");
+    materialTitle.setAttribute("x", String(materialBoxX + 10));
+    materialTitle.setAttribute("y", String(materialBoxY + 16));
+    materialTitle.setAttribute("font-size", "11");
+    materialTitle.setAttribute("fill", "#ffffff");
+    materialTitle.textContent = "材料";
+    svg.appendChild(materialTitle);
+
+    materialLines.forEach((line, idx) => {
+      const materialText = document.createElementNS(NS, "text");
+      materialText.setAttribute("x", String(materialBoxX + 10));
+      materialText.setAttribute("y", String(materialBoxY + 32 + idx * 14));
+      materialText.setAttribute("font-size", "10");
+      materialText.setAttribute("fill", "#d8d8d8");
+      materialText.textContent = line;
+      svg.appendChild(materialText);
+    });
 
     const hasThreeway = (wirePath?.wires || []).some((wire) => wire?.role === "traveler_1" || wire?.role === "traveler_2");
     if (hasThreeway) {
@@ -880,7 +932,7 @@ function renderAiDiagramGamidenki(sceneModel) {
     ];
     legend.forEach((item, idx) => {
       const baseX = 20 + idx * 165;
-      const baseY = 338;
+      const baseY = 368;
 
       const line = document.createElementNS(NS, "line");
       line.setAttribute("x1", String(baseX));
