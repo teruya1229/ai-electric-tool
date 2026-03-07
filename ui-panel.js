@@ -196,21 +196,30 @@ function _renderToExistingOutput(payload) {
   }
 
   if (debugEl) {
-    debugEl.textContent = JSON.stringify(
-      {
-        buildDevicesFromSelection: payload.devices,
-        generateDiagramResult: payload.diagram,
-        counts: {
-          groups: payload.diagram.groups?.length || 0,
-          devices: payload.diagram.devices?.length || 0,
-          wires: payload.diagram.wires?.length || 0,
-          warnings: payload.diagram.warnings?.length || 0,
+    const showDebug = window.__WIRING_DEBUG__ === true;
+    const debugArticle = debugEl.closest("article");
+    if (debugArticle) {
+      debugArticle.style.display = showDebug ? "block" : "none";
+    }
+    if (showDebug) {
+      debugEl.textContent = JSON.stringify(
+        {
+          buildDevicesFromSelection: payload.devices,
+          generateDiagramResult: payload.diagram,
+          counts: {
+            groups: payload.diagram.groups?.length || 0,
+            devices: payload.diagram.devices?.length || 0,
+            wires: payload.diagram.wires?.length || 0,
+            warnings: payload.diagram.warnings?.length || 0,
+          },
+          renderError: payload.renderError || "なし",
         },
-        renderError: payload.renderError || "なし",
-      },
-      null,
-      2
-    );
+        null,
+        2
+      );
+    } else {
+      debugEl.textContent = "";
+    }
   }
 }
 

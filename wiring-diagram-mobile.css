@@ -1,0 +1,41 @@
+/* ==============================================
+   wiring-diagram.css への追記分
+   fix: fit svg diagram to mobile viewport
+   ※ 既存ルールは変更しない。末尾にそのまま追記すること。
+============================================== */
+
+@media (max-width: 600px) {
+  /* SVG 出力エリアの余白を詰める */
+  #diagram-canvas {
+    padding: 4px;
+    margin: 0;
+    box-sizing: border-box;
+    width: 100%;
+    overflow: hidden; /* 横スクロール防止 */
+  }
+
+  /* SVG 要素そのものが幅超過していた場合の保険 */
+  #diagram-canvas svg {
+    max-width: 100% !important;
+    height: auto !important;
+    display: block;
+    margin: 0 auto;
+  }
+
+  /* グループ化結果エリア：通常表示では非表示 */
+  /* （デバッグ折りたたみ内へ移動済みのため余白だけ残さない） */
+  #group-result {
+    margin: 0;
+    padding: 0;
+  }
+
+  /* 選択内容 / 警告 / 必要本数 / 注意点 のみ余白を標準化 */
+  #selection-result,
+  #warning-result,
+  #sleeve-count,
+  #notes-result {
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+}
