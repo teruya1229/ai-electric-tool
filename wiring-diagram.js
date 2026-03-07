@@ -682,6 +682,10 @@ function renderAiDiagramGamidenki(sceneModel) {
     judgeSleevesFromConnectionPoints(connectionPoints);
 
   const NS = "http://www.w3.org/2000/svg";
+  const panelWidth = Number(panel?.clientWidth || 0);
+  const viewportWidth = typeof window !== "undefined" ? Number(window.innerWidth || 0) : 0;
+  const mobileBasis = panelWidth > 0 ? Math.min(panelWidth, viewportWidth || panelWidth) : viewportWidth;
+  const isMobileMode = mobileBasis > 0 && mobileBasis <= 520;
   const roleColors = {
     line: "#f5c842",
     line_load: "#f5c842",
@@ -706,6 +710,9 @@ function renderAiDiagramGamidenki(sceneModel) {
       null;
     const card = document.createElement("article");
     card.className = "ai-diagram-gamidenki-item";
+    if (isMobileMode) {
+      card.style.marginBottom = "12px";
+    }
 
     const title = document.createElement("div");
     title.className = "circuit-item-title";
@@ -713,8 +720,13 @@ function renderAiDiagramGamidenki(sceneModel) {
     card.appendChild(title);
 
     const svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("width", "700");
+    svg.setAttribute("viewBox", "0 0 700 430");
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    svg.setAttribute("width", isMobileMode ? "100%" : "700");
     svg.setAttribute("height", "430");
+    if (isMobileMode) {
+      svg.setAttribute("style", "display:block;width:100%;height:auto;max-width:700px;");
+    }
 
     const bg = document.createElementNS(NS, "rect");
     bg.setAttribute("x", "0");
@@ -748,6 +760,17 @@ function renderAiDiagramGamidenki(sceneModel) {
     headerSub.textContent = `器具数: ${nodeCount}  配線数: ${wireCount}`;
     svg.appendChild(headerSub);
 
+    const hasThreeway = (wirePath?.wires || []).some((wire) => wire?.role === "traveler_1" || wire?.role === "traveler_2");
+    if (hasThreeway) {
+      const threewayText = document.createElementNS(NS, "text");
+      threewayText.setAttribute("x", "540");
+      threewayText.setAttribute("y", "20");
+      threewayText.setAttribute("font-size", "10");
+      threewayText.setAttribute("fill", "#c792ea");
+      threewayText.textContent = "3路配線あり";
+      svg.appendChild(threewayText);
+    }
+
     const circuitMaterials = circuit ? createMaterialsForCircuit(circuit) : [];
     const materialLines =
       circuitMaterials.length > 0
@@ -763,33 +786,35 @@ function renderAiDiagramGamidenki(sceneModel) {
     const materialBoxWidth = 210;
     const materialBoxHeight = 28 + materialLines.length * 14;
 
-    const materialBox = document.createElementNS(NS, "rect");
-    materialBox.setAttribute("x", String(materialBoxX));
-    materialBox.setAttribute("y", String(materialBoxY));
-    materialBox.setAttribute("width", String(materialBoxWidth));
-    materialBox.setAttribute("height", String(materialBoxHeight));
-    materialBox.setAttribute("fill", "#262626");
-    materialBox.setAttribute("stroke", "#555");
-    materialBox.setAttribute("rx", "6");
-    svg.appendChild(materialBox);
+    if (!isMobileMode) {
+      const materialBox = document.createElementNS(NS, "rect");
+      materialBox.setAttribute("x", String(materialBoxX));
+      materialBox.setAttribute("y", String(materialBoxY));
+      materialBox.setAttribute("width", String(materialBoxWidth));
+      materialBox.setAttribute("height", String(materialBoxHeight));
+      materialBox.setAttribute("fill", "#262626");
+      materialBox.setAttribute("stroke", "#555");
+      materialBox.setAttribute("rx", "6");
+      svg.appendChild(materialBox);
 
-    const materialTitle = document.createElementNS(NS, "text");
-    materialTitle.setAttribute("x", String(materialBoxX + 10));
-    materialTitle.setAttribute("y", String(materialBoxY + 16));
-    materialTitle.setAttribute("font-size", "11");
-    materialTitle.setAttribute("fill", "#ffffff");
-    materialTitle.textContent = "材料";
-    svg.appendChild(materialTitle);
+      const materialTitle = document.createElementNS(NS, "text");
+      materialTitle.setAttribute("x", String(materialBoxX + 10));
+      materialTitle.setAttribute("y", String(materialBoxY + 16));
+      materialTitle.setAttribute("font-size", "11");
+      materialTitle.setAttribute("fill", "#ffffff");
+      materialTitle.textContent = "材料";
+      svg.appendChild(materialTitle);
 
-    materialLines.forEach((line, idx) => {
-      const materialText = document.createElementNS(NS, "text");
-      materialText.setAttribute("x", String(materialBoxX + 10));
-      materialText.setAttribute("y", String(materialBoxY + 32 + idx * 14));
-      materialText.setAttribute("font-size", "10");
-      materialText.setAttribute("fill", "#d8d8d8");
-      materialText.textContent = line;
-      svg.appendChild(materialText);
-    });
+      materialLines.forEach((line, idx) => {
+        const materialText = document.createElementNS(NS, "text");
+        materialText.setAttribute("x", String(materialBoxX + 10));
+        materialText.setAttribute("y", String(materialBoxY + 32 + idx * 14));
+        materialText.setAttribute("font-size", "10");
+        materialText.setAttribute("fill", "#d8d8d8");
+        materialText.textContent = line;
+        svg.appendChild(materialText);
+      });
+    }
 
     const resolvedCircuitId =
       layout?.circuitId ?? graph?.circuitId ?? wirePath?.circuitId ?? circuit?.id ?? null;
@@ -876,33 +901,35 @@ function renderAiDiagramGamidenki(sceneModel) {
     const sleeveBoxWidth = 210;
     const sleeveBoxHeight = 28 + visibleSleeveLines.length * 14;
 
-    const sleeveBox = document.createElementNS(NS, "rect");
-    sleeveBox.setAttribute("x", String(sleeveBoxX));
-    sleeveBox.setAttribute("y", String(sleeveBoxY));
-    sleeveBox.setAttribute("width", String(sleeveBoxWidth));
-    sleeveBox.setAttribute("height", String(sleeveBoxHeight));
-    sleeveBox.setAttribute("fill", "#262626");
-    sleeveBox.setAttribute("stroke", "#555");
-    sleeveBox.setAttribute("rx", "6");
-    svg.appendChild(sleeveBox);
+    if (!isMobileMode) {
+      const sleeveBox = document.createElementNS(NS, "rect");
+      sleeveBox.setAttribute("x", String(sleeveBoxX));
+      sleeveBox.setAttribute("y", String(sleeveBoxY));
+      sleeveBox.setAttribute("width", String(sleeveBoxWidth));
+      sleeveBox.setAttribute("height", String(sleeveBoxHeight));
+      sleeveBox.setAttribute("fill", "#262626");
+      sleeveBox.setAttribute("stroke", "#555");
+      sleeveBox.setAttribute("rx", "6");
+      svg.appendChild(sleeveBox);
 
-    const sleeveTitle = document.createElementNS(NS, "text");
-    sleeveTitle.setAttribute("x", String(sleeveBoxX + 10));
-    sleeveTitle.setAttribute("y", String(sleeveBoxY + 16));
-    sleeveTitle.setAttribute("font-size", "11");
-    sleeveTitle.setAttribute("fill", "#ffffff");
-    sleeveTitle.textContent = "スリーブ判定";
-    svg.appendChild(sleeveTitle);
+      const sleeveTitle = document.createElementNS(NS, "text");
+      sleeveTitle.setAttribute("x", String(sleeveBoxX + 10));
+      sleeveTitle.setAttribute("y", String(sleeveBoxY + 16));
+      sleeveTitle.setAttribute("font-size", "11");
+      sleeveTitle.setAttribute("fill", "#ffffff");
+      sleeveTitle.textContent = "スリーブ判定";
+      svg.appendChild(sleeveTitle);
 
-    visibleSleeveLines.forEach((line, idx) => {
-      const sleeveText = document.createElementNS(NS, "text");
-      sleeveText.setAttribute("x", String(sleeveBoxX + 10));
-      sleeveText.setAttribute("y", String(sleeveBoxY + 32 + idx * 14));
-      sleeveText.setAttribute("font-size", "10");
-      sleeveText.setAttribute("fill", line.isAlert ? "#ffb86b" : "#d8d8d8");
-      sleeveText.textContent = line.text;
-      svg.appendChild(sleeveText);
-    });
+      visibleSleeveLines.forEach((line, idx) => {
+        const sleeveText = document.createElementNS(NS, "text");
+        sleeveText.setAttribute("x", String(sleeveBoxX + 10));
+        sleeveText.setAttribute("y", String(sleeveBoxY + 32 + idx * 14));
+        sleeveText.setAttribute("font-size", "10");
+        sleeveText.setAttribute("fill", line.isAlert ? "#ffb86b" : "#d8d8d8");
+        sleeveText.textContent = line.text;
+        svg.appendChild(sleeveText);
+      });
+    }
 
     const drawOffsetY = -8;
     const sleeveByConnectionPointId = new Map();
@@ -911,7 +938,7 @@ function renderAiDiagramGamidenki(sceneModel) {
       sleeveByConnectionPointId.set(key, item);
     });
     const connectionPointWires = (wirePath?.wires || []).filter((wire) => Array.isArray(wire?.path) && wire.path.length > 0);
-    const markerItems = (connectionPointItems || []).slice(0, 6);
+    const markerItems = (connectionPointItems || []).slice(0, isMobileMode ? 4 : 6);
     const usedNodeIds = new Set();
     markerItems.forEach((point, idx) => {
       let x = Number(point?.x);
@@ -1003,7 +1030,9 @@ function renderAiDiagramGamidenki(sceneModel) {
       cpText.setAttribute("font-size", "9");
       cpText.setAttribute("fill", "#fff2b3");
       cpText.textContent = cpIdShort;
-      svg.appendChild(cpText);
+      if (!isMobileMode || idx % 2 === 0) {
+        svg.appendChild(cpText);
+      }
 
       if (sleeveShort) {
         const sleeveText = document.createElementNS(NS, "text");
@@ -1012,20 +1041,11 @@ function renderAiDiagramGamidenki(sceneModel) {
         sleeveText.setAttribute("font-size", "9");
         sleeveText.setAttribute("fill", isAlertShort ? "#ffb86b" : "#ffd966");
         sleeveText.textContent = sleeveShort;
-        svg.appendChild(sleeveText);
+        if (!isMobileMode || idx < 2) {
+          svg.appendChild(sleeveText);
+        }
       }
     });
-
-    const hasThreeway = (wirePath?.wires || []).some((wire) => wire?.role === "traveler_1" || wire?.role === "traveler_2");
-    if (hasThreeway) {
-      const threewayText = document.createElementNS(NS, "text");
-      threewayText.setAttribute("x", "540");
-      threewayText.setAttribute("y", "20");
-      threewayText.setAttribute("font-size", "10");
-      threewayText.setAttribute("fill", "#c792ea");
-      threewayText.textContent = "3路配線あり";
-      svg.appendChild(threewayText);
-    }
 
     let lineNoteCount = 0;
     const lineNoteLabels = {
@@ -1055,7 +1075,7 @@ function renderAiDiagramGamidenki(sceneModel) {
       svg.appendChild(polyline);
 
       const shortLabel = lineNoteLabels[wire?.role];
-      if (shortLabel && lineNoteCount < 2 && !lineNoteUsed.has(shortLabel)) {
+      if (shortLabel && lineNoteCount < (isMobileMode ? 1 : 2) && !lineNoteUsed.has(shortLabel)) {
         const pointList = (wire?.path || []).filter((point) => typeof point?.x === "number" && typeof point?.y === "number");
         if (pointList.length) {
           const midPoint = pointList[Math.floor(pointList.length / 2)];
@@ -1185,6 +1205,41 @@ function renderAiDiagramGamidenki(sceneModel) {
     });
 
     card.appendChild(svg);
+    if (isMobileMode) {
+      const summary = document.createElement("div");
+      summary.setAttribute(
+        "style",
+        "margin-top:6px;padding:8px 10px;background:#262626;border:1px solid #555;border-radius:6px;color:#d8d8d8;font-size:10px;line-height:1.45;"
+      );
+
+      const headerRow = document.createElement("div");
+      headerRow.setAttribute("style", "color:#ffffff;font-size:11px;margin-bottom:4px;");
+      headerRow.textContent = `回路: ${circuitLabel} / 器具数: ${nodeCount} / 配線数: ${wireCount}${hasThreeway ? " / 3路配線あり" : ""}`;
+      summary.appendChild(headerRow);
+
+      const materialTitleRow = document.createElement("div");
+      materialTitleRow.setAttribute("style", "color:#ffffff;font-size:11px;margin-top:4px;");
+      materialTitleRow.textContent = "材料";
+      summary.appendChild(materialTitleRow);
+      materialLines.forEach((line) => {
+        const row = document.createElement("div");
+        row.textContent = line;
+        summary.appendChild(row);
+      });
+
+      const sleeveTitleRow = document.createElement("div");
+      sleeveTitleRow.setAttribute("style", "color:#ffffff;font-size:11px;margin-top:6px;");
+      sleeveTitleRow.textContent = "スリーブ判定";
+      summary.appendChild(sleeveTitleRow);
+      visibleSleeveLines.forEach((line) => {
+        const row = document.createElement("div");
+        row.setAttribute("style", `color:${line.isAlert ? "#ffb86b" : "#d8d8d8"};`);
+        row.textContent = line.text;
+        summary.appendChild(row);
+      });
+
+      card.appendChild(summary);
+    }
     panel.appendChild(card);
   });
 }
