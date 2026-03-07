@@ -446,6 +446,14 @@ function purposeToDeviceType(purpose, switchType) {
   return null;
 }
 
+function extractNumericOnlyQuantityFromLine(line) {
+  const normalized = String(line || "").trim();
+  if (!/[0-9]$/.test(normalized)) return null;
+  const allNumbers = normalized.match(/[0-9]+/g);
+  if (!allNumbers || allNumbers.length === 0) return null;
+  return Number(allNumbers[0]);
+}
+
 function detectQuantity(line) {
   const numMatch = line.match(/([1-6])\s*(灯|個)/);
   if (numMatch) return Number(numMatch[1]);
@@ -464,8 +472,8 @@ function detectQuantity(line) {
   const over = line.match(/([0-9]+)\s*(灯|個)/);
   if (over) return Number(over[1]);
 
-  const numericOnly = line.match(/([0-9]+)/);
-  if (numericOnly) return Number(numericOnly[1]);
+  const numericOnly = extractNumericOnlyQuantityFromLine(line);
+  if (numericOnly !== null) return numericOnly;
 
   return 1;
 }
