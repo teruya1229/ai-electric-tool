@@ -32,12 +32,12 @@ const UNSUPPORTED_PATTERNS = [
 ];
 const PURPOSE_PATTERNS = [
   { purpose: "outdoor", patterns: [/外部/, /ベランダ/, /庭/, /外/] },
-  { purpose: "washroom", patterns: [/洗面/, /洗濯機/] },
+  { purpose: "washroom", patterns: [/洗面/, /洗濯機/, /浴室/] },
   { purpose: "kitchen_outlet", patterns: [/電子レンジ/, /レンジ/, /冷蔵庫/] },
-  { purpose: "ac_outlet", patterns: [/エアコン/, /\bac\b/i, /クーラー/] },
-  { purpose: "fan", patterns: [/換気扇/] },
-  { purpose: "light", patterns: [/照明/, /ライト/, /ランプ/, /3路/, /三路/] },
-  { purpose: "outlet", patterns: [/コンセント/] },
+  { purpose: "ac_outlet", patterns: [/エアコン用/, /エアコンコンセント/, /エアコン/, /\bac\b/i, /acコンセント/, /クーラー/] },
+  { purpose: "fan", patterns: [/換気扇/, /換気/, /ファン/, /ベント/, /浴室換気/, /トイレ換気/] },
+  { purpose: "light", patterns: [/照明/, /ライト/, /ランプ/, /シーリング/, /ダウンライト/, /蛍光灯/, /引掛シーリング/, /3路/, /三路/] },
+  { purpose: "outlet", patterns: [/一般コンセント/, /ダブルコンセント/, /2口コンセント/, /二口コンセント/, /接地極付コンセント/, /コンセント/] },
 ];
 
 /**
@@ -62,7 +62,10 @@ export function normalizeProblemText(text) {
     .replace(/五個/g, "5個")
     .replace(/六個/g, "6個")
     .replace(/三路/g, "3路")
+    .replace(/四路/g, "4路")
     .replace(/片切り/g, "片切")
+    .replace(/引っ掛けシーリング/g, "引掛シーリング")
+    .replace(/引っかけシーリング/g, "引掛シーリング")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
@@ -423,13 +426,17 @@ export function buildDiagramInputFromGroup(group) {
 }
 
 function detectDeviceType(line) {
-  if (/(照明|ライト|ランプ)/.test(line)) return "light";
-  if (/コンセント/.test(line)) return "outlet";
+  if (/(照明|ライト|ランプ|シーリング|ダウンライト|蛍光灯|引掛シーリング)/.test(line)) return "light";
+  if (/(エアコン用|エアコンコンセント|エアコン|acコンセント|\bac\b|クーラー)/.test(line)) return "outlet";
+  if (/(換気扇|換気|ファン|ベント|浴室換気|トイレ換気)/.test(line)) return "outlet";
+  if (/(一般コンセント|ダブルコンセント|2口コンセント|二口コンセント|接地極付コンセント|コンセント)/.test(line)) return "outlet";
   return null;
 }
 
 function detectSwitchType(line) {
-  if (/(3路|三路)/.test(line)) return "threeway";
+  if (/(4路|四路|4路スイッチ|四路スイッチ)/.test(line)) return "threeway";
+  if (/(3路|三路|3路スイッチ)/.test(line)) return "threeway";
+  if (/片切/.test(line)) return "single";
   return "single";
 }
 
@@ -444,6 +451,16 @@ function purposeToDeviceType(purpose, switchType) {
   if (switchType === "threeway") return "light";
   if (["outlet", "ac_outlet", "kitchen_outlet", "washroom", "outdoor", "fan"].includes(purpose)) return "outlet";
   return null;
+}
+
+function detectAssistFeatures(line) {
+  const features = [];
+  if (/(パイロットランプ)/.test(line)) features.push("パイロットランプ");
+  if (/(ほたる|ホタル)/.test(line)) features.push("ほたる");
+  if (/(タイマ|タイマー|timer)/.test(line)) features.push("タイマー");
+  if (/(遅れスイッチ|遅延スイッチ)/.test(line)) features.push("遅れスイッチ");
+  if (/(人感|センサー|sensor)/.test(line)) features.push("センサー");
+  return features;
 }
 
 function extractNumericOnlyQuantityFromLine(line) {
@@ -480,8 +497,11 @@ function detectQuantity(line) {
 function extractGroupLabel(line) {
   return String(line || "")
     .replace(/\s+/g, "")
-    .replace(/(照明|ライト|ランプ|コンセント|エアコン|AC|ac|クーラー|換気扇|電子レンジ|レンジ|冷蔵庫|洗面|洗濯機|外部|外|庭|ベランダ)/g, "")
-    .replace(/(3路|三路)/g, "")
+    .replace(
+      /(照明|ライト|ランプ|シーリング|ダウンライト|蛍光灯|引掛シーリング|一般コンセント|ダブルコンセント|2口コンセント|二口コンセント|接地極付コンセント|コンセント|エアコン用|エアコンコンセント|エアコン|AC|ac|クーラー|換気扇|換気|ファン|ベント|浴室換気|トイレ換気|電子レンジ|レンジ|冷蔵庫|洗面|洗濯機|外部|外|庭|ベランダ|片切|スイッチ|パイロットランプ|ほたる|ホタル|タイマ|タイマー|遅れスイッチ|遅延スイッチ|人感|センサー)/g,
+      ""
+    )
+    .replace(/(3路|三路|4路|四路)/g, "")
     .replace(/([1-9][0-9]*)(灯|個)/g, "")
     .replace(/([一二三四五六七八九十]+)(灯|個)/g, "")
     .trim();
@@ -573,6 +593,7 @@ function parseFieldLine(line) {
   const switchType = detectSwitchType(normalizedLine);
   const purpose = detectPurpose(normalizedLine);
   const detectedDeviceType = detectDeviceType(normalizedLine) || purposeToDeviceType(purpose, switchType);
+  const assistFeatures = detectAssistFeatures(normalizedLine);
   const parsed = {
     rawLine: line,
     normalizedLine,
@@ -588,7 +609,15 @@ function parseFieldLine(line) {
   if (!parsed.deviceType) parsed.errors.push("器具種別を判定できません。");
   if (parsed.quantity === 0) parsed.errors.push("数量は1以上で入力してください。");
   if (parsed.quantity > 6) parsed.errors.push("数量は6以下で入力してください。");
-  if (!/(照明|ライト|ランプ|コンセント|3路|三路|[1-6]灯|[1-6]個|一灯|二灯|三灯|四灯|五灯|六灯|一個|二個|三個|四個|五個|六個)/.test(normalizedLine)) {
+  if (/(4路|四路)/.test(normalizedLine)) {
+    parsed.warnings.push("4路を検出しました。現行では3路系ヒントとして扱います。");
+  }
+  if (assistFeatures.length) {
+    parsed.warnings.push(`補助器具語を検出: ${assistFeatures.join(" / ")}`);
+  }
+  if (
+    !/(照明|ライト|ランプ|シーリング|ダウンライト|蛍光灯|引掛シーリング|コンセント|一般コンセント|ダブルコンセント|2口コンセント|二口コンセント|接地極付コンセント|エアコン|ac|クーラー|換気扇|換気|ファン|ベント|浴室換気|トイレ換気|片切|3路|三路|4路|四路|[1-6]灯|[1-6]個|一灯|二灯|三灯|四灯|五灯|六灯|一個|二個|三個|四個|五個|六個|パイロットランプ|ほたる|タイマ|タイマー|人感|センサー)/.test(normalizedLine)
+  ) {
     parsed.warnings.push("未知語句を含みます。");
   }
   return parsed;
