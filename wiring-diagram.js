@@ -287,6 +287,216 @@ function buildRequiredAndNotes(condition) {
 }
 
 /**
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizeProblemText(text) {
+  if (typeof text !== "string") return "";
+  return text
+    .normalize("NFKC")
+    .replace(/[，、。,.]/g, " ")
+    .replace(/三路/g, "3路")
+    .replace(/二灯/g, "2灯")
+    .replace(/一灯/g, "1灯")
+    .replace(/片切り/g, "片切")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * @param {string} text
+ */
+function parseProblemText(text) {
+  const normalized = normalizeProblemText(text);
+  const parsed = {
+    rawText: typeof text === "string" ? text : "",
+    normalizedText: normalized,
+    circuitType: null,
+    lightCount: null,
+    sameTime: false,
+    hasOutlet: false,
+    controlCount: 1,
+    confidence: 0,
+    matchedRules: [],
+    warnings: [],
+    errors: [],
+  };
+
+  const addRule = (rule) => {
+    if (!parsed.matchedRules.includes(rule)) parsed.matchedRules.push(rule);
+  };
+
+  if (!normalized) {
+    parsed.errors.push("問題文が空です。");
+    return parsed;
+  }
+
+  const unsupportedRules = [
+    { re: /4路|四路/, message: "4路は今回の対応範囲外です。" },
+    { re: /タイマ|タイマー|timer/, message: "タイマ回路は今回の対応範囲外です。" },
+    { re: /パイロットランプ/, message: "パイロットランプ回路は今回の対応範囲外です。" },
+    { re: /換気扇連動/, message: "換気扇連動回路は今回の対応範囲外です。" },
+  ];
+  unsupportedRules.forEach((rule) => {
+    if (rule.re.test(normalized)) parsed.errors.push(rule.message);
+  });
+
+  const hasSingle = /(片切|単極|single)/.test(normalized);
+  const hasThreeway = /(3路|threeway|3-way)/.test(normalized);
+  if (hasSingle && hasThreeway) {
+    parsed.errors.push("片切と3路の両方が含まれています。");
+  } else if (hasSingle) {
+    parsed.circuitType = "single";
+    addRule("circuit:single");
+  } else if (hasThreeway) {
+    parsed.circuitType = "threeway";
+    addRule("circuit:threeway");
+  } else {
+    parsed.errors.push("回路種別（片切 / 3路）を判定できません。");
+  }
+
+  const has1Light = /1灯/.test(normalized);
+  const has2Light = /2灯/.test(normalized);
+  if (has1Light && has2Light) {
+    parsed.errors.push("灯数が1灯と2灯で矛盾しています。");
+  } else if (has2Light) {
+    parsed.lightCount = 2;
+    addRule("light:2");
+  } else if (has1Light) {
+    parsed.lightCount = 1;
+    addRule("light:1");
+  } else {
+    parsed.errors.push("灯数（1灯 / 2灯同時）を判定できません。");
+  }
+
+  if (/同時|同時点灯|同時on|同時off|まとめて|一括/.test(normalized)) {
+    parsed.sameTime = true;
+    addRule("sameTime:true");
+  }
+
+  if (/コンセント/.test(normalized)) {
+    parsed.hasOutlet = true;
+    addRule("outlet:true");
+  }
+
+  if (parsed.circuitType === "single" && parsed.lightCount === 2 && !parsed.sameTime) {
+    parsed.errors.push("2灯だが同時条件が曖昧で今回未対応です。");
+  }
+  if (parsed.circuitType === "single" && parsed.lightCount === 1 && parsed.sameTime) {
+    parsed.warnings.push("1灯条件では同時点灯指定は不要のため無視します。");
+  }
+  if (parsed.circuitType === "single" && parsed.lightCount === 2 && parsed.hasOutlet) {
+    parsed.errors.push("片切の2灯同時 + コンセントあり は今回の対応範囲外です。");
+  }
+  if (parsed.circuitType === "threeway" && parsed.lightCount === 2) {
+    parsed.errors.push("3路の2灯同時は今回の対応範囲外です。");
+  }
+  if (parsed.circuitType === "threeway" && parsed.hasOutlet) {
+    parsed.errors.push("3路 + コンセントあり は今回の対応範囲外です。");
+  }
+
+  const scoreRaw =
+    (parsed.circuitType ? 40 : 0) +
+    (parsed.lightCount ? 40 : 0) +
+    (parsed.sameTime ? 10 : 0) +
+    (parsed.hasOutlet ? 10 : 0) -
+    parsed.errors.length * 20 -
+    parsed.warnings.length * 5;
+  parsed.confidence = Math.max(0, Math.min(100, scoreRaw));
+
+  return parsed;
+}
+
+/**
+ * @param {ReturnType<typeof parseProblemText>} parsed
+ */
+function applyParsedResult(parsed) {
+  const result = {
+    circuitType: /** @type {CircuitType | null} */ (null),
+    conditionId: /** @type {string | null} */ (null),
+    devices: /** @type {InputDevice[]} */ ([]),
+    warnings: /** @type {string[]} */ ([]),
+    errors: /** @type {string[]} */ ([]),
+  };
+
+  if (!parsed || typeof parsed !== "object") {
+    result.errors.push("解析結果が不正です。");
+    return result;
+  }
+  if (parsed.errors.length) {
+    result.errors.push(...parsed.errors);
+    return result;
+  }
+  if (!parsed.circuitType || !parsed.lightCount) {
+    result.errors.push("回路種別または灯数が不足しています。");
+    return result;
+  }
+
+  result.circuitType = parsed.circuitType;
+  if (parsed.circuitType === "threeway") {
+    if (parsed.lightCount !== 1 || parsed.hasOutlet) {
+      result.errors.push("3路は1灯のみ対応です。");
+      return result;
+    }
+    result.conditionId = "threeway_1light";
+  } else if (parsed.hasOutlet) {
+    if (parsed.lightCount !== 1) {
+      result.errors.push("コンセントありは片切1灯のみ対応です。");
+      return result;
+    }
+    result.conditionId = "single_1light_1outlet";
+  } else if (parsed.lightCount === 2) {
+    result.conditionId = "single_2lights_same";
+  } else if (parsed.lightCount === 1) {
+    result.conditionId = "single_1light";
+  } else {
+    result.errors.push("条件を判定できません。");
+    return result;
+  }
+
+  result.devices = buildDevicesFromSelection(result.circuitType, result.conditionId);
+  if (!result.devices.length) {
+    result.errors.push("解析結果から devices を構築できませんでした。");
+  }
+  return result;
+}
+
+/**
+ * @param {ReturnType<typeof parseProblemText>} parsed
+ */
+function renderParseResult(parsed) {
+  const panel = document.getElementById("parseResultPanel");
+  if (!panel) return;
+
+  const circuitMap = { single: "片切", threeway: "3路" };
+  const lightText = parsed.lightCount ? `${parsed.lightCount}灯` : "未判定";
+  const modeText = parsed.sameTime ? "あり" : "なし";
+  const outletText = parsed.hasOutlet ? "あり" : "なし";
+  const warningText = parsed.warnings.length ? parsed.warnings.join("\n- ") : "なし";
+  const errorText = parsed.errors.length ? parsed.errors.join("\n- ") : "なし";
+  const summary = parsed.errors.length ? "解析失敗（エラーあり）" : "解析成功";
+
+  let pre = panel.querySelector("pre");
+  if (!pre) {
+    pre = document.createElement("pre");
+    panel.appendChild(pre);
+  }
+  pre.textContent = [
+    `判定結果: ${summary}`,
+    `回路種別: ${parsed.circuitType ? circuitMap[parsed.circuitType] : "未判定"}`,
+    `灯数: ${lightText}`,
+    `同時点灯: ${modeText}`,
+    `コンセント有無: ${outletText}`,
+    `controlCount: ${parsed.controlCount}`,
+    `confidence: ${parsed.confidence}`,
+    `matchedRules: ${parsed.matchedRules.length ? parsed.matchedRules.join(", ") : "なし"}`,
+    `警告: ${warningText === "なし" ? "なし" : `\n- ${warningText}`}`,
+    `エラー: ${errorText === "なし" ? "なし" : `\n- ${errorText}`}`,
+  ].join("\n");
+}
+
+/**
  * @param {SleeveJudgeInput} input
  * @returns {SleeveJudgeResult}
  */
@@ -571,6 +781,8 @@ function initPlayground() {
   const modeGamidenkiBtn = document.getElementById("mode-gamidenki-btn");
   const modeFieldBtn = document.getElementById("mode-field-btn");
   const generateBtn = document.getElementById("generate-btn");
+  const problemTextInput = document.getElementById("problemTextInput");
+  const parseProblemButton = document.getElementById("parseProblemButton");
 
   const selectionEl = document.getElementById("selection-result");
   const groupEl = document.getElementById("group-result");
@@ -726,6 +938,25 @@ function initPlayground() {
     renderActiveButtons();
   }
 
+  function parseAndApplyProblemText() {
+    if (!(problemTextInput instanceof HTMLTextAreaElement)) return;
+    const parsed = parseProblemText(problemTextInput.value);
+    console.info("[problem-parser] normalizedText:", parsed.normalizedText);
+    console.info("[problem-parser] parsedResult:", parsed);
+    console.info("[problem-parser] matchedRules:", parsed.matchedRules);
+    const applied = applyParsedResult(parsed);
+    if (applied.warnings.length) parsed.warnings.push(...applied.warnings);
+    if (applied.errors.length) parsed.errors.push(...applied.errors);
+    renderParseResult(parsed);
+
+    if (parsed.errors.length || !applied.circuitType || !applied.conditionId) return;
+    state.selectedCircuitType = applied.circuitType;
+    state.selectedCondition = applied.conditionId;
+    state.devices = applied.devices;
+    renderAll();
+    generateAndRender();
+  }
+
   circuitSingleBtn.addEventListener("click", () => {
     state.selectedCircuitType = "single";
     state.selectedCondition = null;
@@ -761,6 +992,12 @@ function initPlayground() {
   generateBtn.addEventListener("click", () => {
     generateAndRender();
   });
+
+  if (parseProblemButton instanceof HTMLButtonElement) {
+    parseProblemButton.addEventListener("click", () => {
+      parseAndApplyProblemText();
+    });
+  }
 
   sleeveBtn.addEventListener("click", () => {
     const result = judgeSleeve({

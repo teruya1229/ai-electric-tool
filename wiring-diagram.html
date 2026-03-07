@@ -39,6 +39,21 @@
       </section>
 
       <section class="card">
+        <h2>問題文から生成</h2>
+        <div class="controls">
+          <label for="problemTextInput">
+            問題文入力
+            <textarea id="problemTextInput" rows="5" placeholder="例: 片切スイッチ1個で2灯を同時点灯。コンセントあり"></textarea>
+          </label>
+          <button id="parseProblemButton" type="button">解析して生成</button>
+          <article id="parseResultPanel" aria-live="polite">
+            <h3>解析結果</h3>
+            <pre>未解析</pre>
+          </article>
+        </div>
+      </section>
+
+      <section class="card">
         <h2>複線図を表示</h2>
         <button id="generate-btn" type="button">複線図を表示</button>
       </section>

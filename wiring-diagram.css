@@ -51,8 +51,13 @@ label {
   max-width: 220px;
 }
 
+label[for="problemTextInput"] {
+  max-width: 100%;
+}
+
 input,
 select,
+textarea,
 button {
   font: inherit;
   min-height: 44px;
@@ -60,9 +65,15 @@ button {
 }
 
 input,
-select {
+select,
+textarea {
   border: 1px solid #cbd5e1;
   padding: 8px 10px;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
 }
 
 button {
@@ -133,6 +144,17 @@ pre {
   gap: 8px;
   flex-wrap: wrap;
   align-items: flex-end;
+}
+
+#parseResultPanel {
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+#parseResultPanel h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
 }
 
 @media (max-width: 768px) {
