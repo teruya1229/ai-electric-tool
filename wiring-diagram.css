@@ -161,6 +161,15 @@ pre {
   align-items: flex-end;
 }
 
+.group-list {
+  display: grid;
+  gap: 6px;
+}
+
+.group-item-btn {
+  text-align: left;
+}
+
 @media (max-width: 768px) {
   .button-row {
     display: grid;

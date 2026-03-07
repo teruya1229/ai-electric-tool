@@ -67,6 +67,37 @@
       </section>
 
       <section class="card">
+        <h2>系統管理</h2>
+        <div class="controls">
+          <div class="button-row">
+            <button id="add-group-btn" type="button">系統を追加</button>
+          </div>
+          <div id="group-list" class="group-list"></div>
+          <article id="group-editor-panel">
+            <h3>選択中系統の編集</h3>
+            <div class="button-row">
+              <label for="group-control-id-input">
+                controlId
+                <input id="group-control-id-input" type="text" value="イ" />
+              </label>
+              <label for="group-switch-type-select">
+                switchType
+                <select id="group-switch-type-select">
+                  <option value="single">single</option>
+                  <option value="threeway">threeway</option>
+                </select>
+              </label>
+              <label for="group-same-time-checkbox">
+                sameTime
+                <input id="group-same-time-checkbox" type="checkbox" />
+              </label>
+            </div>
+            <p class="hint">照明数 / コンセント数は上の条件エリアで編集します。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="card">
         <h2>問題文から生成</h2>
         <div class="controls">
           <label for="problemTextInput">

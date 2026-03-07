@@ -47,4 +47,9 @@
   #parseProblemButton {
     width: 100%;
   }
+
+  .group-item-btn,
+  #add-group-btn {
+    width: 100%;
+  }
 }

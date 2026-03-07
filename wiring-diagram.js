@@ -603,6 +603,186 @@ function buildDiagramInputFromDevices(model) {
   return result;
 }
 
+function createEmptyGroup(controlId) {
+  return {
+    controlId,
+    switchType: "single",
+    sameTime: false,
+    devices: [
+      { type: "light", quantity: 1 },
+      { type: "outlet", quantity: 0 },
+    ],
+  };
+}
+
+function getNextControlId(groups) {
+  const used = new Set((groups || []).map((g) => g.controlId));
+  for (let i = 0; i < EXAM_LABELS.length; i += 1) {
+    if (!used.has(EXAM_LABELS[i])) return EXAM_LABELS[i];
+  }
+  return `#${(groups || []).length + 1}`;
+}
+
+function createDefaultSceneModel() {
+  const first = createEmptyGroup(getNextControlId([]));
+  return {
+    mode: "exam",
+    groups: [first],
+    activeGroupIndex: 0,
+  };
+}
+
+function _getGroupQuantity(group, type) {
+  const hit = (group.devices || []).find((d) => d.type === type);
+  return Number(hit?.quantity || 0);
+}
+
+function _setGroupQuantity(group, type, quantity) {
+  const q = Number.isFinite(quantity) ? quantity : 0;
+  const list = Array.isArray(group.devices) ? group.devices : [];
+  const hit = list.find((d) => d.type === type);
+  if (hit) {
+    hit.quantity = q;
+    return;
+  }
+  list.push({ type, quantity: q });
+  group.devices = list;
+}
+
+function buildDiagramInputFromGroup(group) {
+  const result = {
+    devices: /** @type {InputDevice[]} */ ([]),
+    conditionId: /** @type {string | null} */ (null),
+    warnings: /** @type {string[]} */ ([]),
+    errors: /** @type {string[]} */ ([]),
+    resolved: { lightCount: 0, outletCount: 0 },
+  };
+  if (!group) {
+    result.errors.push("系統が選択されていません。");
+    return result;
+  }
+  const lightCount = _getGroupQuantity(group, "light");
+  const outletCount = _getGroupQuantity(group, "outlet");
+  const circuitType = group.switchType === "threeway" ? "threeway" : "single";
+  const sameTime = !!group.sameTime;
+  const effectiveSameTime = circuitType === "single" && lightCount >= 2 ? true : sameTime;
+
+  result.resolved.lightCount = lightCount;
+  result.resolved.outletCount = outletCount;
+  if (lightCount === 0 && outletCount === 0) result.errors.push("照明数とコンセント数がどちらも0です。");
+  if (lightCount > 6) result.errors.push("照明数は6灯以下で入力してください。");
+  if (outletCount > 6) result.errors.push("コンセント数は6個以下で入力してください。");
+  if (circuitType === "threeway" && outletCount > 0) result.errors.push("3路 + コンセントは未対応です。");
+  if (circuitType === "threeway" && lightCount >= 2) result.errors.push("3路 + 2灯以上は未対応です。");
+  if (circuitType === "single" && lightCount >= 2 && !sameTime) {
+    result.warnings.push("2灯以上のため同時点灯として扱います。");
+  }
+  if (result.errors.length) return result;
+
+  const model = buildDeviceListFromUi({
+    circuitType,
+    mode: "exam",
+    lightCount,
+    outletCount,
+    sameTime: effectiveSameTime,
+    controlCount: 1,
+  });
+  const built = buildDiagramInputFromDevices(model);
+  result.devices = built.devices;
+  result.conditionId = built.conditionId;
+  result.warnings.push(...built.warnings);
+  result.errors.push(...built.errors);
+  result.resolved = built.resolved;
+  return result;
+}
+
+function renderGroupList(sceneModel) {
+  const listEl = document.getElementById("group-list");
+  if (!listEl) return;
+  listEl.innerHTML = "";
+  sceneModel.groups.forEach((group, index) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "group-item-btn";
+    if (index === sceneModel.activeGroupIndex) btn.classList.add("active");
+    const switchText = group.switchType === "threeway" ? "3路" : "片切";
+    btn.textContent = `${group.controlId} | ${switchText} | 照明${_getGroupQuantity(group, "light")} | C${_getGroupQuantity(group, "outlet")}`;
+    btn.dataset.groupIndex = String(index);
+    listEl.appendChild(btn);
+  });
+}
+
+function renderGroupEditor(sceneModel, activeGroupIndex) {
+  const group = sceneModel.groups[activeGroupIndex];
+  const controlIdInput = document.getElementById("group-control-id-input");
+  const switchTypeSelect = document.getElementById("group-switch-type-select");
+  const sameTimeCheckbox = document.getElementById("group-same-time-checkbox");
+  const lightCountSelect = document.getElementById("light-count-select");
+  const outletCountSelect = document.getElementById("outlet-count-select");
+  if (!group || !(controlIdInput instanceof HTMLInputElement) || !(switchTypeSelect instanceof HTMLSelectElement)) return;
+
+  controlIdInput.value = group.controlId;
+  switchTypeSelect.value = group.switchType;
+  if (sameTimeCheckbox instanceof HTMLInputElement) sameTimeCheckbox.checked = !!group.sameTime;
+  if (lightCountSelect instanceof HTMLSelectElement) lightCountSelect.value = String(_getGroupQuantity(group, "light"));
+  if (outletCountSelect instanceof HTMLSelectElement) outletCountSelect.value = String(_getGroupQuantity(group, "outlet"));
+}
+
+function updateActiveGroupFromForm(sceneModel) {
+  const group = sceneModel.groups[sceneModel.activeGroupIndex];
+  if (!group) return;
+  const controlIdInput = document.getElementById("group-control-id-input");
+  const switchTypeSelect = document.getElementById("group-switch-type-select");
+  const sameTimeCheckbox = document.getElementById("group-same-time-checkbox");
+  const lightCountSelect = document.getElementById("light-count-select");
+  const outletCountSelect = document.getElementById("outlet-count-select");
+
+  if (controlIdInput instanceof HTMLInputElement) group.controlId = controlIdInput.value.trim() || getNextControlId(sceneModel.groups);
+  if (switchTypeSelect instanceof HTMLSelectElement) group.switchType = switchTypeSelect.value === "threeway" ? "threeway" : "single";
+  if (sameTimeCheckbox instanceof HTMLInputElement) group.sameTime = sameTimeCheckbox.checked;
+  if (lightCountSelect instanceof HTMLSelectElement) _setGroupQuantity(group, "light", Number(lightCountSelect.value));
+  if (outletCountSelect instanceof HTMLSelectElement) _setGroupQuantity(group, "outlet", Number(outletCountSelect.value));
+}
+
+function renderActiveGroupDiagram(sceneModel) {
+  const result = {
+    diagram: EMPTY_DIAGRAM,
+    error: "",
+    warnings: [],
+    errors: [],
+    conditionId: null,
+    devices: [],
+    resolved: { lightCount: 0, outletCount: 0 },
+  };
+  if (!sceneModel.groups.length) {
+    result.error = "系統がありません";
+    return result;
+  }
+  if (sceneModel.groups.length > 6) {
+    result.error = "系統数は6件までです。";
+    result.errors.push(result.error);
+    return result;
+  }
+  const active = sceneModel.groups[sceneModel.activeGroupIndex];
+  const built = buildDiagramInputFromGroup(active);
+  result.warnings.push(...built.warnings);
+  result.errors.push(...built.errors);
+  result.conditionId = built.conditionId;
+  result.devices = built.devices;
+  result.resolved = built.resolved;
+  if (built.errors.length) {
+    result.error = built.errors.join(" / ");
+    return result;
+  }
+  try {
+    const generationMode = sceneModel.mode === "exam_gamidenki" ? "exam" : sceneModel.mode;
+    result.diagram = { ...generateDiagram(built.devices, generationMode), mode: sceneModel.mode };
+  } catch (_error) {
+    result.error = "複線図生成に失敗しました";
+  }
+  return result;
+}
+
 /**
  * @param {ReturnType<typeof parseProblemText>} parsed
  */
@@ -969,6 +1149,10 @@ function initPlayground() {
   const modeGamidenkiBtn = document.getElementById("mode-gamidenki-btn");
   const modeFieldBtn = document.getElementById("mode-field-btn");
   const generateBtn = document.getElementById("generate-btn");
+  const addGroupBtn = document.getElementById("add-group-btn");
+  const groupControlIdInput = document.getElementById("group-control-id-input");
+  const groupSwitchTypeSelect = document.getElementById("group-switch-type-select");
+  const groupSameTimeCheckbox = document.getElementById("group-same-time-checkbox");
   const lightCountSelect = document.getElementById("light-count-select");
   const outletCountSelect = document.getElementById("outlet-count-select");
   const problemTextInput = document.getElementById("problemTextInput");
@@ -996,6 +1180,10 @@ function initPlayground() {
     !modeGamidenkiBtn ||
     !modeFieldBtn ||
     !generateBtn ||
+    !addGroupBtn ||
+    !groupControlIdInput ||
+    !groupSwitchTypeSelect ||
+    !groupSameTimeCheckbox ||
     !lightCountSelect ||
     !outletCountSelect ||
     !selectionEl ||
@@ -1014,9 +1202,8 @@ function initPlayground() {
   }
 
   const state = {
-    selectedCircuitType: /** @type {CircuitType | null} */ (null),
-    selectedCondition: /** @type {string | null} */ (null),
-    selectedMode: /** @type {DiagramMode} */ ("exam"),
+    sceneModel: createDefaultSceneModel(),
+    selectedCondition: /** @type {string | null} */ ("single_1light"),
     devices: /** @type {InputDevice[]} */ ([]),
     formState: null,
     inputWarnings: /** @type {string[]} */ ([]),
@@ -1026,8 +1213,12 @@ function initPlayground() {
     error: "",
   };
 
+  function getActiveGroup() {
+    return state.sceneModel.groups[state.sceneModel.activeGroupIndex] || null;
+  }
+
   function isSelectionReady() {
-    return !!state.selectedCircuitType && state.devices.length > 0 && state.inputErrors.length === 0;
+    return !!getActiveGroup() && state.devices.length > 0 && state.inputErrors.length === 0;
   }
 
   function readQuantityFromUi() {
@@ -1059,12 +1250,9 @@ function initPlayground() {
     }
   }
 
-  function _currentSameTime(lightCount) {
-    return state.selectedCircuitType === "single" && lightCount >= 2;
-  }
-
   function rebuildDevicesFromCurrentInput() {
-    if (!state.selectedCircuitType) {
+    const group = getActiveGroup();
+    if (!group) {
       state.formState = null;
       state.devices = [];
       state.inputWarnings = [];
@@ -1073,42 +1261,49 @@ function initPlayground() {
       return;
     }
     const quantity = readQuantityFromUi();
+    _setGroupQuantity(group, "light", quantity.lightCount);
+    _setGroupQuantity(group, "outlet", quantity.outletCount);
+    group.switchType = groupSwitchTypeSelect.value === "threeway" ? "threeway" : "single";
+    group.sameTime = groupSameTimeCheckbox.checked;
+
     state.formState = buildDeviceListFromUi({
-      circuitType: state.selectedCircuitType,
-      mode: state.selectedMode,
+      circuitType: group.switchType === "threeway" ? "threeway" : "single",
+      mode: state.sceneModel.mode,
       lightCount: quantity.lightCount,
       outletCount: quantity.outletCount,
-      sameTime: _currentSameTime(quantity.lightCount),
+      sameTime: group.sameTime,
       controlCount: 1,
     });
-    const built = buildDiagramInputFromDevices(state.formState);
+    const built = buildDiagramInputFromGroup(group);
     state.devices = built.devices;
     state.inputWarnings = built.warnings;
     state.inputErrors = built.errors;
     state.simplified = built.resolved;
-    state.selectedCondition =
-      built.conditionId ||
-      _inferConditionIdFromCounts(state.selectedCircuitType, quantity.lightCount, quantity.outletCount, _currentSameTime(quantity.lightCount));
+    state.selectedCondition = built.conditionId;
   }
 
   function getConditionLabel() {
-    if (!state.selectedCircuitType) return "未選択";
+    const group = getActiveGroup();
+    if (!group) return "未選択";
     if (!state.selectedCondition) {
       const q = readQuantityFromUi();
       return `照明${q.lightCount}灯 / コンセント${q.outletCount}個`;
     }
-    const hit = CONDITION_OPTIONS[state.selectedCircuitType].find((c) => c.id === state.selectedCondition);
+    const circuitType = group.switchType === "threeway" ? "threeway" : "single";
+    const hit = CONDITION_OPTIONS[circuitType].find((c) => c.id === state.selectedCondition);
     return hit ? hit.label : "カスタム";
   }
 
   function renderConditionButtons() {
     conditionButtonsEl.innerHTML = "";
-    if (!state.selectedCircuitType) {
+    const group = getActiveGroup();
+    if (!group) {
       conditionHintEl.textContent = "先に回路を選んでください。";
       return;
     }
-    conditionHintEl.textContent = `${state.selectedCircuitType === "single" ? "片切" : "3路"} の条件を選んでください。`;
-    CONDITION_OPTIONS[state.selectedCircuitType].forEach((option) => {
+    const circuitType = group.switchType === "threeway" ? "threeway" : "single";
+    conditionHintEl.textContent = `${circuitType === "single" ? "片切" : "3路"} の条件を選んでください。`;
+    CONDITION_OPTIONS[circuitType].forEach((option) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = option.label;
@@ -1116,6 +1311,22 @@ function initPlayground() {
       if (state.selectedCondition === option.id) btn.classList.add("active");
       btn.addEventListener("click", () => {
         state.selectedCondition = option.id;
+        if (option.id === "single_1light") {
+          group.switchType = "single";
+          group.sameTime = false;
+        } else if (option.id === "single_2lights_same") {
+          group.switchType = "single";
+          group.sameTime = true;
+        } else if (option.id === "single_1light_1outlet") {
+          group.switchType = "single";
+          group.sameTime = false;
+        } else if (option.id === "threeway_1light") {
+          group.switchType = "threeway";
+          group.sameTime = false;
+        }
+        groupControlIdInput.value = group.controlId;
+        groupSwitchTypeSelect.value = group.switchType;
+        groupSameTimeCheckbox.checked = group.sameTime;
         syncQuantityUiFromCondition(option.id);
         rebuildDevicesFromCurrentInput();
         renderAll();
@@ -1126,12 +1337,14 @@ function initPlayground() {
   }
 
   function renderSelection() {
-    const circuitText = state.selectedCircuitType === "single" ? "片切" : state.selectedCircuitType === "threeway" ? "3路" : "未選択";
+    const group = getActiveGroup();
+    const circuitType = group ? (group.switchType === "threeway" ? "threeway" : "single") : null;
+    const circuitText = circuitType === "single" ? "片切" : circuitType === "threeway" ? "3路" : "未選択";
     const quantity = readQuantityFromUi();
     const modeText =
-      state.selectedMode === "exam"
+      state.sceneModel.mode === "exam"
         ? "試験モード"
-        : state.selectedMode === "exam_gamidenki"
+        : state.sceneModel.mode === "exam_gamidenki"
           ? "ガミデンキモード"
           : "現場モード";
     selectionEl.textContent = JSON.stringify(
@@ -1148,46 +1361,48 @@ function initPlayground() {
   }
 
   function renderActiveButtons() {
-    circuitSingleBtn.classList.toggle("active", state.selectedCircuitType === "single");
-    circuitThreewayBtn.classList.toggle("active", state.selectedCircuitType === "threeway");
-    modeExamBtn.classList.toggle("active", state.selectedMode === "exam");
-    modeGamidenkiBtn.classList.toggle("active", state.selectedMode === "exam_gamidenki");
-    modeFieldBtn.classList.toggle("active", state.selectedMode === "field");
+    const group = getActiveGroup();
+    const circuitType = group ? (group.switchType === "threeway" ? "threeway" : "single") : null;
+    circuitSingleBtn.classList.toggle("active", circuitType === "single");
+    circuitThreewayBtn.classList.toggle("active", circuitType === "threeway");
+    modeExamBtn.classList.toggle("active", state.sceneModel.mode === "exam");
+    modeGamidenkiBtn.classList.toggle("active", state.sceneModel.mode === "exam_gamidenki");
+    modeFieldBtn.classList.toggle("active", state.sceneModel.mode === "field");
   }
 
   function generateAndRender() {
-    if (!isSelectionReady()) {
-      state.error = state.inputErrors.length ? state.inputErrors.join(" / ") : "回路・条件を選択してください";
-      state.diagram = EMPTY_DIAGRAM;
-    } else {
-      state.error = "";
-      try {
-        const generationMode = state.selectedMode === "exam_gamidenki" ? "exam" : state.selectedMode;
-        state.diagram = { ...generateDiagram(state.devices, generationMode), mode: state.selectedMode };
-        if (!state.diagram.devices.length && !state.diagram.wires.length) {
-          state.error = "複線図データなし";
-        }
-      } catch (_error) {
-        state.error = "複線図生成に失敗しました";
-        state.diagram = EMPTY_DIAGRAM;
-      }
-    }
+    const rendered = renderActiveGroupDiagram(state.sceneModel);
+    state.diagram = rendered.diagram;
+    state.error = rendered.error;
+    state.devices = rendered.devices;
+    state.inputWarnings = rendered.warnings;
+    state.inputErrors = rendered.errors;
+    state.selectedCondition = rendered.conditionId;
+    state.simplified = rendered.resolved;
 
     groupEl.textContent = state.diagram.groups.length ? JSON.stringify(state.diagram.groups, null, 2) : "グループ化結果なし";
     const allWarnings = [...state.inputWarnings, ...state.diagram.warnings];
     warningEl.textContent = allWarnings.length ? allWarnings.join("\n") : "警告なし";
     renderDiagram(state.diagram, state.error);
 
-    const quantity = readQuantityFromUi();
-    const fallbackCondition = _inferConditionIdFromCounts(
-      state.selectedCircuitType,
-      quantity.lightCount,
-      quantity.outletCount,
-      _currentSameTime(quantity.lightCount)
-    );
-    const meta = buildRequiredAndNotes(fallbackCondition);
+    const active = getActiveGroup();
+    const quantity = {
+      lightCount: active ? _getGroupQuantity(active, "light") : 0,
+      outletCount: active ? _getGroupQuantity(active, "outlet") : 0,
+    };
+    const fallbackCondition = active
+      ? _inferConditionIdFromCounts(
+          active.switchType === "threeway" ? "threeway" : "single",
+          quantity.lightCount,
+          quantity.outletCount,
+          !!active.sameTime
+        )
+      : null;
+    const meta = fallbackCondition ? buildRequiredAndNotes(fallbackCondition) : { required: ["カスタム系統: 自動算出対象外"], notes: [] };
+    const customNotes = !fallbackCondition ? ["カスタム系統のため必要本数は参考表示です。"] : [];
     requiredEl.textContent = meta.required.join("\n");
     notesEl.textContent = [
+      ...customNotes,
       ...meta.notes,
       state.simplified.lightCount < quantity.lightCount ? `照明${quantity.lightCount - state.simplified.lightCount}灯は補助情報扱い` : "",
       state.simplified.outletCount < quantity.outletCount ? `コンセント${quantity.outletCount - state.simplified.outletCount}個は補助情報扱い` : "",
@@ -1198,9 +1413,10 @@ function initPlayground() {
     debugEl.textContent = JSON.stringify(
       {
         選択状態: {
-          selectedCircuitType: state.selectedCircuitType,
+          selectedCircuitType: active ? (active.switchType === "threeway" ? "threeway" : "single") : null,
           selectedCondition: state.selectedCondition,
-          selectedMode: state.selectedMode,
+          selectedMode: state.sceneModel.mode,
+          activeGroupIndex: state.sceneModel.activeGroupIndex,
         },
         devices: state.devices,
         formState: state.formState,
@@ -1213,6 +1429,8 @@ function initPlayground() {
   }
 
   function renderAll() {
+    renderGroupList(state.sceneModel);
+    renderGroupEditor(state.sceneModel, state.sceneModel.activeGroupIndex);
     renderSelection();
     renderConditionButtons();
     renderActiveButtons();
@@ -1236,9 +1454,12 @@ function initPlayground() {
       state.inputWarnings = [...parsed.warnings];
       return;
     }
+    const group = getActiveGroup();
+    if (!group) return;
     if (parsed.lightCount) lightCountSelect.value = String(parsed.lightCount);
     outletCountSelect.value = String(parsed.outletCount || 0);
-    state.selectedCircuitType = applied.circuitType;
+    group.switchType = applied.circuitType === "threeway" ? "threeway" : "single";
+    group.sameTime = !!parsed.sameTime;
     state.selectedCondition = applied.conditionId || null;
     state.formState = diagramFormState;
     state.devices = applied.devices;
@@ -1248,44 +1469,92 @@ function initPlayground() {
       lightCount: Math.min(parsed.lightCount || 0, 2),
       outletCount: Math.min(parsed.outletCount || 0, 1),
     };
+    renderGroupEditor(state.sceneModel, state.sceneModel.activeGroupIndex);
     renderAll();
     generateAndRender();
   }
 
   circuitSingleBtn.addEventListener("click", () => {
-    state.selectedCircuitType = "single";
+    const group = getActiveGroup();
+    if (!group) return;
+    group.switchType = "single";
+    groupSwitchTypeSelect.value = "single";
     state.selectedCondition = null;
     rebuildDevicesFromCurrentInput();
     renderAll();
   });
 
   circuitThreewayBtn.addEventListener("click", () => {
-    state.selectedCircuitType = "threeway";
+    const group = getActiveGroup();
+    if (!group) return;
+    group.switchType = "threeway";
+    groupSwitchTypeSelect.value = "threeway";
     state.selectedCondition = null;
     rebuildDevicesFromCurrentInput();
     renderAll();
   });
 
   modeExamBtn.addEventListener("click", () => {
-    state.selectedMode = "exam";
+    state.sceneModel.mode = "exam";
     rebuildDevicesFromCurrentInput();
     renderAll();
     if (isSelectionReady()) generateAndRender();
   });
 
   modeGamidenkiBtn.addEventListener("click", () => {
-    state.selectedMode = "exam_gamidenki";
+    state.sceneModel.mode = "exam_gamidenki";
     rebuildDevicesFromCurrentInput();
     renderAll();
     if (isSelectionReady()) generateAndRender();
   });
 
   modeFieldBtn.addEventListener("click", () => {
-    state.selectedMode = "field";
+    state.sceneModel.mode = "field";
     rebuildDevicesFromCurrentInput();
     renderAll();
     if (isSelectionReady()) generateAndRender();
   });
+
+  if (addGroupBtn instanceof HTMLButtonElement) {
+    addGroupBtn.addEventListener("click", () => {
+      if (state.sceneModel.groups.length >= 6) {
+        state.inputErrors = ["系統数は6件までです。"];
+        renderAll();
+        generateAndRender();
+        return;
+      }
+      const newGroup = createEmptyGroup(getNextControlId(state.sceneModel.groups));
+      state.sceneModel.groups.push(newGroup);
+      state.sceneModel.activeGroupIndex = state.sceneModel.groups.length - 1;
+      state.selectedCondition = null;
+      renderAll();
+      rebuildDevicesFromCurrentInput();
+      generateAndRender();
+    });
+  }
+
+  if (groupSwitchTypeSelect instanceof HTMLSelectElement) {
+    groupSwitchTypeSelect.addEventListener("change", () => {
+      updateActiveGroupFromForm(state.sceneModel);
+      state.selectedCondition = null;
+      rebuildDevicesFromCurrentInput();
+      renderAll();
+    });
+  }
+  if (groupControlIdInput instanceof HTMLInputElement) {
+    groupControlIdInput.addEventListener("change", () => {
+      updateActiveGroupFromForm(state.sceneModel);
+      renderAll();
+    });
+  }
+  if (groupSameTimeCheckbox instanceof HTMLInputElement) {
+    groupSameTimeCheckbox.addEventListener("change", () => {
+      updateActiveGroupFromForm(state.sceneModel);
+      state.selectedCondition = null;
+      rebuildDevicesFromCurrentInput();
+      renderAll();
+    });
+  }
 
   lightCountSelect.addEventListener("change", () => {
     state.selectedCondition = null;
@@ -1298,6 +1567,23 @@ function initPlayground() {
     rebuildDevicesFromCurrentInput();
     renderAll();
   });
+
+  const groupListEl = document.getElementById("group-list");
+  if (groupListEl instanceof HTMLElement) {
+    groupListEl.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const btn = target.closest("[data-group-index]");
+      if (!(btn instanceof HTMLElement)) return;
+      const idx = Number(btn.dataset.groupIndex);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= state.sceneModel.groups.length) return;
+      state.sceneModel.activeGroupIndex = idx;
+      state.selectedCondition = null;
+      renderAll();
+      rebuildDevicesFromCurrentInput();
+      generateAndRender();
+    });
+  }
 
   generateBtn.addEventListener("click", () => {
     generateAndRender();
