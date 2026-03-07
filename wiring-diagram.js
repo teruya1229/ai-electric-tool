@@ -60,6 +60,26 @@ function parseGroupsFromDom() {
   return { groups, activeGroup };
 }
 
+function getSelectedCircuitFromList() {
+  const panel = document.getElementById("circuit-list-result");
+  if (!panel) return { hasSelection: false, selectedCircuitId: null, selectedIndex: -1 };
+
+  const cards = Array.from(panel.querySelectorAll(".circuit-item"));
+  const selectedIndex = cards.findIndex((card) => card.classList.contains("active"));
+  if (selectedIndex < 0) return { hasSelection: false, selectedCircuitId: null, selectedIndex: -1 };
+
+  const selectedCard = cards[selectedIndex];
+  const titleEl = selectedCard.querySelector(".circuit-item-title");
+  const titleText = (titleEl?.textContent || "").trim();
+  const matched = titleText.match(/回路\s*(\d+)/);
+  const selectedCircuitId = matched ? Number(matched[1]) : null;
+  return {
+    hasSelection: true,
+    selectedCircuitId: Number.isFinite(selectedCircuitId) ? selectedCircuitId : null,
+    selectedIndex,
+  };
+}
+
 function renderCircuitList(sceneModel) {
   const panel = document.getElementById("circuit-list-result");
   if (!panel) return;
@@ -696,6 +716,7 @@ function renderAiDiagramExamStyle(sceneModel) {
     traveler_1: "#9b59b6",
     traveler_2: "#9b59b6",
   };
+  const selectedCircuit = getSelectedCircuitFromList();
 
   layouts.forEach((layout, layoutIndex) => {
     const wirePath = wirePaths.find((item) => item?.circuitId === layout?.circuitId) || wirePaths[layoutIndex] || null;
@@ -712,6 +733,20 @@ function renderAiDiagramExamStyle(sceneModel) {
       null;
     const card = document.createElement("article");
     card.className = "ai-diagram-exam-style-item";
+    const isSelectedCircuitById =
+      selectedCircuit.hasSelection &&
+      selectedCircuit.selectedCircuitId !== null &&
+      [circuit?.id, layout?.circuitId, graph?.circuitId, wirePath?.circuitId].some(
+        (value) => Number.isFinite(Number(value)) && Number(value) === selectedCircuit.selectedCircuitId
+      );
+    const isSelectedCircuitByIndex = selectedCircuit.hasSelection && selectedCircuit.selectedIndex === layoutIndex;
+    const isSelectedCircuit = selectedCircuit.hasSelection ? isSelectedCircuitById || isSelectedCircuitByIndex : true;
+    if (selectedCircuit.hasSelection) {
+      card.style.opacity = isSelectedCircuit ? "1" : "0.42";
+      card.style.border = isSelectedCircuit ? "1px solid #8fb3e0" : "1px solid transparent";
+      card.style.borderRadius = "8px";
+      card.style.padding = "4px";
+    }
     if (isMobileMode) {
       card.style.marginBottom = "12px";
     }
@@ -719,6 +754,9 @@ function renderAiDiagramExamStyle(sceneModel) {
     const title = document.createElement("div");
     title.className = "circuit-item-title";
     title.textContent = `回路${layout?.circuitId ?? "-"} AI exam_style`;
+    if (selectedCircuit.hasSelection) {
+      title.style.color = isSelectedCircuit ? "#ffffff" : "#bbbbbb";
+    }
     card.appendChild(title);
 
     const svg = document.createElementNS(NS, "svg");
@@ -1213,6 +1251,9 @@ function renderAiDiagramExamStyle(sceneModel) {
         "style",
         "margin-top:6px;padding:8px 10px;background:#262626;border:1px solid #555;border-radius:6px;color:#d8d8d8;font-size:10px;line-height:1.45;"
       );
+      if (selectedCircuit.hasSelection) {
+        summary.style.borderColor = isSelectedCircuit ? "#8fb3e0" : "#555";
+      }
 
       const headerRow = document.createElement("div");
       headerRow.setAttribute("style", "color:#ffffff;font-size:11px;margin-bottom:4px;");
