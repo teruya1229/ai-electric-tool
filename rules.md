@@ -352,3 +352,43 @@ groupDevicesByControl()
 judgeSleeve()
 
 変更する前に、対象ファイルの現在のコード構造を必ず確認する。
+
+---
+
+## Cursor Run Allowlist ポリシー
+
+### Allowlist対象コマンド
+
+Run確認で以下が表示された場合は、Allowlist を選択する。
+
+- git status
+- git add
+- git commit
+- git push
+- git diff
+- git log
+- ls
+- pwd
+- Get-ChildItem
+- Get-Location
+
+理由:
+- Git状態確認
+- Git履歴確認
+- フォルダ確認
+のみを行う安全コマンドであるため。
+
+### Allowlist禁止コマンド
+
+以下は絶対に Allowlist しない。
+
+- rm
+- del
+- sudo
+- git reset --hard
+- git clean
+- git checkout -- .
+- git restore .
+- git restore --source
+- git reset --mixed
+- git reset --soft
