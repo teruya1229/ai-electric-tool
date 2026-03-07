@@ -649,6 +649,179 @@ function renderAiDiagramEnhanced(sceneModel) {
   });
 }
 
+function renderAiDiagramGamidenki(sceneModel) {
+  const panel = document.getElementById("ai-diagram-preview-result");
+  if (!panel) return;
+
+  Array.from(panel.querySelectorAll(".ai-diagram-gamidenki-item")).forEach((item) => item.remove());
+
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+  if (!groups.length) return;
+
+  const circuits = createCircuitsFromGroups(groups);
+  const graphs = createCircuitGraphFromCircuits(circuits);
+  const layouts = createDiagramLayoutsFromGraphs(graphs);
+  if (!layouts.length) return;
+
+  const wirePaths = createWirePathsFromLayouts(layouts);
+  const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
+  if (!hasWire) return;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const roleColors = {
+    line: "#f5c842",
+    line_load: "#f5c842",
+    neutral: "#4aa3ff",
+    switch_return: "#ff6b6b",
+    traveler_1: "#9b59b6",
+    traveler_2: "#9b59b6",
+  };
+
+  layouts.forEach((layout) => {
+    const wirePath = wirePaths.find((item) => item?.circuitId === layout?.circuitId);
+    const card = document.createElement("article");
+    card.className = "ai-diagram-gamidenki-item";
+
+    const title = document.createElement("div");
+    title.className = "circuit-item-title";
+    title.textContent = `回路${layout?.circuitId ?? "-"} AI gamidenki`;
+    card.appendChild(title);
+
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("width", "700");
+    svg.setAttribute("height", "360");
+
+    const bg = document.createElementNS(NS, "rect");
+    bg.setAttribute("x", "0");
+    bg.setAttribute("y", "0");
+    bg.setAttribute("width", "700");
+    bg.setAttribute("height", "360");
+    bg.setAttribute("fill", "#1f1f1f");
+    svg.appendChild(bg);
+
+    (wirePath?.wires || []).forEach((wire) => {
+      const yOffset = wire?.role === "traveler_1" ? -3 : wire?.role === "traveler_2" ? 3 : 0;
+      const points = (wire?.path || [])
+        .filter((point) => typeof point?.x === "number" && typeof point?.y === "number")
+        .map((point) => `${point.x},${point.y + yOffset}`)
+        .join(" ");
+      if (!points) return;
+
+      const polyline = document.createElementNS(NS, "polyline");
+      polyline.setAttribute("points", points);
+      polyline.setAttribute("stroke", roleColors[wire?.role] || "#f5c842");
+      polyline.setAttribute("stroke-width", "2");
+      polyline.setAttribute("fill", "none");
+      polyline.setAttribute("stroke-linecap", "round");
+      svg.appendChild(polyline);
+    });
+
+    (layout?.nodes || []).forEach((node) => {
+      if (typeof node?.x !== "number" || typeof node?.y !== "number") return;
+
+      const x = node.x;
+      const y = node.y;
+      const nodeKind =
+        node?.type === "source"
+          ? "source"
+          : node?.deviceType === "switch"
+            ? "switch"
+            : node?.deviceType === "light"
+              ? "light"
+              : node?.deviceType === "outlet" || node?.deviceType === "ac_outlet"
+                ? "outlet"
+                : "light";
+
+      if (nodeKind === "source") {
+        const rect = document.createElementNS(NS, "rect");
+        rect.setAttribute("x", String(x - 18));
+        rect.setAttribute("y", String(y - 8));
+        rect.setAttribute("width", "36");
+        rect.setAttribute("height", "16");
+        rect.setAttribute("fill", "#2c2c2c");
+        rect.setAttribute("stroke", "#999");
+        svg.appendChild(rect);
+      } else if (nodeKind === "switch") {
+        const rect = document.createElementNS(NS, "rect");
+        rect.setAttribute("x", String(x - 8));
+        rect.setAttribute("y", String(y - 8));
+        rect.setAttribute("width", "16");
+        rect.setAttribute("height", "16");
+        rect.setAttribute("fill", "#3a3a3a");
+        rect.setAttribute("stroke", "#bfbfbf");
+        svg.appendChild(rect);
+      } else if (nodeKind === "outlet") {
+        const polygon = document.createElementNS(NS, "polygon");
+        polygon.setAttribute("points", `${x - 10},${y - 7} ${x + 10},${y - 7} ${x + 7},${y + 7} ${x - 7},${y + 7}`);
+        polygon.setAttribute("fill", "#444");
+        polygon.setAttribute("stroke", "#d8d8d8");
+        svg.appendChild(polygon);
+      } else {
+        const circle = document.createElementNS(NS, "circle");
+        circle.setAttribute("cx", String(x));
+        circle.setAttribute("cy", String(y));
+        circle.setAttribute("r", "7");
+        circle.setAttribute("fill", "#444");
+        circle.setAttribute("stroke", "#d8d8d8");
+        svg.appendChild(circle);
+      }
+
+      const idText = document.createElementNS(NS, "text");
+      idText.setAttribute("x", String(x + 10));
+      idText.setAttribute("y", String(y - 10));
+      idText.setAttribute("font-size", "11");
+      idText.setAttribute("fill", "#f0f0f0");
+      idText.textContent = String(node?.id || "-");
+      svg.appendChild(idText);
+
+      const typeText = document.createElementNS(NS, "text");
+      typeText.setAttribute("x", String(x + 10));
+      typeText.setAttribute("y", String(y + 3));
+      typeText.setAttribute("font-size", "9");
+      typeText.setAttribute("fill", "#aaaaaa");
+      typeText.textContent = nodeKind;
+      svg.appendChild(typeText);
+    });
+
+    const legend = [
+      { key: "line", color: "#f5c842", label: "line" },
+      { key: "neutral", color: "#4aa3ff", label: "neutral" },
+      { key: "switch_return", color: "#ff6b6b", label: "switch_return" },
+      { key: "traveler", color: "#9b59b6", label: "traveler" },
+    ];
+    legend.forEach((item, idx) => {
+      const baseX = 20 + idx * 165;
+      const baseY = 338;
+
+      const line = document.createElementNS(NS, "line");
+      line.setAttribute("x1", String(baseX));
+      line.setAttribute("y1", String(baseY));
+      line.setAttribute("x2", String(baseX + 22));
+      line.setAttribute("y2", String(baseY));
+      line.setAttribute("stroke", item.color);
+      line.setAttribute("stroke-width", "2");
+      svg.appendChild(line);
+
+      const text = document.createElementNS(NS, "text");
+      text.setAttribute("x", String(baseX + 28));
+      text.setAttribute("y", String(baseY + 4));
+      text.setAttribute("font-size", "10");
+      text.setAttribute("fill", "#dddddd");
+      text.textContent = item.label;
+      svg.appendChild(text);
+    });
+
+    card.appendChild(svg);
+    panel.appendChild(card);
+  });
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
@@ -660,6 +833,7 @@ function setupCircuitListAutoRender() {
   renderWirePathDebug();
   renderAiDiagramPreview();
   renderAiDiagramEnhanced();
+  renderAiDiagramGamidenki();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
@@ -671,6 +845,7 @@ function setupCircuitListAutoRender() {
     renderWirePathDebug();
     renderAiDiagramPreview();
     renderAiDiagramEnhanced();
+    renderAiDiagramGamidenki();
   });
   observer.observe(target, {
     childList: true,
@@ -690,6 +865,7 @@ window.renderLayoutDebug = renderLayoutDebug;
 window.renderWirePathDebug = renderWirePathDebug;
 window.renderAiDiagramPreview = renderAiDiagramPreview;
 window.renderAiDiagramEnhanced = renderAiDiagramEnhanced;
+window.renderAiDiagramGamidenki = renderAiDiagramGamidenki;
 
 initPlayground();
 setupCircuitListAutoRender();
