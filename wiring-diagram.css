@@ -170,6 +170,43 @@ pre {
   text-align: left;
 }
 
+#circuit-list-result {
+  display: grid;
+  gap: 8px;
+}
+
+.circuit-item {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+}
+
+.circuit-item.active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb inset;
+}
+
+.circuit-item-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.circuit-group-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.circuit-group-list li {
+  color: #334155;
+  line-height: 1.5;
+}
+
+.circuit-group-list li.active {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
 #field-scene-input {
   min-height: 120px;
 }
