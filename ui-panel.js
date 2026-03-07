@@ -114,10 +114,11 @@ function uiGenerate() {
   if (!UI.circuit || !UI.condition || !UI.mode) return;
 
   const circuitType = UI.circuit === "3路" ? "threeway" : "single";
+  const conditionId = _normalizeConditionId(UI.condition.id);
   const devices =
     typeof window.buildDevicesFromSelection === "function"
-      ? window.buildDevicesFromSelection(circuitType, UI.condition.id)
-      : _buildDevicesFromCondition(UI.condition.id);
+      ? window.buildDevicesFromSelection(circuitType, conditionId)
+      : _buildDevicesFromCondition(conditionId);
   const mode = UI.mode === "現場" ? "field" : "exam";
   let diagram = null;
   let renderError = "";
@@ -137,6 +138,7 @@ function uiGenerate() {
 
   _renderToExistingOutput({
     circuitType,
+    conditionId,
     mode,
     devices,
     diagram: diagram || { groups: [], devices: [], wires: [], warnings: [] },
@@ -161,20 +163,22 @@ function _renderToExistingOutput(payload) {
   const debugEl = document.getElementById("debug-result");
   const requiredEl = document.getElementById("required-cables");
   const notesEl = document.getElementById("notes-result");
+  const showDebug = window.__WIRING_DEBUG__ === true;
+  const groupArticle = groupEl ? groupEl.closest("article") : null;
+  const debugArticle = debugEl ? debugEl.closest("article") : null;
+
+  if (groupArticle) groupArticle.style.display = showDebug ? "block" : "none";
+  if (debugArticle) debugArticle.style.display = showDebug ? "block" : "none";
 
   if (selectionEl) {
-    selectionEl.textContent = JSON.stringify(
-      {
-        回路を選ぶ: payload.circuitType === "threeway" ? "3路" : "片切",
-        条件を選ぶ: UI.condition ? UI.condition.label : "未選択",
-        表示モード: payload.mode === "exam" ? "試験モード" : "現場モード",
-      },
-      null,
-      2
-    );
+    selectionEl.textContent = [
+      `回路を選ぶ: ${payload.circuitType === "threeway" ? "3路" : "片切"}`,
+      `条件を選ぶ: ${UI.condition ? UI.condition.label : "未選択"}`,
+      `表示モード: ${payload.mode === "exam" ? "試験モード" : "現場モード"}`,
+    ].join("\n");
   }
 
-  if (groupEl) {
+  if (groupEl && showDebug) {
     groupEl.textContent = payload.diagram.groups?.length
       ? JSON.stringify(payload.diagram.groups, null, 2)
       : "グループ化結果なし";
@@ -188,22 +192,23 @@ function _renderToExistingOutput(payload) {
   if (typeof window.renderDiagram === "function") {
     window.renderDiagram(payload.diagram, payload.renderError);
   }
+  _renderOutletSupplement(payload);
 
   if (requiredEl && notesEl && typeof window.buildRequiredAndNotes === "function") {
-    const meta = window.buildRequiredAndNotes(UI.condition ? UI.condition.id : null);
+    const meta = window.buildRequiredAndNotes(payload.conditionId || null);
     requiredEl.textContent = (meta.required || []).join("\n");
     notesEl.textContent = (meta.notes || []).join("\n");
   }
 
   if (debugEl) {
-    const showDebug = window.__WIRING_DEBUG__ === true;
-    const debugArticle = debugEl.closest("article");
-    if (debugArticle) {
-      debugArticle.style.display = showDebug ? "block" : "none";
-    }
     if (showDebug) {
       debugEl.textContent = JSON.stringify(
         {
+          selected: {
+            circuitType: payload.circuitType,
+            conditionId: payload.conditionId,
+            mode: payload.mode,
+          },
           buildDevicesFromSelection: payload.devices,
           generateDiagramResult: payload.diagram,
           counts: {
@@ -221,6 +226,47 @@ function _renderToExistingOutput(payload) {
       debugEl.textContent = "";
     }
   }
+}
+
+function _renderOutletSupplement(payload) {
+  const canvas = document.getElementById("diagram-canvas");
+  if (!canvas) return;
+
+  let info = document.getElementById("outlet-supplement");
+  const isOutletCase =
+    payload.conditionId === "single_1light_1outlet" ||
+    payload.devices.some((d) => d && d.kind === "outlet");
+  const hasOutletInSvg = payload.diagram.devices?.some((d) => d && d.kind === "outlet");
+
+  if (!isOutletCase) {
+    if (info) info.remove();
+    return;
+  }
+
+  if (!info) {
+    info = document.createElement("div");
+    info.id = "outlet-supplement";
+    info.style.marginTop = "8px";
+    info.style.fontSize = "13px";
+    info.style.color = "#334155";
+    canvas.insertAdjacentElement("afterend", info);
+  }
+
+  info.textContent = hasOutletInSvg
+    ? "補助表示: C1（コンセントあり）"
+    : "補助表示: C1（コンセントあり / 図中未描画）";
+}
+
+function _normalizeConditionId(conditionId) {
+  if (conditionId === "single_1light_1outlet") return conditionId;
+  const aliases = {
+    single_1light_with_outlet: "single_1light_1outlet",
+    single_1light_outlet: "single_1light_1outlet",
+    single_1outlet: "single_1light_1outlet",
+    single_outlet: "single_1light_1outlet",
+    threeway: "threeway_1light",
+  };
+  return aliases[conditionId] || conditionId;
 }
 
 // ── 内部処理 ──────────────────────────────────
