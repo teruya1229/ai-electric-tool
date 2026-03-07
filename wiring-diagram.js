@@ -24,6 +24,8 @@ window.groupDevicesByControl = groupDevicesByControl;
 window.judgeSleeve = judgeSleeve;
 window.renderDiagram = renderDiagram;
 
+let aiDiagramPreviewMode = "gamidenki";
+
 function getCircuitSummaryLabel(circuit) {
   return `回路${circuit.id} / ${circuit.type}`;
 }
@@ -1244,6 +1246,65 @@ function renderAiDiagramGamidenki(sceneModel) {
   });
 }
 
+function ensureAiDiagramModeSwitcher() {
+  const panel = document.getElementById("ai-diagram-preview-result");
+  if (!panel || !panel.parentElement) return;
+
+  let switcher = document.getElementById("ai-diagram-mode-switcher");
+  if (!switcher) {
+    switcher = document.createElement("div");
+    switcher.id = "ai-diagram-mode-switcher";
+    switcher.setAttribute(
+      "style",
+      "display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 8px 0;"
+    );
+    panel.parentElement.insertBefore(switcher, panel);
+
+    const modes = [
+      { key: "preview", label: "Preview" },
+      { key: "enhanced", label: "Enhanced" },
+      { key: "gamidenki", label: "Gamidenki" },
+    ];
+    modes.forEach((mode) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.mode = mode.key;
+      btn.textContent = mode.label;
+      btn.setAttribute(
+        "style",
+        "padding:4px 10px;border:1px solid #555;border-radius:6px;background:#2b2b2b;color:#ddd;cursor:pointer;font-size:12px;"
+      );
+      btn.addEventListener("click", () => {
+        aiDiagramPreviewMode = mode.key;
+        ensureAiDiagramModeSwitcher();
+        renderAiDiagramByMode();
+      });
+      switcher.appendChild(btn);
+    });
+  }
+
+  const buttons = Array.from(switcher.querySelectorAll("button[data-mode]"));
+  buttons.forEach((btn) => {
+    const active = btn.dataset.mode === aiDiagramPreviewMode;
+    btn.style.background = active ? "#4a6fa1" : "#2b2b2b";
+    btn.style.borderColor = active ? "#8fb3e0" : "#555";
+    btn.style.color = active ? "#ffffff" : "#dddddd";
+  });
+}
+
+function renderAiDiagramByMode(sceneModel) {
+  ensureAiDiagramModeSwitcher();
+  if (aiDiagramPreviewMode === "preview") {
+    renderAiDiagramPreview(sceneModel);
+    return;
+  }
+  if (aiDiagramPreviewMode === "enhanced") {
+    renderAiDiagramEnhanced(sceneModel);
+    return;
+  }
+  renderAiDiagramGamidenki(sceneModel);
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
@@ -1253,9 +1314,8 @@ function setupCircuitListAutoRender() {
   renderParseDebugResult();
   renderLayoutDebug();
   renderWirePathDebug();
-  renderAiDiagramPreview();
-  renderAiDiagramEnhanced();
-  renderAiDiagramGamidenki();
+  ensureAiDiagramModeSwitcher();
+  renderAiDiagramByMode();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
@@ -1265,9 +1325,8 @@ function setupCircuitListAutoRender() {
     renderParseDebugResult();
     renderLayoutDebug();
     renderWirePathDebug();
-    renderAiDiagramPreview();
-    renderAiDiagramEnhanced();
-    renderAiDiagramGamidenki();
+    ensureAiDiagramModeSwitcher();
+    renderAiDiagramByMode();
   });
   observer.observe(target, {
     childList: true,
@@ -1288,6 +1347,7 @@ window.renderWirePathDebug = renderWirePathDebug;
 window.renderAiDiagramPreview = renderAiDiagramPreview;
 window.renderAiDiagramEnhanced = renderAiDiagramEnhanced;
 window.renderAiDiagramGamidenki = renderAiDiagramGamidenki;
+window.renderAiDiagramByMode = renderAiDiagramByMode;
 
 initPlayground();
 setupCircuitListAutoRender();
