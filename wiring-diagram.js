@@ -607,6 +607,7 @@ function createEmptyGroup(controlId) {
   return {
     controlId,
     label: "",
+    purpose: "unknown",
     switchType: "single",
     sameTime: false,
     devices: [
@@ -707,7 +708,7 @@ function renderGroupList(sceneModel) {
     btn.className = "group-item-btn";
     if (index === sceneModel.activeGroupIndex) btn.classList.add("active");
     const switchText = group.switchType === "threeway" ? "3路" : "片切";
-    btn.textContent = `${group.controlId} | ${group.label || ""} | ${switchText} | 照明${_getGroupQuantity(group, "light")} | コンセント${_getGroupQuantity(group, "outlet")}`;
+    btn.textContent = `${group.controlId} | ${group.label || ""} | ${group.purpose || "unknown"} | ${switchText} | 照明${_getGroupQuantity(group, "light")} | コンセント${_getGroupQuantity(group, "outlet")}`;
     btn.dataset.groupIndex = String(index);
     listEl.appendChild(btn);
   });
@@ -717,6 +718,7 @@ function renderGroupEditor(sceneModel, activeGroupIndex) {
   const group = sceneModel.groups[activeGroupIndex];
   const controlIdInput = document.getElementById("group-control-id-input");
   const groupLabelInput = document.getElementById("group-label-input");
+  const groupPurposeInput = document.getElementById("group-purpose-input");
   const switchTypeSelect = document.getElementById("group-switch-type-select");
   const sameTimeCheckbox = document.getElementById("group-same-time-checkbox");
   const lightCountSelect = document.getElementById("light-count-select");
@@ -725,6 +727,7 @@ function renderGroupEditor(sceneModel, activeGroupIndex) {
     !group ||
     !(controlIdInput instanceof HTMLInputElement) ||
     !(groupLabelInput instanceof HTMLInputElement) ||
+    !(groupPurposeInput instanceof HTMLSelectElement) ||
     !(switchTypeSelect instanceof HTMLSelectElement)
   ) {
     return;
@@ -732,6 +735,7 @@ function renderGroupEditor(sceneModel, activeGroupIndex) {
 
   controlIdInput.value = group.controlId;
   groupLabelInput.value = group.label || "";
+  groupPurposeInput.value = group.purpose || "unknown";
   switchTypeSelect.value = group.switchType;
   if (sameTimeCheckbox instanceof HTMLInputElement) sameTimeCheckbox.checked = !!group.sameTime;
   if (lightCountSelect instanceof HTMLSelectElement) lightCountSelect.value = String(_getGroupQuantity(group, "light"));
@@ -743,6 +747,7 @@ function updateActiveGroupFromForm(sceneModel) {
   if (!group) return;
   const controlIdInput = document.getElementById("group-control-id-input");
   const groupLabelInput = document.getElementById("group-label-input");
+  const groupPurposeInput = document.getElementById("group-purpose-input");
   const switchTypeSelect = document.getElementById("group-switch-type-select");
   const sameTimeCheckbox = document.getElementById("group-same-time-checkbox");
   const lightCountSelect = document.getElementById("light-count-select");
@@ -750,6 +755,7 @@ function updateActiveGroupFromForm(sceneModel) {
 
   if (controlIdInput instanceof HTMLInputElement) group.controlId = controlIdInput.value.trim() || getNextControlId(sceneModel.groups);
   if (groupLabelInput instanceof HTMLInputElement) group.label = groupLabelInput.value.trim();
+  if (groupPurposeInput instanceof HTMLSelectElement) group.purpose = groupPurposeInput.value || "unknown";
   if (switchTypeSelect instanceof HTMLSelectElement) group.switchType = switchTypeSelect.value === "threeway" ? "threeway" : "single";
   if (sameTimeCheckbox instanceof HTMLInputElement) group.sameTime = sameTimeCheckbox.checked;
   if (lightCountSelect instanceof HTMLSelectElement) _setGroupQuantity(group, "light", Number(lightCountSelect.value));
@@ -806,6 +812,13 @@ function detectSwitchType(line) {
   return "single";
 }
 
+function detectPurpose(line) {
+  if (/(照明|ライト|ランプ)/.test(line)) return "light";
+  if (/コンセント/.test(line)) return "outlet";
+  if (/(3路|三路)/.test(line)) return "light";
+  return "unknown";
+}
+
 function detectQuantity(line) {
   const numMatch = line.match(/([1-6])\s*(灯|個)/);
   if (numMatch) return Number(numMatch[1]);
@@ -844,6 +857,7 @@ function canMergeGroups(a, b) {
   const bLabel = normalizeGroupLabel(b?.label);
   if (!aLabel || !bLabel) return { ok: false, reason: "empty_label" };
   if (aLabel !== bLabel) return { ok: false, reason: "label_mismatch" };
+  if ((a?.purpose || "unknown") !== (b?.purpose || "unknown")) return { ok: false, reason: "purpose_mismatch" };
   if (a.switchType !== b.switchType) return { ok: false, reason: "switch_mismatch" };
   const mergedLight = _getGroupQuantity(a, "light") + _getGroupQuantity(b, "light");
   const mergedOutlet = _getGroupQuantity(a, "outlet") + _getGroupQuantity(b, "outlet");
@@ -856,6 +870,7 @@ function mergeTwoGroups(a, b) {
   const merged = {
     ...a,
     label: a.label || b.label || "",
+    purpose: a.purpose || b.purpose || "unknown",
     devices: [
       { type: "light", quantity: _getGroupQuantity(a, "light") + _getGroupQuantity(b, "light") },
       { type: "outlet", quantity: _getGroupQuantity(a, "outlet") + _getGroupQuantity(b, "outlet") },
@@ -878,29 +893,31 @@ function mergeGroupsByLabel(groups) {
       return;
     }
     const sameLabelGroups = result.groups.filter((g) => normalizeGroupLabel(g.label) === normalized);
-    const sameLabelSameSwitch = sameLabelGroups.find((g) => g.switchType === group.switchType);
-    if (!sameLabelSameSwitch) {
+    const sameLabelSamePurposeAndSwitch = sameLabelGroups.find(
+      (g) => (g.purpose || "unknown") === (group.purpose || "unknown") && g.switchType === group.switchType
+    );
+    if (!sameLabelSamePurposeAndSwitch) {
       if (sameLabelGroups.length) {
-        result.warnings.push(`label="${normalized}" は switchType が異なるため統合しません。`);
+        result.warnings.push(`label="${normalized}" は purpose/switchType が異なるため統合しません。`);
       }
       result.groups.push(group);
       return;
     }
-    const check = canMergeGroups(sameLabelSameSwitch, group);
+    const check = canMergeGroups(sameLabelSamePurposeAndSwitch, group);
     if (!check.ok) {
       if (check.reason === "light_overflow") {
         result.errors.push(`label="${normalized}" 統合後の照明数が6を超えます。`);
       } else if (check.reason === "outlet_overflow") {
         result.errors.push(`label="${normalized}" 統合後のコンセント数が6を超えます。`);
       } else {
-        result.warnings.push(`label="${normalized}" は統合条件を満たさないため統合しません。`);
+        result.warnings.push(`label="${normalized}" は統合条件（purpose/switchType/上限）を満たさないため統合しません。`);
       }
       result.groups.push(group);
       return;
     }
-    const idx = result.groups.indexOf(sameLabelSameSwitch);
+    const idx = result.groups.indexOf(sameLabelSamePurposeAndSwitch);
     if (idx >= 0) {
-      result.groups[idx] = mergeTwoGroups(sameLabelSameSwitch, group);
+      result.groups[idx] = mergeTwoGroups(sameLabelSamePurposeAndSwitch, group);
       result.warnings.push(`label="${normalized}" を統合しました。`);
     } else {
       result.groups.push(group);
@@ -920,6 +937,7 @@ function parseFieldLine(line) {
     rawLine: line,
     normalizedLine,
     deviceType: detectedDeviceType || (switchType === "threeway" ? "light" : null),
+    purpose: detectPurpose(normalizedLine),
     switchType,
     quantity: detectQuantity(normalizedLine),
     label: normalizeGroupLabel(extractGroupLabel(line)),
@@ -940,6 +958,7 @@ function createGroupFromLine(parsed) {
   const controlId = "";
   const group = createEmptyGroup(controlId);
   group.label = parsed.label || "";
+  group.purpose = parsed.purpose || "unknown";
   group.switchType = parsed.switchType;
   group.sameTime = parsed.deviceType === "light" && parsed.quantity >= 2;
   _setGroupQuantity(group, "light", parsed.deviceType === "light" ? parsed.quantity : 0);
@@ -1359,6 +1378,7 @@ function initPlayground() {
   const addGroupBtn = document.getElementById("add-group-btn");
   const groupControlIdInput = document.getElementById("group-control-id-input");
   const groupLabelInput = document.getElementById("group-label-input");
+  const groupPurposeInput = document.getElementById("group-purpose-input");
   const groupSwitchTypeSelect = document.getElementById("group-switch-type-select");
   const groupSameTimeCheckbox = document.getElementById("group-same-time-checkbox");
   const fieldSceneInput = document.getElementById("field-scene-input");
@@ -1393,6 +1413,7 @@ function initPlayground() {
     !addGroupBtn ||
     !groupControlIdInput ||
     !groupLabelInput ||
+    !groupPurposeInput ||
     !groupSwitchTypeSelect ||
     !groupSameTimeCheckbox ||
     !fieldSceneInput ||
@@ -1776,6 +1797,12 @@ function initPlayground() {
   }
   if (groupLabelInput instanceof HTMLInputElement) {
     groupLabelInput.addEventListener("change", () => {
+      updateActiveGroupFromForm(state.sceneModel);
+      renderAll();
+    });
+  }
+  if (groupPurposeInput instanceof HTMLSelectElement) {
+    groupPurposeInput.addEventListener("change", () => {
       updateActiveGroupFromForm(state.sceneModel);
       renderAll();
     });
