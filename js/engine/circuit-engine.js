@@ -351,3 +351,89 @@ export function createCircuitGraphFromCircuits(circuits) {
   });
   return graphs;
 }
+
+export function createDiagramLayoutFromGraph(graph) {
+  if (!graph || typeof graph !== "object") {
+    return {
+      circuitId: null,
+      nodes: [],
+      edges: [],
+      meta: { layoutType: "empty" },
+    };
+  }
+
+  const sourceNodes = (graph.nodes || []).filter((node) => node?.type === "source");
+  const switchNodes = (graph.nodes || []).filter((node) => node?.deviceType === "switch");
+  const lightNodes = (graph.nodes || []).filter((node) => node?.deviceType === "light");
+  const outletNodes = (graph.nodes || []).filter((node) => node?.deviceType === "outlet" || node?.deviceType === "ac_outlet");
+  const extraNodes = (graph.nodes || []).filter(
+    (node) =>
+      node &&
+      node.type !== "source" &&
+      node.deviceType !== "switch" &&
+      node.deviceType !== "light" &&
+      node.deviceType !== "outlet" &&
+      node.deviceType !== "ac_outlet"
+  );
+
+  const positionedNodes = [];
+
+  sourceNodes.forEach((node, idx) => {
+    positionedNodes.push({
+      ...node,
+      deviceType: node.deviceType || "source",
+      x: 40,
+      y: 60 + idx * 80,
+    });
+  });
+
+  switchNodes.forEach((node, idx) => {
+    positionedNodes.push({
+      ...node,
+      x: 160 + idx * 90,
+      y: 60,
+    });
+  });
+
+  lightNodes.forEach((node, idx) => {
+    positionedNodes.push({
+      ...node,
+      x: 300 + idx * 140,
+      y: 60,
+    });
+  });
+
+  outletNodes.forEach((node, idx) => {
+    positionedNodes.push({
+      ...node,
+      x: 300 + idx * 140,
+      y: 160,
+    });
+  });
+
+  extraNodes.forEach((node, idx) => {
+    positionedNodes.push({
+      ...node,
+      x: 300 + idx * 140,
+      y: 260,
+    });
+  });
+
+  return {
+    circuitId: typeof graph.circuitId === "number" ? graph.circuitId : null,
+    nodes: positionedNodes,
+    edges: Array.isArray(graph.edges) ? [...graph.edges] : [],
+    meta: {
+      layoutType: positionedNodes.length ? "horizontal-flow" : "empty",
+    },
+  };
+}
+
+export function createDiagramLayoutsFromGraphs(graphs) {
+  if (!Array.isArray(graphs) || !graphs.length) return [];
+  const layouts = [];
+  graphs.forEach((graph) => {
+    layouts.push(createDiagramLayoutFromGraph(graph));
+  });
+  return layouts;
+}
