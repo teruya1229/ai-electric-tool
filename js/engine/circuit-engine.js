@@ -437,3 +437,73 @@ export function createDiagramLayoutsFromGraphs(graphs) {
   });
   return layouts;
 }
+
+function createPathPoints(fromNode, toNode) {
+  const fromX = Number(fromNode?.x || 0);
+  const fromY = Number(fromNode?.y || 0);
+  const toX = Number(toNode?.x || 0);
+  const toY = Number(toNode?.y || 0);
+
+  if (fromX === toX) {
+    const midY = Math.round((fromY + toY) / 2);
+    return [
+      { x: fromX, y: fromY },
+      { x: fromX, y: midY },
+      { x: toX, y: toY },
+    ];
+  }
+
+  if (fromY === toY) {
+    const midX = Math.round((fromX + toX) / 2);
+    return [
+      { x: fromX, y: fromY },
+      { x: midX, y: fromY },
+      { x: toX, y: toY },
+    ];
+  }
+
+  const midX = Math.round((fromX + toX) / 2);
+  return [
+    { x: fromX, y: fromY },
+    { x: midX, y: fromY },
+    { x: midX, y: toY },
+    { x: toX, y: toY },
+  ];
+}
+
+export function createWirePathsFromLayout(layout) {
+  const result = {
+    circuitId: typeof layout?.circuitId === "number" ? layout.circuitId : null,
+    wires: [],
+  };
+  if (!layout || !Array.isArray(layout.nodes) || !Array.isArray(layout.edges)) return result;
+
+  const nodeMap = new Map();
+  layout.nodes.forEach((node) => {
+    if (node?.id) nodeMap.set(node.id, node);
+  });
+
+  layout.edges.forEach((edge) => {
+    const fromNode = nodeMap.get(edge?.from);
+    const toNode = nodeMap.get(edge?.to);
+    if (!fromNode || !toNode) return;
+
+    result.wires.push({
+      from: edge.from,
+      to: edge.to,
+      role: edge.role || "unknown",
+      path: createPathPoints(fromNode, toNode),
+    });
+  });
+
+  return result;
+}
+
+export function createWirePathsFromLayouts(layouts) {
+  if (!Array.isArray(layouts) || !layouts.length) return [];
+  const results = [];
+  layouts.forEach((layout) => {
+    results.push(createWirePathsFromLayout(layout));
+  });
+  return results;
+}
