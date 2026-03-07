@@ -6,7 +6,11 @@ import {
   judgeSleeve,
   renderDiagram,
 } from "./js/diagram/index.js";
-import { createCircuitsFromGroups } from "./js/engine/circuit-engine.js";
+import {
+  createCircuitsFromGroups,
+  createConnectionPointsFromCircuits,
+  judgeSleevesFromConnectionPoints,
+} from "./js/engine/circuit-engine.js";
 import { createMaterialsFromCircuits } from "./js/engine/material-engine.js";
 import { initPlayground } from "./js/ui/index.js";
 
@@ -200,16 +204,71 @@ function renderCircuitMaterialList(sceneModel) {
   });
 }
 
+function renderSleeveJudgeList(sceneModel) {
+  const panel = document.getElementById("sleeve-judge-list-result");
+  if (!panel) return;
+
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+
+  panel.innerHTML = "";
+  if (!groups.length) {
+    panel.textContent = "回路なし";
+    return;
+  }
+
+  const circuits = createCircuitsFromGroups(groups);
+  const connectionPoints = createConnectionPointsFromCircuits(circuits);
+  if (!connectionPoints.length) {
+    panel.textContent = "接続点なし";
+    return;
+  }
+
+  const judgedList = judgeSleevesFromConnectionPoints(connectionPoints);
+  if (!judgedList.length) {
+    panel.textContent = "判定なし";
+    return;
+  }
+
+  judgedList.forEach((judged) => {
+    const card = document.createElement("article");
+    card.className = "sleeve-judge-item";
+
+    const lines = [
+      `回路${judged.circuitId || "-"} / ${judged.purpose || "unknown"}`,
+      `接続点 ${judged.connectionPointId || "-"}`,
+      `本数: ${typeof judged.wireCount === "number" ? judged.wireCount : "-"}`,
+      `推奨: ${judged.recommendedConnector || "-"}`,
+    ];
+    if (judged.sleeveSize) {
+      lines.push(`サイズ: ${judged.sleeveSize}`);
+    }
+    if (judged.reason) {
+      lines.push(`理由: ${judged.reason}`);
+    }
+
+    card.textContent = lines.join("\n");
+    panel.appendChild(card);
+  });
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
   renderMaterialList();
   renderCircuitMaterialList();
+  renderSleeveJudgeList();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
     renderMaterialList();
     renderCircuitMaterialList();
+    renderSleeveJudgeList();
   });
   observer.observe(target, {
     childList: true,
@@ -223,6 +282,7 @@ function setupCircuitListAutoRender() {
 window.renderCircuitList = renderCircuitList;
 window.renderMaterialList = renderMaterialList;
 window.renderCircuitMaterialList = renderCircuitMaterialList;
+window.renderSleeveJudgeList = renderSleeveJudgeList;
 
 initPlayground();
 setupCircuitListAutoRender();
