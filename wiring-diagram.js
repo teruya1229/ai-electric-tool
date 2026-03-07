@@ -11,6 +11,7 @@ import {
   createConnectionPointsFromCircuits,
   createCircuitGraphFromCircuits,
   createDiagramLayoutsFromGraphs,
+  createWirePathsFromLayouts,
   judgeSleevesFromConnectionPoints,
 } from "./js/engine/circuit-engine.js";
 import { createMaterialsFromCircuits } from "./js/engine/material-engine.js";
@@ -361,6 +362,84 @@ function renderLayoutDebug(sceneModel) {
   });
 }
 
+function renderWirePathDebug(sceneModel) {
+  const panel = document.getElementById("wire-path-debug-result");
+  if (!panel) return;
+
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+
+  panel.innerHTML = "";
+  if (!groups.length) {
+    panel.textContent = "回路なし";
+    return;
+  }
+
+  const circuits = createCircuitsFromGroups(groups);
+  const graphs = createCircuitGraphFromCircuits(circuits);
+  const layouts = createDiagramLayoutsFromGraphs(graphs);
+  if (!layouts.length) {
+    panel.textContent = "layoutなし";
+    return;
+  }
+
+  const wirePaths = createWirePathsFromLayouts(layouts);
+  const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
+  if (!hasWire) {
+    panel.textContent = "wireなし";
+    return;
+  }
+
+  const NS = "http://www.w3.org/2000/svg";
+  wirePaths.forEach((wirePath) => {
+    const layout = layouts.find((item) => item?.circuitId === wirePath?.circuitId);
+    const card = document.createElement("article");
+    card.className = "wire-path-debug-item";
+
+    const title = document.createElement("div");
+    title.className = "circuit-item-title";
+    title.textContent = `回路${wirePath?.circuitId ?? "-"} wire path`;
+    card.appendChild(title);
+
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("width", "600");
+    svg.setAttribute("height", "300");
+
+    (wirePath?.wires || []).forEach((wire) => {
+      const points = (wire?.path || [])
+        .filter((point) => typeof point?.x === "number" && typeof point?.y === "number")
+        .map((point) => `${point.x},${point.y}`)
+        .join(" ");
+      if (!points) return;
+
+      const polyline = document.createElementNS(NS, "polyline");
+      polyline.setAttribute("points", points);
+      polyline.setAttribute("stroke", "#f5c842");
+      polyline.setAttribute("stroke-width", "2");
+      polyline.setAttribute("fill", "none");
+      svg.appendChild(polyline);
+    });
+
+    (layout?.nodes || []).forEach((node) => {
+      if (typeof node?.x !== "number" || typeof node?.y !== "number") return;
+      const circle = document.createElementNS(NS, "circle");
+      circle.setAttribute("cx", String(node.x));
+      circle.setAttribute("cy", String(node.y));
+      circle.setAttribute("r", "4");
+      circle.setAttribute("fill", "#ffffff");
+      svg.appendChild(circle);
+    });
+
+    card.appendChild(svg);
+    panel.appendChild(card);
+  });
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
@@ -369,6 +448,7 @@ function setupCircuitListAutoRender() {
   renderSleeveJudgeList();
   renderParseDebugResult();
   renderLayoutDebug();
+  renderWirePathDebug();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
@@ -377,6 +457,7 @@ function setupCircuitListAutoRender() {
     renderSleeveJudgeList();
     renderParseDebugResult();
     renderLayoutDebug();
+    renderWirePathDebug();
   });
   observer.observe(target, {
     childList: true,
@@ -393,6 +474,7 @@ window.renderCircuitMaterialList = renderCircuitMaterialList;
 window.renderSleeveJudgeList = renderSleeveJudgeList;
 window.renderParseDebugResult = renderParseDebugResult;
 window.renderLayoutDebug = renderLayoutDebug;
+window.renderWirePathDebug = renderWirePathDebug;
 
 initPlayground();
 setupCircuitListAutoRender();
