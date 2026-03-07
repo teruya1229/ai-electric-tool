@@ -104,6 +104,14 @@ function getMaterialSummaryLabel(material) {
   return `${material.name} / ${material.type} / ${material.quantity}`;
 }
 
+function createMaterialsForCircuit(circuit) {
+  return createMaterialsFromCircuits([circuit]);
+}
+
+function getCircuitMaterialSummaryLabel(material) {
+  return `${material.name} / ${material.type} / ${material.quantity}`;
+}
+
 function renderMaterialList(sceneModel) {
   const panel = document.getElementById("material-list-result");
   if (!panel) return;
@@ -136,14 +144,67 @@ function renderMaterialList(sceneModel) {
   panel.appendChild(list);
 }
 
+function renderCircuitMaterialList(sceneModel) {
+  const panel = document.getElementById("circuit-material-list-result");
+  if (!panel) return;
+
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+
+  const circuits = createCircuitsFromGroups(groups);
+  panel.innerHTML = "";
+  if (!circuits.length) {
+    panel.textContent = "回路別材料なし";
+    return;
+  }
+
+  circuits.forEach((circuit) => {
+    const card = document.createElement("article");
+    card.className = "circuit-material-item";
+
+    const title = document.createElement("div");
+    title.className = "circuit-item-title";
+    title.textContent = getCircuitSummaryLabel(circuit);
+    card.appendChild(title);
+
+    const materials = createMaterialsForCircuit(circuit);
+    if (!materials.length) {
+      const empty = document.createElement("div");
+      empty.className = "circuit-material-empty";
+      empty.textContent = "材料なし";
+      card.appendChild(empty);
+      panel.appendChild(card);
+      return;
+    }
+
+    const list = document.createElement("ul");
+    list.className = "material-list";
+    materials.forEach((material) => {
+      const row = document.createElement("li");
+      row.className = "material-item";
+      row.textContent = getCircuitMaterialSummaryLabel(material);
+      list.appendChild(row);
+    });
+    card.appendChild(list);
+    panel.appendChild(card);
+  });
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
   renderMaterialList();
+  renderCircuitMaterialList();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
     renderMaterialList();
+    renderCircuitMaterialList();
   });
   observer.observe(target, {
     childList: true,
@@ -156,6 +217,7 @@ function setupCircuitListAutoRender() {
 
 window.renderCircuitList = renderCircuitList;
 window.renderMaterialList = renderMaterialList;
+window.renderCircuitMaterialList = renderCircuitMaterialList;
 
 initPlayground();
 setupCircuitListAutoRender();

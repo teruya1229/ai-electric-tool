@@ -222,6 +222,23 @@ pre {
   line-height: 1.6;
 }
 
+#circuit-material-list-result {
+  display: grid;
+  gap: 8px;
+}
+
+.circuit-material-item {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+}
+
+.circuit-material-empty {
+  color: #64748b;
+  font-size: 13px;
+}
+
 #field-scene-input {
   min-height: 120px;
 }
