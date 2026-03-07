@@ -672,6 +672,12 @@ function renderAiDiagramGamidenki(sceneModel) {
   const wirePaths = createWirePathsFromLayouts(layouts);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) return;
+  const connectionPoints = createConnectionPointsFromCircuits(circuits);
+  const allSleeveResults =
+    (sceneModel && Array.isArray(sceneModel.sleeveResults) && sceneModel.sleeveResults) ||
+    (sceneModel && Array.isArray(sceneModel.sleeves) && sceneModel.sleeves) ||
+    (sceneModel && Array.isArray(sceneModel.sleeveResult) && sceneModel.sleeveResult) ||
+    judgeSleevesFromConnectionPoints(connectionPoints);
 
   const NS = "http://www.w3.org/2000/svg";
   const roleColors = {
@@ -706,13 +712,13 @@ function renderAiDiagramGamidenki(sceneModel) {
 
     const svg = document.createElementNS(NS, "svg");
     svg.setAttribute("width", "700");
-    svg.setAttribute("height", "390");
+    svg.setAttribute("height", "430");
 
     const bg = document.createElementNS(NS, "rect");
     bg.setAttribute("x", "0");
     bg.setAttribute("y", "0");
     bg.setAttribute("width", "700");
-    bg.setAttribute("height", "390");
+    bg.setAttribute("height", "430");
     bg.setAttribute("fill", "#1f1f1f");
     svg.appendChild(bg);
 
@@ -781,6 +787,100 @@ function renderAiDiagramGamidenki(sceneModel) {
       materialText.setAttribute("fill", "#d8d8d8");
       materialText.textContent = line;
       svg.appendChild(materialText);
+    });
+
+    const resolvedCircuitId =
+      layout?.circuitId ?? graph?.circuitId ?? wirePath?.circuitId ?? circuit?.id ?? null;
+    let sleeveItems = Array.isArray(allSleeveResults)
+      ? allSleeveResults.filter((item) => item?.circuitId === resolvedCircuitId)
+      : [];
+    if (!sleeveItems.length && Array.isArray(allSleeveResults) && allSleeveResults.length) {
+      const groupedByCircuitId = [];
+      const groupedMap = new Map();
+      allSleeveResults.forEach((item) => {
+        const key = item?.circuitId;
+        if (typeof key === "undefined" || key === null) return;
+        if (!groupedMap.has(key)) {
+          groupedMap.set(key, []);
+          groupedByCircuitId.push(groupedMap.get(key));
+        }
+        groupedMap.get(key).push(item);
+      });
+      if (groupedByCircuitId[layoutIndex]) {
+        sleeveItems = groupedByCircuitId[layoutIndex];
+      }
+    }
+
+    const sleeveSummaryMap = new Map();
+    sleeveItems.forEach((item) => {
+      const label =
+        item?.sleeveType ||
+        item?.sleeveName ||
+        item?.label ||
+        item?.name ||
+        item?.size ||
+        item?.sleeveSize ||
+        item?.recommendedConnector ||
+        item?.result ||
+        item?.judgement ||
+        item?.judge ||
+        "要確認";
+      const rawQty = item?.quantity ?? item?.count ?? item?.qty ?? item?.total ?? item?.wireCount ?? 1;
+      const qty = Number.isFinite(Number(rawQty)) ? Number(rawQty) : 1;
+      const alertText = `${label} ${item?.reason || ""}`.toLowerCase();
+      const isAlert = alertText.includes("要確認") || alertText.includes("未判定") || alertText.includes("unknown");
+      if (!sleeveSummaryMap.has(label)) {
+        sleeveSummaryMap.set(label, { qty: 0, isAlert: false });
+      }
+      const current = sleeveSummaryMap.get(label);
+      current.qty += qty;
+      if (isAlert) current.isAlert = true;
+    });
+
+    const sleeveLines = [];
+    if (!sleeveSummaryMap.size) {
+      sleeveLines.push({ text: "スリーブ情報なし", isAlert: false });
+    } else {
+      Array.from(sleeveSummaryMap.entries()).forEach(([label, info]) => {
+        sleeveLines.push({ text: `${label} × ${info.qty}`, isAlert: info.isAlert });
+      });
+    }
+    const visibleSleeveLines = sleeveLines.slice(0, 5);
+    if (sleeveLines.length > 5) {
+      visibleSleeveLines.push({ text: `...他${sleeveLines.length - 5}件`, isAlert: false });
+    }
+
+    const sleeveBoxX = 470;
+    const sleeveBoxY = materialBoxY + materialBoxHeight + 8;
+    const sleeveBoxWidth = 210;
+    const sleeveBoxHeight = 28 + visibleSleeveLines.length * 14;
+
+    const sleeveBox = document.createElementNS(NS, "rect");
+    sleeveBox.setAttribute("x", String(sleeveBoxX));
+    sleeveBox.setAttribute("y", String(sleeveBoxY));
+    sleeveBox.setAttribute("width", String(sleeveBoxWidth));
+    sleeveBox.setAttribute("height", String(sleeveBoxHeight));
+    sleeveBox.setAttribute("fill", "#262626");
+    sleeveBox.setAttribute("stroke", "#555");
+    sleeveBox.setAttribute("rx", "6");
+    svg.appendChild(sleeveBox);
+
+    const sleeveTitle = document.createElementNS(NS, "text");
+    sleeveTitle.setAttribute("x", String(sleeveBoxX + 10));
+    sleeveTitle.setAttribute("y", String(sleeveBoxY + 16));
+    sleeveTitle.setAttribute("font-size", "11");
+    sleeveTitle.setAttribute("fill", "#ffffff");
+    sleeveTitle.textContent = "スリーブ判定";
+    svg.appendChild(sleeveTitle);
+
+    visibleSleeveLines.forEach((line, idx) => {
+      const sleeveText = document.createElementNS(NS, "text");
+      sleeveText.setAttribute("x", String(sleeveBoxX + 10));
+      sleeveText.setAttribute("y", String(sleeveBoxY + 32 + idx * 14));
+      sleeveText.setAttribute("font-size", "10");
+      sleeveText.setAttribute("fill", line.isAlert ? "#ffb86b" : "#d8d8d8");
+      sleeveText.textContent = line.text;
+      svg.appendChild(sleeveText);
     });
 
     const hasThreeway = (wirePath?.wires || []).some((wire) => wire?.role === "traveler_1" || wire?.role === "traveler_2");
@@ -932,7 +1032,7 @@ function renderAiDiagramGamidenki(sceneModel) {
     ];
     legend.forEach((item, idx) => {
       const baseX = 20 + idx * 165;
-      const baseY = 368;
+      const baseY = 408;
 
       const line = document.createElementNS(NS, "line");
       line.setAttribute("x1", String(baseX));
