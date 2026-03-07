@@ -257,18 +257,73 @@ function renderSleeveJudgeList(sceneModel) {
   });
 }
 
+function detectGroupType(group) {
+  const devices = Array.isArray(group?.devices) ? group.devices : [];
+  const light = Number((devices.find((item) => item?.type === "light") || {}).quantity || 0);
+  const outlet = Number((devices.find((item) => item?.type === "outlet") || {}).quantity || 0);
+  if (light > 0 && outlet > 0) return "mixed";
+  if (light > 0) return "light";
+  if (outlet > 0) return "outlet";
+  if (group?.purpose === "fan") return "fan";
+  if (group?.purpose === "ac_outlet") return "outlet";
+  return "unknown";
+}
+
+function renderParseDebugResult(sceneModel) {
+  const panel = document.getElementById("parse-debug-result");
+  if (!panel) return;
+
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+
+  panel.innerHTML = "";
+  if (!groups.length) {
+    panel.textContent = "groupsなし";
+    return;
+  }
+
+  groups.forEach((group, index) => {
+    const card = document.createElement("article");
+    card.className = "parse-debug-item";
+
+    const assistFeatures = Array.isArray(group?.assistFeatures) ? group.assistFeatures.filter(Boolean) : [];
+    const warnings = Array.isArray(group?.warnings) ? group.warnings.filter(Boolean) : [];
+    if (typeof group?.warning === "string" && group.warning) warnings.push(group.warning);
+
+    const lines = [
+      `Group ${group?.label || String.fromCharCode(65 + (index % 26))}`,
+      `label: ${group?.label || "-"}`,
+      `type: ${detectGroupType(group)}`,
+      `purpose: ${group?.purpose || "unknown"}`,
+      `control: ${group?.controlId || "-"} / ${group?.switchType || "none"}`,
+      `assist: ${assistFeatures.length ? assistFeatures.join(" / ") : "none"}`,
+      `warning: ${warnings.length ? warnings.join(" / ") : "none"}`,
+    ];
+
+    card.textContent = lines.join("\n");
+    panel.appendChild(card);
+  });
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
   renderMaterialList();
   renderCircuitMaterialList();
   renderSleeveJudgeList();
+  renderParseDebugResult();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
     renderMaterialList();
     renderCircuitMaterialList();
     renderSleeveJudgeList();
+    renderParseDebugResult();
   });
   observer.observe(target, {
     childList: true,
@@ -283,6 +338,7 @@ window.renderCircuitList = renderCircuitList;
 window.renderMaterialList = renderMaterialList;
 window.renderCircuitMaterialList = renderCircuitMaterialList;
 window.renderSleeveJudgeList = renderSleeveJudgeList;
+window.renderParseDebugResult = renderParseDebugResult;
 
 initPlayground();
 setupCircuitListAutoRender();
