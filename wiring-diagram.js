@@ -58,6 +58,15 @@ const UNSUPPORTED_PATTERNS = [
   { patterns: [/パイロットランプ/], message: "パイロットランプ回路は今回の対応範囲外です。" },
   { patterns: [/換気扇連動/], message: "換気扇連動回路は今回の対応範囲外です。" },
 ];
+const PURPOSE_PATTERNS = [
+  { purpose: "outdoor", patterns: [/外部/, /ベランダ/, /庭/, /外/] },
+  { purpose: "washroom", patterns: [/洗面/, /洗濯機/] },
+  { purpose: "kitchen_outlet", patterns: [/電子レンジ/, /レンジ/, /冷蔵庫/] },
+  { purpose: "ac_outlet", patterns: [/エアコン/, /\bac\b/i, /クーラー/] },
+  { purpose: "fan", patterns: [/換気扇/] },
+  { purpose: "light", patterns: [/照明/, /ライト/, /ランプ/, /3路/, /三路/] },
+  { purpose: "outlet", patterns: [/コンセント/] },
+];
 
 /**
  * @param {number} controlId
@@ -813,10 +822,16 @@ function detectSwitchType(line) {
 }
 
 function detectPurpose(line) {
-  if (/(照明|ライト|ランプ)/.test(line)) return "light";
-  if (/コンセント/.test(line)) return "outlet";
-  if (/(3路|三路)/.test(line)) return "light";
+  const hit = PURPOSE_PATTERNS.find((item) => _matchesAny(item.patterns, line));
+  if (hit) return hit.purpose;
   return "unknown";
+}
+
+function purposeToDeviceType(purpose, switchType) {
+  if (purpose === "light") return "light";
+  if (switchType === "threeway") return "light";
+  if (["outlet", "ac_outlet", "kitchen_outlet", "washroom", "outdoor", "fan"].includes(purpose)) return "outlet";
+  return null;
 }
 
 function detectQuantity(line) {
@@ -841,7 +856,7 @@ function detectQuantity(line) {
 function extractGroupLabel(line) {
   return String(line || "")
     .replace(/\s+/g, "")
-    .replace(/(照明|ライト|ランプ|コンセント)/g, "")
+    .replace(/(照明|ライト|ランプ|コンセント|エアコン|AC|ac|クーラー|換気扇|電子レンジ|レンジ|冷蔵庫|洗面|洗濯機|外部|外|庭|ベランダ)/g, "")
     .replace(/(3路|三路)/g, "")
     .replace(/([1-9][0-9]*)(灯|個)/g, "")
     .replace(/([一二三四五六七八九十]+)(灯|個)/g, "")
@@ -932,12 +947,13 @@ function mergeGroupsByLabel(groups) {
 function parseFieldLine(line) {
   const normalizedLine = normalizeProblemText(line);
   const switchType = detectSwitchType(normalizedLine);
-  const detectedDeviceType = detectDeviceType(normalizedLine);
+  const purpose = detectPurpose(normalizedLine);
+  const detectedDeviceType = detectDeviceType(normalizedLine) || purposeToDeviceType(purpose, switchType);
   const parsed = {
     rawLine: line,
     normalizedLine,
     deviceType: detectedDeviceType || (switchType === "threeway" ? "light" : null),
-    purpose: detectPurpose(normalizedLine),
+    purpose,
     switchType,
     quantity: detectQuantity(normalizedLine),
     label: normalizeGroupLabel(extractGroupLabel(line)),
