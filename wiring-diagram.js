@@ -24,7 +24,7 @@ window.groupDevicesByControl = groupDevicesByControl;
 window.judgeSleeve = judgeSleeve;
 window.renderDiagram = renderDiagram;
 
-let aiDiagramPreviewMode = "gamidenki";
+let aiDiagramPreviewMode = "exam_style";
 
 function getCircuitSummaryLabel(circuit) {
   return `回路${circuit.id} / ${circuit.type}`;
@@ -651,11 +651,11 @@ function renderAiDiagramEnhanced(sceneModel) {
   });
 }
 
-function renderAiDiagramGamidenki(sceneModel) {
+function renderAiDiagramExamStyle(sceneModel) {
   const panel = document.getElementById("ai-diagram-preview-result");
   if (!panel) return;
 
-  Array.from(panel.querySelectorAll(".ai-diagram-gamidenki-item")).forEach((item) => item.remove());
+  Array.from(panel.querySelectorAll(".ai-diagram-exam-style-item")).forEach((item) => item.remove());
 
   let groups = [];
   if (sceneModel && Array.isArray(sceneModel.groups)) {
@@ -711,14 +711,14 @@ function renderAiDiagramGamidenki(sceneModel) {
       circuits[layoutIndex] ||
       null;
     const card = document.createElement("article");
-    card.className = "ai-diagram-gamidenki-item";
+    card.className = "ai-diagram-exam-style-item";
     if (isMobileMode) {
       card.style.marginBottom = "12px";
     }
 
     const title = document.createElement("div");
     title.className = "circuit-item-title";
-    title.textContent = `回路${layout?.circuitId ?? "-"} AI gamidenki`;
+    title.textContent = `回路${layout?.circuitId ?? "-"} AI exam_style`;
     card.appendChild(title);
 
     const svg = document.createElementNS(NS, "svg");
@@ -1263,7 +1263,7 @@ function ensureAiDiagramModeSwitcher() {
     const modes = [
       { key: "preview", label: "Preview" },
       { key: "enhanced", label: "Enhanced" },
-      { key: "gamidenki", label: "Gamidenki" },
+      { key: "exam_style", label: "試験式複線図" },
     ];
     modes.forEach((mode) => {
       const btn = document.createElement("button");
@@ -1302,7 +1302,7 @@ function renderAiDiagramByMode(sceneModel) {
     renderAiDiagramEnhanced(sceneModel);
     return;
   }
-  renderAiDiagramGamidenki(sceneModel);
+  renderAiDiagramExamStyle(sceneModel);
 }
 
 function setupCircuitListAutoRender() {
@@ -1346,7 +1346,7 @@ window.renderLayoutDebug = renderLayoutDebug;
 window.renderWirePathDebug = renderWirePathDebug;
 window.renderAiDiagramPreview = renderAiDiagramPreview;
 window.renderAiDiagramEnhanced = renderAiDiagramEnhanced;
-window.renderAiDiagramGamidenki = renderAiDiagramGamidenki;
+window.renderAiDiagramExamStyle = renderAiDiagramExamStyle;
 window.renderAiDiagramByMode = renderAiDiagramByMode;
 
 initPlayground();
