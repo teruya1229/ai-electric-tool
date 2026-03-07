@@ -170,6 +170,10 @@ pre {
   text-align: left;
 }
 
+#field-scene-input {
+  min-height: 120px;
+}
+
 @media (max-width: 768px) {
   .button-row {
     display: grid;

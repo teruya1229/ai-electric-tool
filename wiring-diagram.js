@@ -783,6 +783,107 @@ function renderActiveGroupDiagram(sceneModel) {
   return result;
 }
 
+function detectDeviceType(line) {
+  if (/(照明|ライト|ランプ)/.test(line)) return "light";
+  if (/コンセント/.test(line)) return "outlet";
+  return null;
+}
+
+function detectSwitchType(line) {
+  if (/(3路|三路)/.test(line)) return "threeway";
+  return "single";
+}
+
+function detectQuantity(line) {
+  const numMatch = line.match(/([1-6])\s*(灯|個)/);
+  if (numMatch) return Number(numMatch[1]);
+  const jpMap = [
+    { re: /一(灯|個)/, value: 1 },
+    { re: /二(灯|個)/, value: 2 },
+    { re: /三(灯|個)/, value: 3 },
+    { re: /四(灯|個)/, value: 4 },
+    { re: /五(灯|個)/, value: 5 },
+    { re: /六(灯|個)/, value: 6 },
+  ];
+  const hit = jpMap.find((item) => item.re.test(line));
+  if (hit) return hit.value;
+
+  const over = line.match(/([0-9]+)\s*(灯|個)/);
+  if (over) return Number(over[1]);
+  return 1;
+}
+
+function parseFieldLine(line) {
+  const normalizedLine = normalizeProblemText(line);
+  const switchType = detectSwitchType(normalizedLine);
+  const detectedDeviceType = detectDeviceType(normalizedLine);
+  const parsed = {
+    rawLine: line,
+    normalizedLine,
+    deviceType: detectedDeviceType || (switchType === "threeway" ? "light" : null),
+    switchType,
+    quantity: detectQuantity(normalizedLine),
+    warnings: [],
+    errors: [],
+  };
+
+  if (!parsed.deviceType) parsed.errors.push("器具種別を判定できません。");
+  if (parsed.quantity > 6) parsed.errors.push("数量は6以下で入力してください。");
+  if (!/(照明|ライト|ランプ|コンセント|3路|三路|[1-6]灯|[1-6]個|一灯|二灯|三灯|四灯|五灯|六灯|一個|二個|三個|四個|五個|六個)/.test(normalizedLine)) {
+    parsed.warnings.push("未知語句を含みます。");
+  }
+  return parsed;
+}
+
+function createGroupFromLine(parsed) {
+  if (!parsed || parsed.errors.length) return null;
+  const controlId = "";
+  const group = createEmptyGroup(controlId);
+  group.switchType = parsed.switchType;
+  group.sameTime = parsed.deviceType === "light" && parsed.quantity >= 2;
+  _setGroupQuantity(group, "light", parsed.deviceType === "light" ? parsed.quantity : 0);
+  _setGroupQuantity(group, "outlet", parsed.deviceType === "outlet" ? parsed.quantity : 0);
+  return group;
+}
+
+function parseFieldSceneText(text) {
+  const lines = String(text || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const result = {
+    groups: [],
+    warnings: [],
+    errors: [],
+    lineResults: [],
+  };
+
+  lines.forEach((line, idx) => {
+    const parsed = parseFieldLine(line);
+    result.lineResults.push(parsed);
+    if (parsed.warnings.length) result.warnings.push(...parsed.warnings.map((m) => `${idx + 1}行目: ${m}`));
+    if (parsed.errors.length) {
+      result.errors.push(...parsed.errors.map((m) => `${idx + 1}行目: ${m}`));
+      return;
+    }
+    const group = createGroupFromLine(parsed);
+    if (!group) {
+      result.errors.push(`${idx + 1}行目: group 生成に失敗しました。`);
+      return;
+    }
+    group.controlId = getNextControlId(result.groups);
+    result.groups.push(group);
+  });
+
+  if (!result.groups.length) result.errors.push("有効な系統を生成できませんでした。");
+  if (result.groups.length > 6) {
+    result.errors.push("系統数は6件までです。");
+    result.groups = result.groups.slice(0, 6);
+  }
+  return result;
+}
+
 /**
  * @param {ReturnType<typeof parseProblemText>} parsed
  */
@@ -1153,6 +1254,8 @@ function initPlayground() {
   const groupControlIdInput = document.getElementById("group-control-id-input");
   const groupSwitchTypeSelect = document.getElementById("group-switch-type-select");
   const groupSameTimeCheckbox = document.getElementById("group-same-time-checkbox");
+  const fieldSceneInput = document.getElementById("field-scene-input");
+  const parseFieldSceneBtn = document.getElementById("parse-field-scene");
   const lightCountSelect = document.getElementById("light-count-select");
   const outletCountSelect = document.getElementById("outlet-count-select");
   const problemTextInput = document.getElementById("problemTextInput");
@@ -1184,6 +1287,8 @@ function initPlayground() {
     !groupControlIdInput ||
     !groupSwitchTypeSelect ||
     !groupSameTimeCheckbox ||
+    !fieldSceneInput ||
+    !parseFieldSceneBtn ||
     !lightCountSelect ||
     !outletCountSelect ||
     !selectionEl ||
@@ -1208,6 +1313,8 @@ function initPlayground() {
     formState: null,
     inputWarnings: /** @type {string[]} */ ([]),
     inputErrors: /** @type {string[]} */ ([]),
+    sceneParseWarnings: /** @type {string[]} */ ([]),
+    sceneParseErrors: /** @type {string[]} */ ([]),
     simplified: { lightCount: 0, outletCount: 0 },
     diagram: /** @type {GeneratedDiagram} */ (EMPTY_DIAGRAM),
     error: "",
@@ -1381,7 +1488,12 @@ function initPlayground() {
     state.simplified = rendered.resolved;
 
     groupEl.textContent = state.diagram.groups.length ? JSON.stringify(state.diagram.groups, null, 2) : "グループ化結果なし";
-    const allWarnings = [...state.inputWarnings, ...state.diagram.warnings];
+    const allWarnings = [
+      ...state.sceneParseWarnings,
+      ...state.sceneParseErrors.map((e) => `解析エラー: ${e}`),
+      ...state.inputWarnings,
+      ...state.diagram.warnings,
+    ];
     warningEl.textContent = allWarnings.length ? allWarnings.join("\n") : "警告なし";
     renderDiagram(state.diagram, state.error);
 
@@ -1420,6 +1532,8 @@ function initPlayground() {
         },
         devices: state.devices,
         formState: state.formState,
+        sceneParseWarnings: state.sceneParseWarnings,
+        sceneParseErrors: state.sceneParseErrors,
         diagram: state.diagram,
         error: state.error || "なし",
       },
@@ -1582,6 +1696,26 @@ function initPlayground() {
       renderAll();
       rebuildDevicesFromCurrentInput();
       generateAndRender();
+    });
+  }
+
+  if (parseFieldSceneBtn instanceof HTMLButtonElement) {
+    parseFieldSceneBtn.addEventListener("click", () => {
+      if (!(fieldSceneInput instanceof HTMLTextAreaElement)) return;
+      const parsedScene = parseFieldSceneText(fieldSceneInput.value);
+      state.sceneParseWarnings = parsedScene.warnings;
+      state.sceneParseErrors = parsedScene.errors;
+      if (parsedScene.groups.length) {
+        state.sceneModel.groups = parsedScene.groups;
+        state.sceneModel.activeGroupIndex = 0;
+        state.selectedCondition = null;
+        renderAll();
+        rebuildDevicesFromCurrentInput();
+        generateAndRender();
+      } else {
+        renderAll();
+        generateAndRender();
+      }
     });
   }
 
