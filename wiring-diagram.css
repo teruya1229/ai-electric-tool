@@ -207,6 +207,21 @@ pre {
   font-weight: 700;
 }
 
+#material-list-result {
+  display: grid;
+  gap: 8px;
+}
+
+.material-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.material-item {
+  color: #334155;
+  line-height: 1.6;
+}
+
 #field-scene-input {
   min-height: 120px;
 }

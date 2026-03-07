@@ -7,6 +7,7 @@ import {
   renderDiagram,
 } from "./js/diagram/index.js";
 import { createCircuitsFromGroups } from "./js/engine/circuit-engine.js";
+import { createMaterialsFromCircuits } from "./js/engine/material-engine.js";
 import { initPlayground } from "./js/ui/index.js";
 
 window.buildDevicesFromSelection = buildDevicesFromSelection;
@@ -99,12 +100,50 @@ function renderCircuitList(sceneModel) {
   });
 }
 
+function getMaterialSummaryLabel(material) {
+  return `${material.name} / ${material.type} / ${material.quantity}`;
+}
+
+function renderMaterialList(sceneModel) {
+  const panel = document.getElementById("material-list-result");
+  if (!panel) return;
+
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+
+  const circuits = createCircuitsFromGroups(groups);
+  const materials = createMaterialsFromCircuits(circuits);
+
+  panel.innerHTML = "";
+  if (!materials.length) {
+    panel.textContent = "材料なし";
+    return;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "material-list";
+  materials.forEach((material) => {
+    const row = document.createElement("li");
+    row.className = "material-item";
+    row.textContent = getMaterialSummaryLabel(material);
+    list.appendChild(row);
+  });
+  panel.appendChild(list);
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
+  renderMaterialList();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
+    renderMaterialList();
   });
   observer.observe(target, {
     childList: true,
@@ -116,6 +155,7 @@ function setupCircuitListAutoRender() {
 }
 
 window.renderCircuitList = renderCircuitList;
+window.renderMaterialList = renderMaterialList;
 
 initPlayground();
 setupCircuitListAutoRender();
