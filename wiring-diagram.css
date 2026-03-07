@@ -273,6 +273,24 @@ pre {
   overflow-wrap: anywhere;
 }
 
+#parse-debug-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#parse-debug-result .parse-debug-item {
+  border: 1px solid #cbd5e1;
+  border-left: 3px solid #f59e0b;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #111827;
+  color: #e2e8f0;
+  white-space: pre-line;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 #field-scene-input {
   min-height: 120px;
 }
@@ -299,6 +317,11 @@ pre {
     padding: 8px 10px;
   }
   #sleeve-judge-list-result .sleeve-judge-item {
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  #parse-debug-result .parse-debug-item {
     padding: 8px 10px;
     font-size: 13px;
     line-height: 1.55;
