@@ -3,33 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>複線図生成エンジン MVP</title>
+    <title>複線図プレイグラウンド</title>
     <link rel="stylesheet" href="./wiring-diagram.css" />
   </head>
   <body>
     <main class="container">
-      <h1>ガミデンキ風 複線図生成エンジン MVP</h1>
-      <p class="lead">片切1灯 / 3路1灯のテンプレ回路を、試験モード / 現場モードでSVG表示します。</p>
+      <h1>複線図プレイグラウンド</h1>
+      <p class="lead">回路を選ぶ → 条件を選ぶ → 表示モードを選ぶ で、複線図を表示します。</p>
 
       <section class="card">
-        <h2>入力エリア</h2>
+        <h2>回路を選ぶ</h2>
         <div class="controls">
-          <label>
-            表示モード
-            <select id="mode-select">
-              <option value="exam">試験モード</option>
-              <option value="field">現場モード</option>
-            </select>
-          </label>
-          <div class="button-row">
-            <button id="sample-single-btn" type="button">片切1灯サンプル</button>
-            <button id="sample-threeway-btn" type="button">3路1灯サンプル</button>
+          <div class="button-row" id="circuit-buttons">
+            <button id="circuit-single-btn" type="button">片切</button>
+            <button id="circuit-threeway-btn" type="button">3路</button>
           </div>
         </div>
       </section>
 
       <section class="card">
+        <h2>条件を選ぶ</h2>
+        <p class="hint" id="condition-hint">先に回路を選んでください。</p>
+        <div class="button-row" id="condition-buttons"></div>
+      </section>
+
+      <section class="card">
+        <h2>表示モード</h2>
+        <div class="button-row" id="mode-buttons">
+          <button id="mode-exam-btn" type="button">試験モード</button>
+          <button id="mode-field-btn" type="button">現場モード</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>複線図を表示</h2>
+        <button id="generate-btn" type="button">複線図を表示</button>
+      </section>
+
+      <section class="card">
         <h2>出力エリア</h2>
+        <article>
+          <h3>選択内容</h3>
+          <pre id="selection-result"></pre>
+        </article>
         <article>
           <h3>グループ化結果</h3>
           <pre id="group-result"></pre>
@@ -39,7 +55,7 @@
           <pre id="warning-result"></pre>
         </article>
         <article>
-          <h3>SVG 複線図</h3>
+          <h3>SVG複線図</h3>
           <div id="diagram-canvas" class="diagram-wrap"></div>
           <ul class="legend">
             <li>L: 黒</li>
@@ -50,29 +66,36 @@
           </ul>
         </article>
         <article>
+          <h3>必要本数</h3>
+          <pre id="required-cables"></pre>
+        </article>
+        <article>
+          <h3>注意点</h3>
+          <pre id="notes-result"></pre>
+        </article>
+        <article>
+          <h3>スリーブ判定テスト</h3>
+          <div class="sleeve-form">
+            <label>
+              wire16Count
+              <input id="wire16-count" type="number" min="0" value="2" />
+            </label>
+            <label>
+              wire20Count
+              <input id="wire20-count" type="number" min="0" value="0" />
+            </label>
+            <label>
+              wire26Count
+              <input id="wire26-count" type="number" min="0" value="0" />
+            </label>
+            <button id="sleeve-judge-btn" type="button">判定</button>
+          </div>
+          <pre id="sleeve-result"></pre>
+        </article>
+        <article>
           <h3>デバッグ情報</h3>
           <pre id="debug-result"></pre>
         </article>
-      </section>
-
-      <section class="card">
-        <h2>スリーブ判定テスト</h2>
-        <div class="sleeve-form">
-          <label>
-            wire16Count
-            <input id="wire16-count" type="number" min="0" value="2" />
-          </label>
-          <label>
-            wire20Count
-            <input id="wire20-count" type="number" min="0" value="0" />
-          </label>
-          <label>
-            wire26Count
-            <input id="wire26-count" type="number" min="0" value="0" />
-          </label>
-          <button id="sleeve-judge-btn" type="button">判定</button>
-        </div>
-        <pre id="sleeve-result"></pre>
       </section>
     </main>
 

@@ -39,6 +39,11 @@ body {
   flex-wrap: wrap;
 }
 
+.hint {
+  margin: 0 0 10px;
+  color: #475569;
+}
+
 label {
   display: flex;
   flex-direction: column;
@@ -50,7 +55,7 @@ input,
 select,
 button {
   font: inherit;
-  min-height: 40px;
+  min-height: 44px;
   border-radius: 8px;
 }
 
@@ -66,18 +71,23 @@ button {
   background: #2563eb;
   color: #fff;
   cursor: pointer;
+  font-weight: 700;
 }
 
 button:hover {
   background: #1d4ed8;
 }
 
-.sample-btn-active {
+.select-btn {
+  min-width: 120px;
+}
+
+button.active {
   background: #0f172a;
   box-shadow: 0 0 0 2px #93c5fd inset;
 }
 
-.sample-btn-active:hover {
+button.active:hover {
   background: #1e293b;
 }
 
@@ -108,7 +118,7 @@ pre {
   border-radius: 10px;
   background: #f8fafc;
   overflow: auto;
-  min-height: 280px;
+  min-height: 320px;
   padding: 4px;
 }
 
@@ -129,6 +139,9 @@ pre {
   .button-row {
     display: grid;
     grid-template-columns: 1fr;
+  }
+  .select-btn {
+    width: 100%;
   }
   label {
     max-width: 100%;
