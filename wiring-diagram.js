@@ -182,6 +182,16 @@ function getCircuitMaterialSummaryLabel(material) {
   return parts.join(" / ");
 }
 
+function getCircuitControlIdLabel(circuit) {
+  if (circuit?.controlId) return String(circuit.controlId);
+  const ids = (Array.isArray(circuit?.groups) ? circuit.groups : [])
+    .map((group) => String(group?.controlId || "").trim())
+    .filter(Boolean);
+  if (ids.length === 1) return ids[0];
+  if (ids.length > 1) return ids.join(", ");
+  return String(circuit?.id || "-");
+}
+
 function renderMaterialList(materials) {
   const panel = document.getElementById("material-list-result");
   if (!panel) return;
@@ -216,21 +226,11 @@ function renderMaterialListFromScene(sceneModel) {
   renderMaterialList(materials);
 }
 
-function renderCircuitMaterialList(sceneModel) {
-  const panel = document.getElementById("circuit-material-list-result");
+function renderCircuitMaterialList(circuits) {
+  const panel = document.getElementById("material-list-result");
   if (!panel) return;
-
-  let groups = [];
-  if (sceneModel && Array.isArray(sceneModel.groups)) {
-    groups = sceneModel.groups;
-  } else {
-    const parsed = parseGroupsFromDom();
-    groups = parsed.groups;
-  }
-
-  const circuits = createCircuitsFromGroups(groups);
   panel.innerHTML = "";
-  if (!circuits.length) {
+  if (!Array.isArray(circuits) || !circuits.length) {
     panel.textContent = "回路なし";
     return;
   }
@@ -241,7 +241,7 @@ function renderCircuitMaterialList(sceneModel) {
 
     const title = document.createElement("div");
     title.className = "circuit-item-title";
-    title.textContent = getCircuitSummaryLabel(circuit);
+    title.textContent = `回路: ${getCircuitControlIdLabel(circuit)}`;
     card.appendChild(title);
 
     const materials = createMaterialsForCircuit(circuit);
@@ -259,12 +259,24 @@ function renderCircuitMaterialList(sceneModel) {
     materials.forEach((material) => {
       const row = document.createElement("li");
       row.className = "material-item";
-      row.textContent = getCircuitMaterialSummaryLabel(material);
+      row.textContent = getMaterialSummaryLabel(material);
       list.appendChild(row);
     });
     card.appendChild(list);
     panel.appendChild(card);
   });
+}
+
+function renderCircuitMaterialListFromScene(sceneModel) {
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+  const circuits = createCircuitsFromGroups(groups);
+  renderCircuitMaterialList(circuits);
 }
 
 function renderSleeveJudgeList(sceneModel) {
@@ -3481,8 +3493,7 @@ function renderConnectionPointRoute(sceneModel) {
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
-  renderMaterialListFromScene();
-  renderCircuitMaterialList();
+  renderCircuitMaterialListFromScene();
   renderSleeveJudgeList();
   renderParseDebugResult();
   renderLayoutDebug();
@@ -3495,8 +3506,7 @@ function setupCircuitListAutoRender() {
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
-    renderMaterialListFromScene();
-    renderCircuitMaterialList();
+    renderCircuitMaterialListFromScene();
     renderSleeveJudgeList();
     renderParseDebugResult();
     renderLayoutDebug();
