@@ -139,6 +139,13 @@ function renderActiveGroupDiagram(sceneModel) {
     return result;
   }
   const active = sceneModel.groups[sceneModel.activeGroupIndex];
+  console.info("[ui] active group before diagram build", {
+    activeGroupIndex: sceneModel.activeGroupIndex,
+    controlId: active?.controlId,
+    switchType: active?.switchType,
+    sameTime: active?.sameTime,
+    devices: active?.devices,
+  });
   const built = buildDiagramInputFromGroup(active);
   result.warnings.push(...built.warnings);
   result.errors.push(...built.errors);
