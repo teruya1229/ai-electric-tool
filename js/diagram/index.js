@@ -132,7 +132,13 @@ function groupDevicesByControlWithWarnings(devices, mode) {
         return;
       }
       if (switchSingleCount === 0 && switch3wayCount === 2 && lightCount === 1) {
-        groups.push({ controlId, controlLabel, templateId: "three_way_1light", devices: groupDevices });
+        groups.push({
+          controlId,
+          controlLabel,
+          templateId: "three_way_1light",
+          switchType: "threeway",
+          devices: groupDevices,
+        });
         return;
       }
 
