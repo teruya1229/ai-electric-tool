@@ -1681,6 +1681,33 @@ function renderConnectionPointBranches(sceneModel) {
   });
 }
 
+function estimateConnectionPointWireLength(sceneModel) {
+  const connectionPoints = sceneModel && Array.isArray(sceneModel.connectionPoints) ? sceneModel.connectionPoints : [];
+  if (!Array.isArray(connectionPoints) || connectionPoints.length < 2) {
+    return { trunkSegments: [], branchSegments: [] };
+  }
+
+  const trunkSegments = [];
+  const branchSegments = [];
+  connectionPoints.forEach((point, index) => {
+    const current = getConnectionPointHeightProfile(point);
+    branchSegments.push({
+      cpIndex: index,
+      lengthMm: current.branchDrop + 200,
+    });
+
+    if (index >= connectionPoints.length - 1) return;
+    const next = getConnectionPointHeightProfile(connectionPoints[index + 1]);
+    const lengthMm = 2000 + Math.abs(current.trunkHeight - next.trunkHeight);
+    trunkSegments.push({
+      fromIndex: index,
+      toIndex: index + 1,
+      lengthMm,
+    });
+  });
+  return { trunkSegments, branchSegments };
+}
+
 function renderConnectionPointRoute(sceneModel) {
   const panel = document.getElementById("connection-point-route");
   if (!panel) return;
@@ -1752,6 +1779,39 @@ function renderConnectionPointRoute(sceneModel) {
   });
 
   panel.appendChild(route);
+
+  const estimate = estimateConnectionPointWireLength({ connectionPoints });
+  if (!Array.isArray(estimate.trunkSegments) || estimate.trunkSegments.length < 1) return;
+
+  const estimateBlock = document.createElement("div");
+  estimateBlock.className = "wire-length-estimate";
+  const title = document.createElement("div");
+  title.textContent = "配線概算";
+  estimateBlock.appendChild(title);
+
+  estimate.trunkSegments.forEach((segment) => {
+    const row = document.createElement("div");
+    const from = `CP${segment.fromIndex + 1}`;
+    const to = `CP${segment.toIndex + 1}`;
+    const lengthM = (Number(segment.lengthMm || 0) / 1000).toFixed(1);
+    row.textContent = `${from} → ${to}  ${lengthM}m`;
+    estimateBlock.appendChild(row);
+  });
+
+  if (Array.isArray(estimate.branchSegments) && estimate.branchSegments.length) {
+    const branchTitle = document.createElement("div");
+    branchTitle.textContent = "枝配線";
+    estimateBlock.appendChild(branchTitle);
+    estimate.branchSegments.forEach((segment) => {
+      const row = document.createElement("div");
+      const cp = `CP${segment.cpIndex + 1}`;
+      const lengthM = (Number(segment.lengthMm || 0) / 1000).toFixed(1);
+      row.textContent = `${cp}  ${lengthM}m`;
+      estimateBlock.appendChild(row);
+    });
+  }
+
+  panel.appendChild(estimateBlock);
 }
 
 function setupCircuitListAutoRender() {
@@ -1805,6 +1865,7 @@ window.renderConnectionPointsEditor = renderConnectionPointsEditor;
 window.handleAddDeviceToConnectionPoint = handleAddDeviceToConnectionPoint;
 window.moveConnectionPoint = moveConnectionPoint;
 window.renderConnectionPointBranches = renderConnectionPointBranches;
+window.estimateConnectionPointWireLength = estimateConnectionPointWireLength;
 window.renderConnectionPointRoute = renderConnectionPointRoute;
 window.getConnectionPointHeightProfile = getConnectionPointHeightProfile;
 window.renderConnectionPointHeights = renderConnectionPointHeights;
