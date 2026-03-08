@@ -849,10 +849,12 @@ export function parseFieldSceneText(text) {
     warnings: [],
     errors: [],
     lineResults: [],
+    sceneModel: {},
   };
   const structured = parseStructuredDeviceText(text);
   const structuredBuilt = createGroupsFromStructuredParse(structured);
   if (structuredBuilt.groups.length) {
+    result.sceneModel.structured = structured;
     result.groups = structuredBuilt.groups;
     result.warnings.push(...structuredBuilt.warnings);
     if (result.groups.length > 6) {
