@@ -31,6 +31,7 @@ let aiDiagramRenderState = {
   layouts: "-",
   message: "",
 };
+let connectionPointsEditorSceneModel = null;
 
 function getCircuitSummaryLabel(circuit) {
   return `回路${circuit.id} / ${circuit.type}`;
@@ -1502,6 +1503,7 @@ function renderConnectionPointsEditor(sceneModel) {
 
   let connectionPoints = [];
   if (sceneModel && Array.isArray(sceneModel.connectionPoints)) {
+    connectionPointsEditorSceneModel = sceneModel;
     connectionPoints = sceneModel.connectionPoints;
   } else {
     let groups = [];
@@ -1513,6 +1515,7 @@ function renderConnectionPointsEditor(sceneModel) {
     }
     const circuits = createCircuitsFromGroups(groups);
     connectionPoints = createConnectionPointsFromCircuits(circuits);
+    connectionPointsEditorSceneModel = { connectionPoints };
   }
 
   panel.innerHTML = "";
@@ -1562,8 +1565,33 @@ function renderConnectionPointsEditor(sceneModel) {
       list.appendChild(li);
     });
     card.appendChild(list);
+
+    const addButton = document.createElement("button");
+    addButton.className = "cp-add-device";
+    addButton.type = "button";
+    addButton.textContent = "＋器具追加";
+    addButton.addEventListener("click", () => {
+      handleAddDeviceToConnectionPoint(index);
+    });
+    card.appendChild(addButton);
+
     panel.appendChild(card);
   });
+}
+
+function handleAddDeviceToConnectionPoint(cpIndex) {
+  const model = connectionPointsEditorSceneModel;
+  if (!model || !Array.isArray(model.connectionPoints)) return;
+  const point = model.connectionPoints[cpIndex];
+  if (!point) return;
+
+  const input = prompt("器具名を入力してください");
+  const deviceName = typeof input === "string" ? input.trim() : "";
+  if (!deviceName) return;
+
+  if (!Array.isArray(point.devices)) point.devices = [];
+  point.devices.push(deviceName);
+  renderConnectionPointsEditor(model);
 }
 
 function setupCircuitListAutoRender() {
@@ -1612,6 +1640,7 @@ window.renderAiDiagramEnhanced = renderAiDiagramEnhanced;
 window.renderAiDiagramExamStyle = renderAiDiagramExamStyle;
 window.renderAiDiagramByMode = renderAiDiagramByMode;
 window.renderConnectionPointsEditor = renderConnectionPointsEditor;
+window.handleAddDeviceToConnectionPoint = handleAddDeviceToConnectionPoint;
 
 initPlayground();
 setupCircuitListAutoRender();
