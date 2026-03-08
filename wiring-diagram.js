@@ -1945,6 +1945,78 @@ function aggregateCableLengthsByMaterial(sceneModel) {
   }));
 }
 
+function aggregateCableLengthsByCircuit(sceneModel) {
+  let model = sceneModel;
+  if (!model || typeof model !== "object") {
+    if (connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object") {
+      model = connectionPointsEditorSceneModel;
+    } else {
+      model = {};
+    }
+  }
+
+  const estimate = estimateConnectionPointWireLength(model);
+  const trunkSegments = Array.isArray(estimate?.trunkSegments) ? estimate.trunkSegments : [];
+  const branchSegments = Array.isArray(estimate?.branchSegments) ? estimate.branchSegments : [];
+  const allSegments = [
+    ...trunkSegments.map((segment) => ({ ...segment, kind: "trunk" })),
+    ...branchSegments.map((segment) => ({ ...segment, kind: "branch" })),
+  ];
+  if (!allSegments.length) return {};
+
+  let circuits = Array.isArray(model?.circuits) ? model.circuits : [];
+  if (!circuits.length) {
+    const groups = Array.isArray(model?.groups) ? model.groups : parseGroupsFromDom().groups;
+    circuits = createCircuitsFromGroups(groups);
+  }
+  const materials = Array.isArray(model?.materials) ? model.materials : createMaterialsFromCircuits(circuits);
+  const firstMaterialName = (Array.isArray(materials) && materials[0]?.name) ? materials[0].name : null;
+  const materialsByCircuit = new Map();
+  circuits.forEach((circuit) => {
+    const list = createMaterialsForCircuit(circuit);
+    materialsByCircuit.set(circuit?.id, list);
+  });
+
+  const pickMaterialName = (segment) => {
+    const circuitMaterials = materialsByCircuit.get(segment?.circuitId) || [];
+    if (segment?.kind === "trunk") {
+      return circuitMaterials[0]?.name || firstMaterialName || "未判定材料";
+    }
+
+    const label = String(segment?.deviceLabel || "").toUpperCase();
+    const findByHint = (hintList) =>
+      circuitMaterials.find((material) => {
+        const text = `${material?.name || ""} ${material?.type || ""}`.toUpperCase();
+        return hintList.some((hint) => text.includes(hint));
+      });
+    if (label.includes("OUTLET")) {
+      const hit = findByHint(["OUTLET", "コンセント"]);
+      if (hit?.name) return hit.name;
+    }
+    if (label.includes("SW")) {
+      const hit = findByHint(["SWITCH", "スイッチ"]);
+      if (hit?.name) return hit.name;
+    }
+    if (label.includes("LIGHT")) {
+      const hit = findByHint(["LIGHT", "照明"]);
+      if (hit?.name) return hit.name;
+    }
+    return circuitMaterials[0]?.name || firstMaterialName || "未判定材料";
+  };
+
+  const byCircuit = {};
+  allSegments.forEach((segment) => {
+    const lengthMm = Number(segment?.lengthMm || 0);
+    if (!Number.isFinite(lengthMm) || lengthMm <= 0) return;
+    const materialName = pickMaterialName(segment);
+    const circuitId = Number.isFinite(Number(segment?.circuitId)) ? Number(segment.circuitId) : null;
+    const circuitLabel = circuitId !== null ? `回路${circuitId}` : "回路不明";
+    if (!byCircuit[circuitLabel]) byCircuit[circuitLabel] = {};
+    byCircuit[circuitLabel][materialName] = (byCircuit[circuitLabel][materialName] || 0) + lengthMm;
+  });
+  return byCircuit;
+}
+
 function renderCableLengthSummary(sceneModel) {
   const panel = document.getElementById("cable-length-summary");
   if (!panel) return;
@@ -1970,6 +2042,42 @@ function renderCableLengthSummary(sceneModel) {
     item.appendChild(left);
     item.appendChild(right);
     panel.appendChild(item);
+  });
+}
+
+function renderCircuitCableLengthSummary(sceneModel) {
+  const panel = document.getElementById("circuit-cable-length-summary");
+  if (!panel) return;
+
+  const byCircuit = aggregateCableLengthsByCircuit(sceneModel);
+  const circuitEntries = Object.entries(byCircuit || {});
+  panel.innerHTML = "";
+  if (!circuitEntries.length) {
+    panel.textContent = "配線材料長さデータなし";
+    return;
+  }
+
+  circuitEntries.forEach(([circuitLabel, materialMap]) => {
+    const circuitBlock = document.createElement("div");
+    circuitBlock.setAttribute("style", "padding:10px;margin-bottom:8px;border:1px solid #ddd;border-radius:8px;");
+
+    const title = document.createElement("div");
+    title.textContent = circuitLabel;
+    circuitBlock.appendChild(title);
+
+    Object.entries(materialMap || {}).forEach(([materialName, lengthMm]) => {
+      const row = document.createElement("div");
+      row.setAttribute("style", "display:flex;justify-content:space-between;gap:8px;");
+      const left = document.createElement("span");
+      left.textContent = materialName;
+      const right = document.createElement("strong");
+      right.textContent = `${(Number(lengthMm || 0) / 1000).toFixed(1)}m`;
+      row.appendChild(left);
+      row.appendChild(right);
+      circuitBlock.appendChild(row);
+    });
+
+    panel.appendChild(circuitBlock);
   });
 }
 
@@ -2128,6 +2236,7 @@ function renderConnectionPointRoute(sceneModel) {
   const panel = document.getElementById("connection-point-route");
   if (!panel) {
     renderCableLengthSummary(sceneModel);
+    renderCircuitCableLengthSummary(sceneModel);
     return;
   }
 
@@ -2152,6 +2261,11 @@ function renderConnectionPointRoute(sceneModel) {
   if (!Array.isArray(connectionPoints) || !connectionPoints.length) {
     panel.textContent = "ルートなし";
     renderCableLengthSummary(
+      connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object"
+        ? connectionPointsEditorSceneModel
+        : { connectionPoints }
+    );
+    renderCircuitCableLengthSummary(
       connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object"
         ? connectionPointsEditorSceneModel
         : { connectionPoints }
@@ -2244,6 +2358,7 @@ function renderConnectionPointRoute(sceneModel) {
   panel.appendChild(renderCircuitHeightEditor(routeModel));
   panel.appendChild(renderConnectionPointSegmentEditor(routeModel));
   renderCableLengthSummary(routeModel);
+  renderCircuitCableLengthSummary(routeModel);
 }
 
 function setupCircuitListAutoRender() {
@@ -2306,7 +2421,9 @@ window.moveConnectionPoint = moveConnectionPoint;
 window.renderConnectionPointBranches = renderConnectionPointBranches;
 window.estimateConnectionPointWireLength = estimateConnectionPointWireLength;
 window.aggregateCableLengthsByMaterial = aggregateCableLengthsByMaterial;
+window.aggregateCableLengthsByCircuit = aggregateCableLengthsByCircuit;
 window.renderCableLengthSummary = renderCableLengthSummary;
+window.renderCircuitCableLengthSummary = renderCircuitCableLengthSummary;
 window.getConnectionPointRouteSegments = getConnectionPointRouteSegments;
 window.handleEditConnectionPointSegment = handleEditConnectionPointSegment;
 window.renderConnectionPointSegmentEditor = renderConnectionPointSegmentEditor;
