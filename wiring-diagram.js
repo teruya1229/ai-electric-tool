@@ -1551,6 +1551,8 @@ function renderConnectionPointsEditor(sceneModel) {
     return "junction";
   };
 
+  const heightProfiles = renderConnectionPointHeights(sceneModel);
+
   connectionPoints.forEach((point, index) => {
     const card = document.createElement("div");
     card.className = "cp-card";
@@ -1568,6 +1570,20 @@ function renderConnectionPointsEditor(sceneModel) {
     const typeText = document.createElement("small");
     typeText.textContent = `type: ${detectConnectionPointType(sourceDevices)}`;
     card.appendChild(typeText);
+
+    const height = heightProfiles[index] || getConnectionPointHeightProfile(point);
+    const heightBlock = document.createElement("div");
+    heightBlock.setAttribute("style", "font-size:12px;line-height:1.4;margin-top:4px;");
+    const heightTitle = document.createElement("div");
+    heightTitle.textContent = "高さ情報";
+    const trunk = document.createElement("div");
+    trunk.textContent = `trunkHeight: ${height.trunkHeight}mm`;
+    const branch = document.createElement("div");
+    branch.textContent = `branchDrop: ${height.branchDrop}mm`;
+    heightBlock.appendChild(heightTitle);
+    heightBlock.appendChild(trunk);
+    heightBlock.appendChild(branch);
+    card.appendChild(heightBlock);
 
     const list = document.createElement("ul");
     sourceDevices.forEach((device, deviceIndex) => {
@@ -1588,6 +1604,21 @@ function renderConnectionPointsEditor(sceneModel) {
 
     panel.appendChild(card);
   });
+}
+
+function getConnectionPointHeightProfile(cp) {
+  const trunkRaw = Number(cp?.trunkHeight);
+  const branchRaw = Number(cp?.branchDrop);
+  return {
+    trunkHeight: Number.isFinite(trunkRaw) ? trunkRaw : 2400,
+    branchDrop: Number.isFinite(branchRaw) ? branchRaw : 800,
+  };
+}
+
+function renderConnectionPointHeights(sceneModel) {
+  const points = sceneModel && Array.isArray(sceneModel.connectionPoints) ? sceneModel.connectionPoints : [];
+  if (!Array.isArray(points) || !points.length) return [];
+  return points.map((cp) => getConnectionPointHeightProfile(cp));
 }
 
 function handleAddDeviceToConnectionPoint(cpIndex) {
@@ -1775,6 +1806,8 @@ window.handleAddDeviceToConnectionPoint = handleAddDeviceToConnectionPoint;
 window.moveConnectionPoint = moveConnectionPoint;
 window.renderConnectionPointBranches = renderConnectionPointBranches;
 window.renderConnectionPointRoute = renderConnectionPointRoute;
+window.getConnectionPointHeightProfile = getConnectionPointHeightProfile;
+window.renderConnectionPointHeights = renderConnectionPointHeights;
 
 initPlayground();
 setupCircuitListAutoRender();
