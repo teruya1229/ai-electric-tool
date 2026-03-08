@@ -2138,6 +2138,116 @@ function renderSleeveMaterialSummary(sceneModel) {
   });
 }
 
+function aggregateJunctionBoxMaterials(sceneModel) {
+  let model = sceneModel;
+  if (!model || typeof model !== "object") {
+    if (connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object") {
+      model = connectionPointsEditorSceneModel;
+    } else {
+      model = {};
+    }
+  }
+
+  const connectionPoints = Array.isArray(model?.connectionPoints) ? model.connectionPoints : [];
+  if (!connectionPoints.length) return {};
+
+  const resolveConnectionCount = (point) => {
+    const numericCandidates = [
+      point?.branchCount,
+      point?.connectionCount,
+      point?.connectedCount,
+      point?.wireCount,
+      point?.totalConnections,
+      point?.degree,
+      point?.fanOut,
+    ];
+    for (let i = 0; i < numericCandidates.length; i += 1) {
+      const value = Number(numericCandidates[i]);
+      if (Number.isFinite(value) && value >= 0) return value;
+    }
+
+    const arrayCandidates = [
+      point?.connections,
+      point?.connectedPoints,
+      point?.connectedDevices,
+      point?.devices,
+      point?.branches,
+      point?.branchPoints,
+      point?.wires,
+      point?.terminals,
+    ];
+    for (let i = 0; i < arrayCandidates.length; i += 1) {
+      if (Array.isArray(arrayCandidates[i])) return arrayCandidates[i].length;
+    }
+
+    const objectCandidates = [point?.connections, point?.adjacent, point?.links];
+    for (let i = 0; i < objectCandidates.length; i += 1) {
+      const candidate = objectCandidates[i];
+      if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+        const keys = Object.keys(candidate);
+        if (keys.length) return keys.length;
+      }
+    }
+
+    return null;
+  };
+
+  const resolveBoxLabel = (connectionCount) => {
+    if (!Number.isFinite(connectionCount)) return null;
+    if (connectionCount <= 3) return "小BOX";
+    if (connectionCount <= 5) return "中BOX";
+    return "大BOX";
+  };
+
+  const counts = {
+    小BOX: 0,
+    中BOX: 0,
+    大BOX: 0,
+  };
+
+  connectionPoints.forEach((point) => {
+    const connectionCount = resolveConnectionCount(point);
+    if (!Number.isFinite(connectionCount) || connectionCount < 2) return;
+    const boxLabel = resolveBoxLabel(connectionCount);
+    if (!boxLabel) return;
+    counts[boxLabel] += 1;
+  });
+
+  const compact = {};
+  if (counts["小BOX"] > 0) compact["小BOX"] = counts["小BOX"];
+  if (counts["中BOX"] > 0) compact["中BOX"] = counts["中BOX"];
+  if (counts["大BOX"] > 0) compact["大BOX"] = counts["大BOX"];
+  return compact;
+}
+
+function renderJunctionBoxMaterialSummary(sceneModel) {
+  const panel = document.getElementById("junction-box-material-summary");
+  if (!panel) return;
+
+  const summary = aggregateJunctionBoxMaterials(sceneModel);
+  const rows = Object.entries(summary || {});
+  panel.innerHTML = "";
+  if (!rows.length) {
+    panel.textContent = "ジョイントBOX材料データなし";
+    return;
+  }
+
+  const card = document.createElement("div");
+  card.setAttribute("style", "padding:10px;border:1px solid #ddd;border-radius:8px;");
+  rows.forEach(([name, qty]) => {
+    const row = document.createElement("div");
+    row.setAttribute("style", "display:flex;justify-content:space-between;gap:8px;");
+    const left = document.createElement("span");
+    left.textContent = name;
+    const right = document.createElement("strong");
+    right.textContent = String(qty);
+    row.appendChild(left);
+    row.appendChild(right);
+    card.appendChild(row);
+  });
+  panel.appendChild(card);
+}
+
 function aggregateDeviceMaterials(sceneModel) {
   let model = sceneModel;
   if (!model || typeof model !== "object") {
@@ -2368,6 +2478,7 @@ function renderConnectionPointRoute(sceneModel) {
     renderCircuitCableLengthSummary(sceneModel);
     renderSleeveMaterialSummary(sceneModel);
     renderDeviceMaterialSummary(sceneModel);
+    renderJunctionBoxMaterialSummary(sceneModel);
     return;
   }
 
@@ -2407,6 +2518,11 @@ function renderConnectionPointRoute(sceneModel) {
         : { connectionPoints }
     );
     renderDeviceMaterialSummary(
+      connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object"
+        ? connectionPointsEditorSceneModel
+        : { connectionPoints }
+    );
+    renderJunctionBoxMaterialSummary(
       connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object"
         ? connectionPointsEditorSceneModel
         : { connectionPoints }
@@ -2469,6 +2585,7 @@ function renderConnectionPointRoute(sceneModel) {
     renderCircuitCableLengthSummary(routeModel);
     renderSleeveMaterialSummary(routeModel);
     renderDeviceMaterialSummary(routeModel);
+    renderJunctionBoxMaterialSummary(routeModel);
     return;
   }
 
@@ -2508,6 +2625,7 @@ function renderConnectionPointRoute(sceneModel) {
   renderCircuitCableLengthSummary(routeModel);
   renderSleeveMaterialSummary(routeModel);
   renderDeviceMaterialSummary(routeModel);
+  renderJunctionBoxMaterialSummary(routeModel);
 }
 
 function setupCircuitListAutoRender() {
@@ -2577,6 +2695,8 @@ window.aggregateSleeveMaterials = aggregateSleeveMaterials;
 window.renderSleeveMaterialSummary = renderSleeveMaterialSummary;
 window.aggregateDeviceMaterials = aggregateDeviceMaterials;
 window.renderDeviceMaterialSummary = renderDeviceMaterialSummary;
+window.aggregateJunctionBoxMaterials = aggregateJunctionBoxMaterials;
+window.renderJunctionBoxMaterialSummary = renderJunctionBoxMaterialSummary;
 window.getConnectionPointRouteSegments = getConnectionPointRouteSegments;
 window.handleEditConnectionPointSegment = handleEditConnectionPointSegment;
 window.renderConnectionPointSegmentEditor = renderConnectionPointSegmentEditor;
