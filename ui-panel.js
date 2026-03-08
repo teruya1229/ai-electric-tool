@@ -29,7 +29,7 @@ const CONDITIONS = {
     {
       id: "single_2lights_same",
       label: "2灯同時",
-      sub: "スイッチ1個・照明2個（同時ON/OFF）",
+      sub: "スイッチ1個・照明2個（同時入/切）",
       diagramArgs: { type: "single_2lights_same" },
     },
     {
