@@ -180,3 +180,78 @@ branchDrop
 余長
 
 で配線長さを概算する。
+
+---
+
+# 次の開発
+
+## 目的
+
+回路ごとの材料長さを表示する
+
+現在は全体の材料長さ概算のみ表示されているため
+
+回路別に
+
+どの材料が何m必要か
+
+を確認できるようにする
+
+--------------------------------
+
+## 実装
+
+既存の
+
+aggregateCableLengthsByMaterial()
+
+のロジックをベースに
+
+回路単位の材料長さ集計を追加する
+
+--------------------------------
+
+## UI
+
+回路ごとの材料長さ表示
+
+例
+
+回路1
+
+VVF1.6-2C 6.4m  
+VVF1.6-3C 3.2m  
+
+回路2
+
+VVF1.6-2C 4.1m  
+VVF2.0-2C 2.6m  
+
+--------------------------------
+
+## 重要
+
+エンジン構造は変更しない
+
+parser
+groups
+circuits
+graph
+layout
+wirePaths
+
+--------------------------------
+
+## 次のCursor作業
+
+wiring-diagram.js に
+
+回路別材料長さ集計
+
+を追加
+
+新規関数
+
+aggregateCableLengthsByCircuit(sceneModel)
+
+renderCircuitCableLengthSummary(sceneModel)
