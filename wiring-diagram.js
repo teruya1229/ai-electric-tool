@@ -1708,6 +1708,110 @@ function estimateConnectionPointWireLength(sceneModel) {
   return { trunkSegments, branchSegments };
 }
 
+function getConnectionPointRouteSegments(sceneModel) {
+  const connectionPoints = sceneModel && Array.isArray(sceneModel.connectionPoints) ? sceneModel.connectionPoints : [];
+  if (!Array.isArray(connectionPoints) || !connectionPoints.length) return [];
+
+  const toCpLabel = (point, fallbackIndex) => {
+    const pointId = String(point?.id || "");
+    const hit = pointId.match(/(\d+)(?!.*\d)/);
+    return hit ? `CP${hit[1]}` : `CP${fallbackIndex + 1}`;
+  };
+
+  const segments = [];
+  const panelSpanRaw = Number(connectionPoints[0]?.horizontalSpanFromPanel);
+  segments.push({
+    index: 0,
+    type: "from_panel",
+    fromLabel: "分電盤",
+    toLabel: toCpLabel(connectionPoints[0], 0),
+    horizontalSpan: Number.isFinite(panelSpanRaw) && panelSpanRaw > 0 ? panelSpanRaw : 2000,
+  });
+
+  for (let i = 0; i < connectionPoints.length - 1; i += 1) {
+    const spanRaw = Number(connectionPoints[i]?.horizontalSpanToNext);
+    segments.push({
+      index: i + 1,
+      type: "between_cp",
+      fromIndex: i,
+      toIndex: i + 1,
+      fromLabel: toCpLabel(connectionPoints[i], i),
+      toLabel: toCpLabel(connectionPoints[i + 1], i + 1),
+      horizontalSpan: Number.isFinite(spanRaw) && spanRaw > 0 ? spanRaw : 2000,
+    });
+  }
+  return segments;
+}
+
+function handleEditConnectionPointSegment(index) {
+  const model = connectionPointsEditorSceneModel;
+  if (!model || !Array.isArray(model.connectionPoints)) return;
+  const points = model.connectionPoints;
+  if (!Number.isInteger(index) || index < 0) return;
+
+  const segments = getConnectionPointRouteSegments(model);
+  const segment = segments.find((item) => item.index === index);
+  if (!segment || !points.length) return;
+
+  const input = prompt("horizontalSpan(mm)を入力してください", String(segment.horizontalSpan));
+  const value = Number(typeof input === "string" ? input.trim() : "");
+  if (!Number.isFinite(value) || value <= 0) return;
+
+  if (segment.type === "from_panel") {
+    points[0].horizontalSpanFromPanel = value;
+  } else if (Number.isInteger(segment.fromIndex) && segment.fromIndex >= 0 && segment.fromIndex < points.length) {
+    points[segment.fromIndex].horizontalSpanToNext = value;
+  } else {
+    return;
+  }
+
+  renderConnectionPointRoute(model);
+  renderConnectionPointsEditor(model);
+}
+
+function renderConnectionPointSegmentEditor(sceneModel) {
+  const segments = getConnectionPointRouteSegments(sceneModel);
+  const block = document.createElement("div");
+  block.className = "cp-segment-editor";
+  block.setAttribute("style", "padding:10px;margin-top:8px;border:1px solid #ddd;border-radius:8px;");
+
+  const title = document.createElement("div");
+  title.textContent = "幹線区間距離";
+  block.appendChild(title);
+
+  if (!segments.length) {
+    const empty = document.createElement("div");
+    empty.textContent = "区間なし";
+    block.appendChild(empty);
+    return block;
+  }
+
+  segments.forEach((segment) => {
+    const row = document.createElement("div");
+    row.setAttribute("style", "margin-top:8px;");
+
+    const path = document.createElement("div");
+    path.textContent = `${segment.fromLabel} → ${segment.toLabel}`;
+    row.appendChild(path);
+
+    const span = document.createElement("div");
+    span.textContent = `horizontalSpan: ${segment.horizontalSpan}mm`;
+    row.appendChild(span);
+
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.textContent = "編集";
+    editButton.addEventListener("click", () => {
+      handleEditConnectionPointSegment(segment.index);
+    });
+    row.appendChild(editButton);
+
+    block.appendChild(row);
+  });
+
+  return block;
+}
+
 function renderConnectionPointRoute(sceneModel) {
   const panel = document.getElementById("connection-point-route");
   if (!panel) return;
@@ -1812,6 +1916,7 @@ function renderConnectionPointRoute(sceneModel) {
   }
 
   panel.appendChild(estimateBlock);
+  panel.appendChild(renderConnectionPointSegmentEditor({ connectionPoints }));
 }
 
 function setupCircuitListAutoRender() {
@@ -1866,6 +1971,9 @@ window.handleAddDeviceToConnectionPoint = handleAddDeviceToConnectionPoint;
 window.moveConnectionPoint = moveConnectionPoint;
 window.renderConnectionPointBranches = renderConnectionPointBranches;
 window.estimateConnectionPointWireLength = estimateConnectionPointWireLength;
+window.getConnectionPointRouteSegments = getConnectionPointRouteSegments;
+window.handleEditConnectionPointSegment = handleEditConnectionPointSegment;
+window.renderConnectionPointSegmentEditor = renderConnectionPointSegmentEditor;
 window.renderConnectionPointRoute = renderConnectionPointRoute;
 window.getConnectionPointHeightProfile = getConnectionPointHeightProfile;
 window.renderConnectionPointHeights = renderConnectionPointHeights;
