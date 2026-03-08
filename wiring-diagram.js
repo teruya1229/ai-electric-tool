@@ -369,7 +369,7 @@ function renderLayoutDebug(sceneModel) {
 
   const layouts = createDiagramLayoutsFromGraphs(graphs);
   if (!layouts.length) {
-    panel.textContent = "layoutなし";
+    panel.textContent = "レイアウトなし";
     return;
   }
 
@@ -377,11 +377,11 @@ function renderLayoutDebug(sceneModel) {
     const card = document.createElement("article");
     card.className = "layout-debug-item";
 
-    const lines = [`回路${layout?.circuitId || "-"} layout`, "", "nodes"];
+    const lines = [`回路${layout?.circuitId || "-"} レイアウト`, "", "ノード"];
     (layout?.nodes || []).forEach((node) => {
       lines.push(`${node.id} (${node.x},${node.y})`);
     });
-    lines.push("", "edges");
+    lines.push("", "接続線");
     (layout?.edges || []).forEach((edge) => {
       lines.push(`${edge.from} -> ${edge.to} (${edge.role || "-"})`);
     });
@@ -1210,7 +1210,7 @@ function renderWirePathDebug(sceneModel) {
   const graphs = createCircuitGraphFromCircuits(circuits);
   const layouts = createDiagramLayoutsFromGraphs(graphs);
   if (!layouts.length) {
-    panel.textContent = "layoutなし";
+    panel.textContent = "レイアウトなし";
     return;
   }
 
@@ -1221,7 +1221,7 @@ function renderWirePathDebug(sceneModel) {
   renderOptimizedWireLengthSummary(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) {
-    panel.textContent = "wireなし";
+    panel.textContent = "配線なし";
     return;
   }
 
@@ -1233,7 +1233,7 @@ function renderWirePathDebug(sceneModel) {
 
     const title = document.createElement("div");
     title.className = "circuit-item-title";
-    title.textContent = `回路${wirePath?.circuitId ?? "-"} wire path`;
+    title.textContent = `回路${wirePath?.circuitId ?? "-"} 配線経路`;
     card.appendChild(title);
 
     const svg = document.createElementNS(NS, "svg");
@@ -1292,7 +1292,7 @@ function renderAiDiagramPreview(sceneModel) {
   const graphs = createCircuitGraphFromCircuits(circuits);
   const layouts = createDiagramLayoutsFromGraphs(graphs);
   if (!layouts.length) {
-    panel.textContent = "layoutなし";
+    panel.textContent = "レイアウトなし";
     return;
   }
 
@@ -1303,7 +1303,7 @@ function renderAiDiagramPreview(sceneModel) {
   renderOptimizedWireLengthSummary(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) {
-    panel.textContent = "wireなし";
+    panel.textContent = "配線なし";
     return;
   }
 
@@ -1315,7 +1315,7 @@ function renderAiDiagramPreview(sceneModel) {
 
     const title = document.createElement("div");
     title.className = "circuit-item-title";
-    title.textContent = `回路${layout?.circuitId ?? "-"} AI preview`;
+    title.textContent = `回路${layout?.circuitId ?? "-"} 複線図プレビュー`;
     card.appendChild(title);
 
     const svg = document.createElementNS(NS, "svg");
@@ -1405,7 +1405,7 @@ function renderAiDiagramEnhanced(sceneModel) {
 
     const title = document.createElement("div");
     title.className = "circuit-item-title";
-    title.textContent = `回路${layout?.circuitId ?? "-"} AI enhanced`;
+    title.textContent = `回路${layout?.circuitId ?? "-"} 複線図拡張表示`;
     card.appendChild(title);
 
     const svg = document.createElementNS(NS, "svg");
@@ -1609,7 +1609,7 @@ function renderAiDiagramExamStyle(sceneModel) {
 
     const title = document.createElement("div");
     title.className = "circuit-item-title";
-    title.textContent = `回路${layout?.circuitId ?? "-"} AI exam_style`;
+    title.textContent = `回路${layout?.circuitId ?? "-"} 試験式複線図`;
     if (selectedCircuit.hasSelection) {
       title.style.color = isSelectedCircuit ? "#ffffff" : "#bbbbbb";
     }
@@ -2051,7 +2051,13 @@ function renderAiDiagramExamStyle(sceneModel) {
       typeText.setAttribute("y", String(y + 3));
       typeText.setAttribute("font-size", "9");
       typeText.setAttribute("fill", "#aaaaaa");
-      typeText.textContent = nodeKind;
+      const nodeKindLabelMap = {
+        source: "電源",
+        switch: "スイッチ",
+        light: "照明",
+        outlet: "コンセント",
+      };
+      typeText.textContent = nodeKindLabelMap[nodeKind] || "照明";
       svg.appendChild(typeText);
 
       const deviceLabelMap = {
@@ -2073,10 +2079,10 @@ function renderAiDiagramExamStyle(sceneModel) {
     });
 
     const legend = [
-      { key: "line", color: "#f5c842", label: "line" },
-      { key: "neutral", color: "#4aa3ff", label: "neutral" },
-      { key: "switch_return", color: "#ff6b6b", label: "switch_return" },
-      { key: "traveler", color: "#9b59b6", label: "traveler" },
+      { key: "line", color: "#f5c842", label: "非接地線" },
+      { key: "neutral", color: "#4aa3ff", label: "接地側電線" },
+      { key: "switch_return", color: "#ff6b6b", label: "スイッチ返り線" },
+      { key: "traveler", color: "#9b59b6", label: "3路渡り線" },
     ];
     legend.forEach((item, idx) => {
       const baseX = 20 + idx * 165;
@@ -2186,8 +2192,8 @@ function ensureAiDiagramModeSwitcher() {
 
   const examBtn = createModeButton("exam_style", "試験式複線図");
   if (aiDiagramDeveloperMode) {
-    createModeButton("preview", "Preview");
-    createModeButton("enhanced", "Enhanced");
+    createModeButton("preview", "プレビュー");
+    createModeButton("enhanced", "拡張表示");
   }
 
   const developerBtn = document.createElement("button");
@@ -2226,7 +2232,7 @@ function ensureAiDiagramModeSwitcher() {
   const helper = document.createElement("div");
   helper.setAttribute("style", "font-size:11px;color:#aeb4bb;margin-top:2px;");
   if (aiDiagramDeveloperMode) {
-    helper.textContent = `開発者表示: mode=${aiDiagramPreviewMode} / circuits=${aiDiagramRenderState.circuits} / layouts=${aiDiagramRenderState.layouts}`;
+    helper.textContent = `開発者表示: モード=${aiDiagramPreviewMode} / 回路数=${aiDiagramRenderState.circuits} / レイアウト数=${aiDiagramRenderState.layouts}`;
   } else {
     helper.textContent = "試験式複線図を表示中";
   }

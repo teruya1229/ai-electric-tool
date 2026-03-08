@@ -124,6 +124,13 @@ function uiBack() {
   if (UI.step > 1) _goStep(UI.step - 1);
 }
 
+function uiToggleDetails() {
+  const body = document.body;
+  if (!body) return;
+  body.classList.toggle("show-details");
+  _updateDetailToggleButton();
+}
+
 function uiGenerate() {
   if (!UI.circuit || !UI.condition || !UI.mode) return;
   _syncGroupEditorFromUiState();
@@ -364,6 +371,13 @@ function _buildSummary() {
   `;
 }
 
+function _updateDetailToggleButton() {
+  const btn = document.getElementById("ui-toggle-details-btn");
+  if (!(btn instanceof HTMLElement)) return;
+  const expanded = document.body.classList.contains("show-details") || document.body.classList.contains("dev-mode");
+  btn.textContent = expanded ? "詳細を隠す" : "詳細を表示";
+}
+
 function _clickIfExists(selector) {
   const el = document.querySelector(selector);
   if (el instanceof HTMLElement) el.click();
@@ -477,10 +491,12 @@ function _initUiPanel() {
     panel.style.transform = "translateY(0)";
     panel.style.transition = "none";
   }
+  document.body.classList.remove("show-details");
   if (window.__WIRING_DEBUG__ === true) {
     document.body.classList.add("dev-mode");
   }
   _syncGroupEditorFromUiState();
+  _updateDetailToggleButton();
   _updateStepIndicator();
   _updateBackBtn();
 }
@@ -488,4 +504,5 @@ function _initUiPanel() {
 window.uiSelect = uiSelect;
 window.uiBack = uiBack;
 window.uiGenerate = uiGenerate;
+window.uiToggleDetails = uiToggleDetails;
 window.addEventListener("DOMContentLoaded", _initUiPanel);

@@ -65,6 +65,23 @@
         display: block;
       }
 
+      .detail-only {
+        display: none;
+      }
+
+      body.show-details .detail-only,
+      body.dev-mode .detail-only {
+        display: block;
+      }
+
+      .legacy-control-card {
+        display: none;
+      }
+
+      body.dev-mode .legacy-control-card {
+        display: block;
+      }
+
       @media (max-width: 768px) {
         .container {
           max-width: 100%;
@@ -152,9 +169,6 @@
           box-sizing: border-box;
         }
 
-        .legacy-control-card {
-          display: none;
-        }
       }
     </style>
   </head>
@@ -310,53 +324,49 @@
             </article>
 
             <article class="result-card">
-              <h3>接続点一覧</h3>
-              <div id="connection-point-route" class="result-output">未生成</div>
-            </article>
-
-            <article class="result-card">
-              <h3>回路一覧</h3>
-              <div id="circuit-list-result" class="result-output"></div>
-            </article>
-
-            <article class="result-card">
               <h3>材料一覧</h3>
               <div id="material-list-result" class="result-output"></div>
             </article>
 
             <article class="result-card">
+              <h3>配線長さ</h3>
+              <div id="cable-length-summary" class="result-output">未生成</div>
+              <div id="optimized-wire-length-summary" class="result-output">未生成</div>
+            </article>
+
+            <article class="result-card detail-only">
+              <h3>接続点一覧</h3>
+              <div id="connection-point-route" class="result-output">未生成</div>
+            </article>
+
+            <article class="result-card detail-only">
+              <h3>回路一覧</h3>
+              <div id="circuit-list-result" class="result-output"></div>
+            </article>
+
+            <article class="result-card detail-only">
               <h3>回路別材料一覧</h3>
               <div id="circuit-material-list-result" class="result-output"></div>
             </article>
 
-            <article class="result-card">
-              <h3>配線材料長さ概算</h3>
-              <div id="cable-length-summary" class="result-output">未生成</div>
-            </article>
-
-            <article class="result-card">
+            <article class="result-card detail-only">
               <h3>回路別配線材料長さ</h3>
               <div id="circuit-cable-length-summary" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card">
+            <article class="result-card detail-only">
               <h3>スリーブ材料</h3>
               <div id="sleeve-material-summary" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card">
+            <article class="result-card detail-only">
               <h3>器具材料</h3>
               <div id="device-material-summary" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card">
+            <article class="result-card detail-only">
               <h3>ジョイントBOX材料</h3>
               <div id="junction-box-material-summary" class="result-output">未生成</div>
-            </article>
-
-            <article class="result-card">
-              <h3>配線長さ精度アップ結果</h3>
-              <div id="optimized-wire-length-summary" class="result-output">未生成</div>
             </article>
 
             <article class="result-card dev-only">
@@ -463,6 +473,9 @@
       <div class="ui-screen" id="ui-screen-4" style="display:none">
         <p class="ui-screen-title">④ 確認して生成</p>
         <div id="ui-summary"></div>
+        <button id="ui-toggle-details-btn" type="button" class="ui-generate-btn" onclick="uiToggleDetails()" style="margin-top:8px;background:#2f3b4f;">
+          詳細を表示
+        </button>
         <button class="ui-generate-btn" onclick="uiGenerate()">
           ⚡ 複線図を生成する
         </button>
