@@ -1,92 +1,66 @@
-# AI電気施工アシスタント  
-## Architecture
+# Project Architecture
 
-本プロジェクトは以下の3層構造で設計されています。
+本プロジェクトは以下の3層構造で設計されている。
 
-UI Layer  
-Engine Layer  
+UI Layer
+Engine Layer
 Render Layer
 
 --------------------------------
 
 UI Layer
 
-ユーザー操作を処理する。
+対象
 
-対象ファイル
-
-index.js  
-ui-panel.js  
+index.js
+ui-panel.js
 wiring-diagram.html
 
 役割
 
-・入力処理  
-・グループ管理  
-・UI更新  
+ユーザー入力
+UI更新
 
 --------------------------------
 
 Engine Layer
 
-回路ロジックを処理する。
-
 対象
 
-parser  
-groups  
-circuits  
-connectionPoints  
-graph  
+parser
+groups
+circuits
+connectionPoints
+graph
 
 役割
 
-・回路生成  
-・接続解析  
-・ノード構築  
+回路生成ロジック
 
-重要
-
-この層は
+rules.md により
 
 原則変更禁止
-
-AIはUI修正時にこの層を変更してはいけない。
 
 --------------------------------
 
 Render Layer
 
-図面描画。
-
 対象
 
-layout  
-wirePaths  
-SVG  
+layout
+wirePaths
+SVG
 
 役割
 
-・配線レイアウト  
-・SVG生成  
-
---------------------------------
-
-AI編集ルール
-
-1 UI変更時はUI Layerのみ変更する  
-2 Engine Layerは原則変更禁止  
-3 Render Layerはレイアウト修正のみ許可  
-4 変更は必ず1ファイル単位  
-5 最小差分で実装  
+配線レイアウト
+図面描画
 
 --------------------------------
 
 テスト
 
-ファイル作成のみ
-
-既存コード変更なし
+新規ドキュメント追加のみ
 
 --------------------------------
 
@@ -96,14 +70,12 @@ AI編集ルール
 
 本日やったこと
 
-・3路回路修正
-・材料生成修正
-・architecture.md 追加
+・Engine Layer 保護ルール追加
+・アーキテクチャ定義
 
 現在の状態
 
 ・複線図生成正常
-・材料表示正常
 
 次回やること
 
