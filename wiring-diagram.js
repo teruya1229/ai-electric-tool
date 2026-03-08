@@ -1552,6 +1552,7 @@ function renderConnectionPointsEditor(sceneModel) {
   };
 
   const heightProfiles = renderConnectionPointHeights(sceneModel);
+  const deviceHeightsByPoint = renderConnectionPointDeviceHeights(sceneModel);
 
   connectionPoints.forEach((point, index) => {
     const card = document.createElement("div");
@@ -1588,7 +1589,26 @@ function renderConnectionPointsEditor(sceneModel) {
     const list = document.createElement("ul");
     sourceDevices.forEach((device, deviceIndex) => {
       const li = document.createElement("li");
-      li.textContent = toDeviceLabel(device, deviceIndex);
+      const deviceLabel = toDeviceLabel(device, deviceIndex);
+      li.textContent = deviceLabel;
+
+      const deviceHeightWrap = document.createElement("div");
+      const pointDeviceHeights = Array.isArray(deviceHeightsByPoint[index]) ? deviceHeightsByPoint[index] : [];
+      const height = Number.isFinite(Number(pointDeviceHeights[deviceIndex]))
+        ? Number(pointDeviceHeights[deviceIndex])
+        : getDefaultDeviceHeight(deviceLabel);
+      deviceHeightWrap.textContent = `高さ: ${height}mm`;
+      deviceHeightWrap.appendChild(document.createTextNode(" "));
+
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.textContent = "編集";
+      editButton.addEventListener("click", () => {
+        handleEditDeviceHeight(index, deviceIndex);
+      });
+      deviceHeightWrap.appendChild(editButton);
+
+      li.appendChild(deviceHeightWrap);
       list.appendChild(li);
     });
     card.appendChild(list);
@@ -1615,10 +1635,35 @@ function getConnectionPointHeightProfile(cp) {
   };
 }
 
+function getDefaultDeviceHeight(deviceName) {
+  const name = String(deviceName || "").toUpperCase();
+  if (name.includes("LIGHT")) return 2400;
+  if (name.includes("SW")) return 1200;
+  if (name.includes("OUTLET")) return 300;
+  return 1200;
+}
+
 function renderConnectionPointHeights(sceneModel) {
   const points = sceneModel && Array.isArray(sceneModel.connectionPoints) ? sceneModel.connectionPoints : [];
   if (!Array.isArray(points) || !points.length) return [];
   return points.map((cp) => getConnectionPointHeightProfile(cp));
+}
+
+function renderConnectionPointDeviceHeights(sceneModel) {
+  const points = sceneModel && Array.isArray(sceneModel.connectionPoints) ? sceneModel.connectionPoints : [];
+  if (!Array.isArray(points) || !points.length) return [];
+  return points.map((cp) => {
+    const devices = Array.isArray(cp?.devices) ? cp.devices : [];
+    const heightStore = cp && (Array.isArray(cp.deviceHeights) || typeof cp.deviceHeights === "object") ? cp.deviceHeights : [];
+    return devices.map((device, index) => {
+      const label =
+        typeof device === "string"
+          ? device
+          : String(device?.deviceId || device?.id || device?.name || device?.type || device?.deviceType || `DEVICE${index + 1}`);
+      const saved = Number(heightStore?.[index]);
+      return Number.isFinite(saved) && saved > 0 ? saved : getDefaultDeviceHeight(label);
+    });
+  });
 }
 
 function handleAddDeviceToConnectionPoint(cpIndex) {
@@ -1634,6 +1679,36 @@ function handleAddDeviceToConnectionPoint(cpIndex) {
   if (!Array.isArray(point.devices)) point.devices = [];
   point.devices.push(deviceName);
   renderConnectionPointsEditor(model);
+}
+
+function handleEditDeviceHeight(cpIndex, deviceIndex) {
+  const model = connectionPointsEditorSceneModel;
+  if (!model || !Array.isArray(model.connectionPoints)) return;
+  const point = model.connectionPoints[cpIndex];
+  if (!point) return;
+
+  const devices = Array.isArray(point.devices) ? point.devices : [];
+  const target = devices[deviceIndex];
+  if (typeof target === "undefined") return;
+
+  const label =
+    typeof target === "string"
+      ? target
+      : String(target?.deviceId || target?.id || target?.name || target?.type || target?.deviceType || "");
+  const fallbackHeight = getDefaultDeviceHeight(label);
+
+  if (!Array.isArray(point.deviceHeights) && typeof point.deviceHeights !== "object") {
+    point.deviceHeights = [];
+  }
+  const currentRaw = Number(point.deviceHeights?.[deviceIndex]);
+  const current = Number.isFinite(currentRaw) && currentRaw > 0 ? currentRaw : fallbackHeight;
+  const input = prompt("器具高さ(mm)を入力してください", String(current));
+  const value = Number(typeof input === "string" ? input.trim() : "");
+  if (!Number.isFinite(value) || value <= 0) return;
+
+  point.deviceHeights[deviceIndex] = value;
+  renderConnectionPointsEditor(model);
+  renderConnectionPointRoute(model);
 }
 
 function moveConnectionPoint(index, direction) {
@@ -1692,17 +1767,6 @@ function estimateConnectionPointWireLength(sceneModel) {
     const hit = pointId.match(/(\d+)(?!.*\d)/);
     return hit ? `CP${hit[1]}` : `CP${fallbackIndex + 1}`;
   };
-  const detectDeviceHeight = (device) => {
-    const label =
-      typeof device === "string"
-        ? device
-        : String(device?.deviceId || device?.id || device?.name || device?.type || device?.deviceType || "");
-    const upper = label.toUpperCase();
-    if (upper.includes("LIGHT")) return 2400;
-    if (upper.includes("SW")) return 1200;
-    if (upper.includes("OUTLET")) return 300;
-    return 1200;
-  };
   const toDeviceLabel = (device, fallbackIndex) => {
     if (typeof device === "string") return device;
     const raw = String(device?.deviceId || device?.id || device?.name || device?.type || device?.deviceType || "");
@@ -1715,13 +1779,16 @@ function estimateConnectionPointWireLength(sceneModel) {
     const current = getConnectionPointHeightProfile(point);
     const cpLabel = toCpLabel(point, index);
     const devices = Array.isArray(point?.devices) ? point.devices : [];
+    const heightStore = point && (Array.isArray(point.deviceHeights) || typeof point.deviceHeights === "object") ? point.deviceHeights : [];
     devices.forEach((device, deviceIndex) => {
-      const deviceHeight = detectDeviceHeight(device);
+      const deviceLabel = toDeviceLabel(device, deviceIndex);
+      const saved = Number(heightStore?.[deviceIndex]);
+      const deviceHeight = Number.isFinite(saved) && saved > 0 ? saved : getDefaultDeviceHeight(deviceLabel);
       const lengthMm = Math.max(0, current.trunkHeight - deviceHeight) + 300;
       branchSegments.push({
         cpIndex: index,
         cpLabel,
-        deviceLabel: toDeviceLabel(device, deviceIndex),
+        deviceLabel,
         lengthMm,
       });
     });
@@ -2003,6 +2070,7 @@ window.renderAiDiagramExamStyle = renderAiDiagramExamStyle;
 window.renderAiDiagramByMode = renderAiDiagramByMode;
 window.renderConnectionPointsEditor = renderConnectionPointsEditor;
 window.handleAddDeviceToConnectionPoint = handleAddDeviceToConnectionPoint;
+window.handleEditDeviceHeight = handleEditDeviceHeight;
 window.moveConnectionPoint = moveConnectionPoint;
 window.renderConnectionPointBranches = renderConnectionPointBranches;
 window.estimateConnectionPointWireLength = estimateConnectionPointWireLength;
@@ -2012,6 +2080,8 @@ window.renderConnectionPointSegmentEditor = renderConnectionPointSegmentEditor;
 window.renderConnectionPointRoute = renderConnectionPointRoute;
 window.getConnectionPointHeightProfile = getConnectionPointHeightProfile;
 window.renderConnectionPointHeights = renderConnectionPointHeights;
+window.getDefaultDeviceHeight = getDefaultDeviceHeight;
+window.renderConnectionPointDeviceHeights = renderConnectionPointDeviceHeights;
 
 initPlayground();
 setupCircuitListAutoRender();
