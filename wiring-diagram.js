@@ -590,14 +590,208 @@ function buildAlternateOrthogonalPath(path) {
   return original;
 }
 
-function reduceWirePathIntersections(sceneModel, wirePaths) {
-  const hasConnectionConstraints =
-    !!sceneModel &&
-    typeof sceneModel === "object" &&
-    Array.isArray(sceneModel.connectionPoints) &&
-    sceneModel.connectionPoints.length >= 0;
-  void hasConnectionConstraints;
+function extractConnectionPointConstraints(sceneModel) {
+  const model = sceneModel && typeof sceneModel === "object" ? sceneModel : {};
+  const connectionPoints = Array.isArray(model?.connectionPoints) ? model.connectionPoints : [];
+  const constraints = {
+    byCircuitId: {},
+    pointMap: {},
+  };
+  if (!connectionPoints.length) return constraints;
 
+  const normalizeCircuitId = (value) => {
+    if (value === null || typeof value === "undefined") return null;
+    return String(value);
+  };
+  const readPointId = (point, index) => {
+    const raw = point?.id ?? point?.pointId ?? point?.connectionPointId;
+    if (raw !== null && typeof raw !== "undefined" && String(raw).trim()) return String(raw);
+    return `cp-${index}`;
+  };
+  const readPointPosition = (point) => {
+    const x = Number(point?.x);
+    const y = Number(point?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  };
+  const readDeviceTypes = (point) => {
+    const devices = Array.isArray(point?.devices)
+      ? point.devices
+      : Array.isArray(point?.connectedDevices)
+        ? point.connectedDevices
+        : [];
+    return devices
+      .map((device) => {
+        if (typeof device === "string") return null;
+        return device?.deviceType || device?.type || null;
+      })
+      .filter(Boolean);
+  };
+
+  connectionPoints.forEach((point, index) => {
+    const pointId = readPointId(point, index);
+    const circuitKey = normalizeCircuitId(point?.circuitId);
+    const pointInfo = {
+      pointId,
+      circuitId: point?.circuitId ?? null,
+      position: readPointPosition(point),
+      connectedPointIds: Array.isArray(point?.connections)
+        ? point.connections
+            .map((item) => {
+              if (typeof item === "string" || typeof item === "number") return String(item);
+              if (item && typeof item === "object") {
+                const hit = item.id ?? item.pointId ?? item.connectionPointId;
+                return typeof hit !== "undefined" && hit !== null ? String(hit) : null;
+              }
+              return null;
+            })
+            .filter(Boolean)
+        : [],
+      deviceTypes: readDeviceTypes(point),
+    };
+    constraints.pointMap[pointId] = pointInfo;
+    if (!circuitKey) return;
+    if (!constraints.byCircuitId[circuitKey]) {
+      constraints.byCircuitId[circuitKey] = {
+        pointIds: [],
+        pointMap: {},
+      };
+    }
+    constraints.byCircuitId[circuitKey].pointIds.push(pointId);
+    constraints.byCircuitId[circuitKey].pointMap[pointId] = pointInfo;
+  });
+
+  return constraints;
+}
+
+function evaluateWirePathConstraints(sceneModel, wirePath, constraints) {
+  const model = sceneModel && typeof sceneModel === "object" ? sceneModel : {};
+  void model;
+  const target = wirePath && typeof wirePath === "object" ? wirePath : {};
+  const safeConstraints =
+    constraints && typeof constraints === "object"
+      ? constraints
+      : extractConnectionPointConstraints(sceneModel);
+  const checks = {
+    circuit: true,
+    endpoints: true,
+    connectivity: true,
+  };
+  let violationScore = 0;
+
+  const normalizedPath = Array.isArray(target?.path) ? normalizeWirePathPoints(target.path) : [];
+  const start = normalizedPath.length ? normalizedPath[0] : null;
+  const end = normalizedPath.length ? normalizedPath[normalizedPath.length - 1] : null;
+  const circuitId = target?.circuitId;
+  const circuitKey = circuitId === null || typeof circuitId === "undefined" ? null : String(circuitId);
+  const circuitConstraints = circuitKey ? safeConstraints?.byCircuitId?.[circuitKey] || null : null;
+
+  if (circuitKey && !circuitConstraints) {
+    checks.circuit = false;
+    violationScore += 1;
+  }
+
+  const getEndpointId = (value) => {
+    if (typeof value === "string" || typeof value === "number") return String(value);
+    if (value && typeof value === "object") {
+      const hit = value.id ?? value.pointId ?? value.connectionPointId ?? value.nodeId ?? value.deviceId;
+      if (hit !== null && typeof hit !== "undefined") return String(hit);
+    }
+    return null;
+  };
+  const fromId = getEndpointId(target?.from);
+  const toId = getEndpointId(target?.to);
+  const pointSet = circuitConstraints?.pointMap || {};
+
+  if (circuitConstraints && (fromId || toId)) {
+    let endpointsOk = true;
+    if (fromId && !pointSet[fromId]) {
+      endpointsOk = false;
+      violationScore += 1;
+    }
+    if (toId && !pointSet[toId]) {
+      endpointsOk = false;
+      violationScore += 1;
+    }
+    checks.endpoints = endpointsOk;
+  }
+
+  const tolerance = 600;
+  const withinTolerance = (p1, p2) => {
+    if (!p1 || !p2) return null;
+    const distance = Math.abs(Number(p1.x) - Number(p2.x)) + Math.abs(Number(p1.y) - Number(p2.y));
+    if (!Number.isFinite(distance)) return null;
+    return distance <= tolerance;
+  };
+
+  if (circuitConstraints && normalizedPath.length >= 2) {
+    let endpointPositionOk = true;
+    const fromPoint = fromId ? pointSet[fromId] : null;
+    const toPoint = toId ? pointSet[toId] : null;
+    const fromNear = withinTolerance(start, fromPoint?.position);
+    const toNear = withinTolerance(end, toPoint?.position);
+    if (fromNear === false) {
+      endpointPositionOk = false;
+      violationScore += 1;
+    }
+    if (toNear === false) {
+      endpointPositionOk = false;
+      violationScore += 1;
+    }
+    if (!endpointPositionOk) checks.endpoints = false;
+  }
+
+  if (circuitConstraints) {
+    const hasEndpointReference = !!(fromId || toId);
+    const knownPointCount = Array.isArray(circuitConstraints?.pointIds) ? circuitConstraints.pointIds.length : 0;
+    if (knownPointCount > 0 && !hasEndpointReference) {
+      checks.connectivity = false;
+      violationScore += 1;
+    }
+  }
+
+  return { violationScore, checks };
+}
+
+function evaluateWirePathsConstraintScore(sceneModel, wirePaths) {
+  if (!Array.isArray(wirePaths) || !wirePaths.length) {
+    return { totalViolationScore: 0, byIndex: [] };
+  }
+  const constraints = extractConnectionPointConstraints(sceneModel);
+  const byIndex = Array.from({ length: wirePaths.length }, () => 0);
+  let totalViolationScore = 0;
+
+  wirePaths.forEach((wirePath, index) => {
+    if (!wirePath || typeof wirePath !== "object") return;
+    const evalRoot = evaluateWirePathConstraints(sceneModel, wirePath, constraints);
+    const rootScore = Number(evalRoot?.violationScore || 0);
+    byIndex[index] += rootScore;
+    totalViolationScore += rootScore;
+
+    if (Array.isArray(wirePath.wires)) {
+      wirePath.wires.forEach((wire) => {
+        if (!wire || typeof wire !== "object") return;
+        const evalWire = evaluateWirePathConstraints(
+          sceneModel,
+          {
+            circuitId: wire?.circuitId ?? wirePath?.circuitId,
+            from: wire?.from ?? wirePath?.from,
+            to: wire?.to ?? wirePath?.to,
+            path: wire?.path,
+          },
+          constraints
+        );
+        const wireScore = Number(evalWire?.violationScore || 0);
+        byIndex[index] += wireScore;
+        totalViolationScore += wireScore;
+      });
+    }
+  });
+
+  return { totalViolationScore, byIndex };
+}
+
+function reduceWirePathIntersections(sceneModel, wirePaths) {
   if (!Array.isArray(wirePaths)) return [];
 
   const cloned = wirePaths.map((wirePath) => {
@@ -614,6 +808,8 @@ function reduceWirePathIntersections(sceneModel, wirePaths) {
   const score = scoreWirePathIntersections(cloned);
   let currentTotal = Number(score?.totalScore || 0);
   if (currentTotal <= 0) return cloned;
+  const constraintScore = evaluateWirePathsConstraintScore(sceneModel, cloned);
+  let currentViolationTotal = Number(constraintScore?.totalViolationScore || 0);
 
   const byIndex = Array.isArray(score?.byIndex) ? score.byIndex : [];
   const targetIndexes = byIndex
@@ -664,8 +860,11 @@ function reduceWirePathIntersections(sceneModel, wirePaths) {
 
       const nextScore = scoreWirePathIntersections(cloned);
       const nextTotal = Number(nextScore?.totalScore || 0);
-      if (nextTotal < currentTotal) {
+      const nextConstraintScore = evaluateWirePathsConstraintScore(sceneModel, cloned);
+      const nextViolationTotal = Number(nextConstraintScore?.totalViolationScore || 0);
+      if (nextTotal < currentTotal && nextViolationTotal <= currentViolationTotal) {
         currentTotal = nextTotal;
+        currentViolationTotal = nextViolationTotal;
         return;
       }
       swapPathAt(ownerIndex, candidate.pathType, candidate.childIndex, snapshot);
@@ -673,6 +872,94 @@ function reduceWirePathIntersections(sceneModel, wirePaths) {
   });
 
   return cloned;
+}
+
+function selectConstraintSafeWirePaths(sceneModel, wirePaths) {
+  if (!Array.isArray(wirePaths)) return [];
+  const constraints = extractConnectionPointConstraints(sceneModel);
+  if (!constraints || typeof constraints !== "object") return wirePaths;
+
+  const copied = wirePaths.map((wirePath) => {
+    if (!wirePath || typeof wirePath !== "object") return wirePath;
+    return {
+      ...wirePath,
+      path: Array.isArray(wirePath.path) ? wirePath.path.slice() : wirePath.path,
+      wires: Array.isArray(wirePath.wires)
+        ? wirePath.wires.map((wire) =>
+            wire && typeof wire === "object"
+              ? { ...wire, path: Array.isArray(wire.path) ? wire.path.slice() : wire.path }
+              : wire
+          )
+        : wirePath.wires,
+    };
+  });
+
+  const baseConstraint = evaluateWirePathsConstraintScore(sceneModel, copied);
+  let currentViolationTotal = Number(baseConstraint?.totalViolationScore || 0);
+  const baseIntersections = scoreWirePathIntersections(copied);
+  let currentIntersectionTotal = Number(baseIntersections?.totalScore || 0);
+
+  const byIndex = Array.isArray(baseConstraint?.byIndex) ? baseConstraint.byIndex : [];
+  const targetIndexes = byIndex
+    .map((value, index) => ({ index, value: Number(value || 0) }))
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .map((item) => item.index);
+
+  const swapPathAt = (ownerIndex, pathType, childIndex, nextPath) => {
+    const owner = copied[ownerIndex];
+    if (!owner || typeof owner !== "object" || !Array.isArray(nextPath)) return false;
+    if (pathType === "root") {
+      if (!Array.isArray(owner.path)) return false;
+      owner.path = nextPath;
+      return true;
+    }
+    if (pathType === "wire") {
+      if (!Array.isArray(owner.wires) || !owner.wires[childIndex] || typeof owner.wires[childIndex] !== "object") return false;
+      owner.wires[childIndex].path = nextPath;
+      return true;
+    }
+    return false;
+  };
+
+  targetIndexes.forEach((ownerIndex) => {
+    const owner = copied[ownerIndex];
+    if (!owner || typeof owner !== "object") return;
+    const candidates = [];
+    if (Array.isArray(owner.path)) {
+      candidates.push({ pathType: "root", childIndex: -1, path: owner.path });
+    }
+    if (Array.isArray(owner.wires)) {
+      owner.wires.forEach((wire, wireIndex) => {
+        if (wire && typeof wire === "object" && Array.isArray(wire.path)) {
+          candidates.push({ pathType: "wire", childIndex: wireIndex, path: wire.path });
+        }
+      });
+    }
+
+    candidates.forEach((candidate) => {
+      const originalPath = Array.isArray(candidate.path) ? candidate.path : [];
+      const alternate = buildAlternateOrthogonalPath(originalPath);
+      if (!Array.isArray(alternate) || alternate.length < 2) return;
+
+      const snapshot = Array.isArray(originalPath) ? originalPath.slice() : originalPath;
+      const swapped = swapPathAt(ownerIndex, candidate.pathType, candidate.childIndex, alternate);
+      if (!swapped) return;
+
+      const nextConstraint = evaluateWirePathsConstraintScore(sceneModel, copied);
+      const nextViolationTotal = Number(nextConstraint?.totalViolationScore || 0);
+      const nextIntersection = scoreWirePathIntersections(copied);
+      const nextIntersectionTotal = Number(nextIntersection?.totalScore || 0);
+      if (nextViolationTotal <= currentViolationTotal && nextIntersectionTotal < currentIntersectionTotal) {
+        currentViolationTotal = nextViolationTotal;
+        currentIntersectionTotal = nextIntersectionTotal;
+        return;
+      }
+      swapPathAt(ownerIndex, candidate.pathType, candidate.childIndex, snapshot);
+    });
+  });
+
+  return copied;
 }
 
 function renderWirePathDebug(sceneModel) {
@@ -704,6 +991,7 @@ function renderWirePathDebug(sceneModel) {
   let wirePaths = createWirePathsFromLayouts(layouts);
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
+  wirePaths = selectConstraintSafeWirePaths(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) {
     panel.textContent = "wireなし";
@@ -784,6 +1072,7 @@ function renderAiDiagramPreview(sceneModel) {
   let wirePaths = createWirePathsFromLayouts(layouts);
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
+  wirePaths = selectConstraintSafeWirePaths(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) {
     panel.textContent = "wireなし";
@@ -867,6 +1156,7 @@ function renderAiDiagramEnhanced(sceneModel) {
   let wirePaths = createWirePathsFromLayouts(layouts);
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
+  wirePaths = selectConstraintSafeWirePaths(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) return;
 
@@ -991,6 +1281,7 @@ function renderAiDiagramExamStyle(sceneModel) {
   let wirePaths = createWirePathsFromLayouts(layouts);
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
+  wirePaths = selectConstraintSafeWirePaths(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) return;
   const connectionPoints =
@@ -2971,6 +3262,10 @@ window.countWirePathSegmentIntersections = countWirePathSegmentIntersections;
 window.scoreWirePathIntersections = scoreWirePathIntersections;
 window.buildAlternateOrthogonalPath = buildAlternateOrthogonalPath;
 window.reduceWirePathIntersections = reduceWirePathIntersections;
+window.extractConnectionPointConstraints = extractConnectionPointConstraints;
+window.evaluateWirePathConstraints = evaluateWirePathConstraints;
+window.evaluateWirePathsConstraintScore = evaluateWirePathsConstraintScore;
+window.selectConstraintSafeWirePaths = selectConstraintSafeWirePaths;
 window.renderWirePathDebug = renderWirePathDebug;
 window.renderAiDiagramPreview = renderAiDiagramPreview;
 window.renderAiDiagramEnhanced = renderAiDiagramEnhanced;
