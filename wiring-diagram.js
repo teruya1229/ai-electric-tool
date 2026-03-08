@@ -1605,6 +1605,53 @@ function handleAddDeviceToConnectionPoint(cpIndex) {
   renderConnectionPointsEditor(model);
 }
 
+function renderConnectionPointRoute(sceneModel) {
+  const panel = document.getElementById("connection-point-route");
+  if (!panel) return;
+
+  let connectionPoints = [];
+  if (sceneModel && Array.isArray(sceneModel.connectionPoints)) {
+    connectionPoints = sceneModel.connectionPoints;
+  } else {
+    let groups = [];
+    if (sceneModel && Array.isArray(sceneModel.groups)) {
+      groups = sceneModel.groups;
+    } else {
+      const parsed = parseGroupsFromDom();
+      groups = parsed.groups;
+    }
+    const circuits = createCircuitsFromGroups(groups);
+    connectionPoints = createConnectionPointsFromCircuits(circuits);
+  }
+
+  panel.innerHTML = "";
+  if (!Array.isArray(connectionPoints) || !connectionPoints.length) {
+    panel.textContent = "ルートなし";
+    return;
+  }
+
+  const route = document.createElement("div");
+  route.className = "cp-route";
+
+  const head = document.createElement("div");
+  head.textContent = "分電盤";
+  route.appendChild(head);
+
+  connectionPoints.forEach((point, index) => {
+    const arrow = document.createElement("div");
+    arrow.textContent = "↓";
+    route.appendChild(arrow);
+
+    const row = document.createElement("div");
+    const pointId = String(point?.id || "");
+    const hit = pointId.match(/(\d+)(?!.*\d)/);
+    row.textContent = hit ? `CP${hit[1]}` : `CP${index + 1}`;
+    route.appendChild(row);
+  });
+
+  panel.appendChild(route);
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
@@ -1617,6 +1664,7 @@ function setupCircuitListAutoRender() {
   ensureAiDiagramModeSwitcher();
   renderAiDiagramByMode();
   renderConnectionPointsEditor();
+  renderConnectionPointRoute();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
@@ -1629,6 +1677,7 @@ function setupCircuitListAutoRender() {
     ensureAiDiagramModeSwitcher();
     renderAiDiagramByMode();
     renderConnectionPointsEditor();
+    renderConnectionPointRoute();
   });
   observer.observe(target, {
     childList: true,
@@ -1652,6 +1701,7 @@ window.renderAiDiagramExamStyle = renderAiDiagramExamStyle;
 window.renderAiDiagramByMode = renderAiDiagramByMode;
 window.renderConnectionPointsEditor = renderConnectionPointsEditor;
 window.handleAddDeviceToConnectionPoint = handleAddDeviceToConnectionPoint;
+window.renderConnectionPointRoute = renderConnectionPointRoute;
 
 initPlayground();
 setupCircuitListAutoRender();
