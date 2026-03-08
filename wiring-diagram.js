@@ -962,6 +962,232 @@ function selectConstraintSafeWirePaths(sceneModel, wirePaths) {
   return copied;
 }
 
+function estimateOptimizedWirePathLengths(sceneModel, wirePaths) {
+  const model = sceneModel && typeof sceneModel === "object" ? sceneModel : {};
+  const safeWirePaths = Array.isArray(wirePaths) ? wirePaths : [];
+  if (!safeWirePaths.length) {
+    return { totalMm: 0, byCircuit: {}, byMaterial: {}, rows: [] };
+  }
+
+  const profile = getCircuitHeightProfile(model);
+  const connectionPoints = Array.isArray(model?.connectionPoints) ? model.connectionPoints : [];
+  const pointsByCircuit = new Map();
+  connectionPoints.forEach((point) => {
+    const key = point?.circuitId;
+    if (key === null || typeof key === "undefined") return;
+    if (!pointsByCircuit.has(key)) pointsByCircuit.set(key, []);
+    pointsByCircuit.get(key).push(point);
+  });
+
+  const toRole = (item, parent) => {
+    const roleText = String(item?.role || item?.type || item?.kind || parent?.role || parent?.type || "")
+      .trim()
+      .toLowerCase();
+    if (roleText.includes("trunk") || roleText.includes("main") || roleText.includes("feeder")) return "trunk";
+    if (roleText.includes("branch") || roleText.includes("drop") || roleText.includes("load")) return "branch";
+    return "unknown";
+  };
+
+  const toMaterial = (item, parent) => {
+    const raw = item?.material || item?.materialName || parent?.material || parent?.materialName;
+    return String(raw || "未判定材料");
+  };
+
+  const calcPathMm = (path) => {
+    const points = normalizeWirePathPoints(path);
+    if (points.length < 2) return 0;
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      total += Math.abs(Number(p1.x) - Number(p2.x)) + Math.abs(Number(p1.y) - Number(p2.y));
+    }
+    return Number.isFinite(total) ? total : 0;
+  };
+
+  const calcVerticalMm = (role, circuitId) => {
+    if (role === "trunk") {
+      return Number.isFinite(Number(profile?.panelRise)) ? Number(profile.panelRise) : 0;
+    }
+    if (role === "branch") {
+      const points = pointsByCircuit.get(circuitId) || [];
+      const firstPoint = points[0];
+      const deviceHeights = Array.isArray(firstPoint?.deviceHeights) ? firstPoint.deviceHeights : [];
+      const firstDeviceHeight = Number(deviceHeights[0]);
+      if (Number.isFinite(firstDeviceHeight) && firstDeviceHeight > 0) return firstDeviceHeight;
+      return 1200;
+    }
+    return 0;
+  };
+
+  const calcSlackMm = (role) => {
+    const baseSlack = Number(profile?.slack);
+    const safeSlack = Number.isFinite(baseSlack) && baseSlack > 0 ? baseSlack : 0;
+    if (role === "unknown") return Math.floor(safeSlack * 0.5);
+    return safeSlack;
+  };
+
+  const calcBendAdjustmentMm = (path) => {
+    const points = normalizeWirePathPoints(path);
+    if (points.length < 3) return 0;
+    const bendCount = Math.max(points.length - 2, 0);
+    const perBendMm = 50;
+    const capMm = 400;
+    return Math.min(bendCount * perBendMm, capMm);
+  };
+
+  const rows = [];
+  safeWirePaths.forEach((wirePath, wirePathIndex) => {
+    if (!wirePath || typeof wirePath !== "object") return;
+    const circuitIdRaw = wirePath?.circuitId;
+    const circuitId = circuitIdRaw === null || typeof circuitIdRaw === "undefined" ? "unknown" : String(circuitIdRaw);
+    const rootPath = Array.isArray(wirePath.path) ? wirePath.path : null;
+    if (rootPath) {
+      const role = toRole(wirePath, null);
+      const pathMm = calcPathMm(rootPath);
+      const verticalMm = calcVerticalMm(role, circuitIdRaw);
+      const slackMm = calcSlackMm(role);
+      const bendAdjustmentMm = calcBendAdjustmentMm(rootPath);
+      rows.push({
+        id: String(wirePath?.id || `wirePath-${wirePathIndex}`),
+        circuitId,
+        material: toMaterial(wirePath, null),
+        role,
+        pathMm,
+        verticalMm,
+        slackMm,
+        bendAdjustmentMm,
+        totalMm: pathMm + verticalMm + slackMm + bendAdjustmentMm,
+      });
+    }
+
+    if (Array.isArray(wirePath.wires)) {
+      wirePath.wires.forEach((wire, wireIndex) => {
+        if (!wire || typeof wire !== "object") return;
+        const path = Array.isArray(wire.path) ? wire.path : null;
+        if (!path) return;
+        const role = toRole(wire, wirePath);
+        const pathMm = calcPathMm(path);
+        const verticalMm = calcVerticalMm(role, circuitIdRaw);
+        const slackMm = calcSlackMm(role);
+        const bendAdjustmentMm = calcBendAdjustmentMm(path);
+        rows.push({
+          id: String(wire?.id || wirePath?.id || `wire-${wirePathIndex}-${wireIndex}`),
+          circuitId,
+          material: toMaterial(wire, wirePath),
+          role,
+          pathMm,
+          verticalMm,
+          slackMm,
+          bendAdjustmentMm,
+          totalMm: pathMm + verticalMm + slackMm + bendAdjustmentMm,
+        });
+      });
+    }
+  });
+
+  const byCircuit = {};
+  const byMaterial = {};
+  let totalMm = 0;
+  rows.forEach((row) => {
+    const rowTotal = Number(row?.totalMm || 0);
+    if (!Number.isFinite(rowTotal) || rowTotal <= 0) return;
+    totalMm += rowTotal;
+
+    const circuitKey = `circuit${row.circuitId}`;
+    if (!byCircuit[circuitKey]) {
+      byCircuit[circuitKey] = {
+        totalMm: 0,
+        trunkMm: 0,
+        branchMm: 0,
+      };
+    }
+    byCircuit[circuitKey].totalMm += rowTotal;
+    if (row.role === "trunk") byCircuit[circuitKey].trunkMm += rowTotal;
+    else if (row.role === "branch") byCircuit[circuitKey].branchMm += rowTotal;
+
+    const materialKey = String(row?.material || "未判定材料");
+    byMaterial[materialKey] = (byMaterial[materialKey] || 0) + rowTotal;
+  });
+
+  return {
+    totalMm,
+    byCircuit,
+    byMaterial,
+    rows,
+  };
+}
+
+function renderOptimizedWireLengthSummary(sceneModel, wirePaths) {
+  const panel = document.getElementById("optimized-wire-length-summary");
+  if (!panel) return;
+
+  const result = estimateOptimizedWirePathLengths(sceneModel, wirePaths);
+  const hasRows = Array.isArray(result?.rows) && result.rows.length > 0;
+  panel.innerHTML = "";
+  if (!hasRows) {
+    panel.textContent = "配線長さ精度データなし";
+    return;
+  }
+
+  const toMeterText = (mm) => `${(Number(mm || 0) / 1000).toFixed(1)}m`;
+
+  const card = document.createElement("div");
+  card.setAttribute("style", "padding:10px;border:1px solid #ddd;border-radius:8px;");
+
+  const title = document.createElement("div");
+  title.textContent = "配線長さ精度アップ結果";
+  card.appendChild(title);
+
+  const total = document.createElement("div");
+  total.setAttribute("style", "margin-top:6px;");
+  total.textContent = `合計 ${toMeterText(result.totalMm)}`;
+  card.appendChild(total);
+
+  const byCircuitEntries = Object.entries(result.byCircuit || {});
+  byCircuitEntries.forEach(([circuitKey, stats]) => {
+    const block = document.createElement("div");
+    block.setAttribute("style", "margin-top:8px;");
+
+    const header = document.createElement("div");
+    header.textContent = circuitKey.replace(/^circuit/, "回路");
+    block.appendChild(header);
+
+    const totalRow = document.createElement("div");
+    totalRow.textContent = `合計 ${toMeterText(stats?.totalMm)}`;
+    block.appendChild(totalRow);
+
+    const trunkRow = document.createElement("div");
+    trunkRow.textContent = `幹線 ${toMeterText(stats?.trunkMm)}`;
+    block.appendChild(trunkRow);
+
+    const branchRow = document.createElement("div");
+    branchRow.textContent = `枝線 ${toMeterText(stats?.branchMm)}`;
+    block.appendChild(branchRow);
+
+    card.appendChild(block);
+  });
+
+  const materialTitle = document.createElement("div");
+  materialTitle.setAttribute("style", "margin-top:8px;");
+  materialTitle.textContent = "材料別";
+  card.appendChild(materialTitle);
+
+  Object.entries(result.byMaterial || {}).forEach(([name, lengthMm]) => {
+    const row = document.createElement("div");
+    row.setAttribute("style", "display:flex;justify-content:space-between;gap:8px;");
+    const left = document.createElement("span");
+    left.textContent = name;
+    const right = document.createElement("strong");
+    right.textContent = toMeterText(lengthMm);
+    row.appendChild(left);
+    row.appendChild(right);
+    card.appendChild(row);
+  });
+
+  panel.appendChild(card);
+}
+
 function renderWirePathDebug(sceneModel) {
   const panel = document.getElementById("wire-path-debug-result");
   if (!panel) return;
@@ -992,6 +1218,7 @@ function renderWirePathDebug(sceneModel) {
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
   wirePaths = selectConstraintSafeWirePaths(sceneModel, wirePaths);
+  renderOptimizedWireLengthSummary(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) {
     panel.textContent = "wireなし";
@@ -1073,6 +1300,7 @@ function renderAiDiagramPreview(sceneModel) {
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
   wirePaths = selectConstraintSafeWirePaths(sceneModel, wirePaths);
+  renderOptimizedWireLengthSummary(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) {
     panel.textContent = "wireなし";
@@ -1157,6 +1385,7 @@ function renderAiDiagramEnhanced(sceneModel) {
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
   wirePaths = selectConstraintSafeWirePaths(sceneModel, wirePaths);
+  renderOptimizedWireLengthSummary(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) return;
 
@@ -1282,6 +1511,7 @@ function renderAiDiagramExamStyle(sceneModel) {
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
   wirePaths = selectConstraintSafeWirePaths(sceneModel, wirePaths);
+  renderOptimizedWireLengthSummary(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) return;
   const connectionPoints =
@@ -3266,6 +3496,8 @@ window.extractConnectionPointConstraints = extractConnectionPointConstraints;
 window.evaluateWirePathConstraints = evaluateWirePathConstraints;
 window.evaluateWirePathsConstraintScore = evaluateWirePathsConstraintScore;
 window.selectConstraintSafeWirePaths = selectConstraintSafeWirePaths;
+window.estimateOptimizedWirePathLengths = estimateOptimizedWirePathLengths;
+window.renderOptimizedWireLengthSummary = renderOptimizedWireLengthSummary;
 window.renderWirePathDebug = renderWirePathDebug;
 window.renderAiDiagramPreview = renderAiDiagramPreview;
 window.renderAiDiagramEnhanced = renderAiDiagramEnhanced;
