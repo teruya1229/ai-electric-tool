@@ -1666,6 +1666,16 @@ function renderConnectionPointDeviceHeights(sceneModel) {
   });
 }
 
+function getCircuitHeightProfile(sceneModel) {
+  const profile = sceneModel && typeof sceneModel.circuitHeightProfile === "object" ? sceneModel.circuitHeightProfile : {};
+  const panelRiseRaw = Number(profile?.panelRise);
+  const slackRaw = Number(profile?.slack);
+  return {
+    panelRise: Number.isFinite(panelRiseRaw) && panelRiseRaw > 0 ? panelRiseRaw : 1500,
+    slack: Number.isFinite(slackRaw) && slackRaw > 0 ? slackRaw : 300,
+  };
+}
+
 function handleAddDeviceToConnectionPoint(cpIndex) {
   const model = connectionPointsEditorSceneModel;
   if (!model || !Array.isArray(model.connectionPoints)) return;
@@ -1707,6 +1717,40 @@ function handleEditDeviceHeight(cpIndex, deviceIndex) {
   if (!Number.isFinite(value) || value <= 0) return;
 
   point.deviceHeights[deviceIndex] = value;
+  renderConnectionPointsEditor(model);
+  renderConnectionPointRoute(model);
+}
+
+function handleEditPanelRise(sceneModel) {
+  const model = sceneModel && typeof sceneModel === "object" ? sceneModel : connectionPointsEditorSceneModel;
+  if (!model || typeof model !== "object") return;
+  const profile = getCircuitHeightProfile(model);
+
+  if (!model.circuitHeightProfile || typeof model.circuitHeightProfile !== "object") {
+    model.circuitHeightProfile = {};
+  }
+  const input = prompt("分電盤立ち上げ高さ(mm)を入力してください", String(profile.panelRise));
+  const value = Number(typeof input === "string" ? input.trim() : "");
+  if (!Number.isFinite(value) || value <= 0) return;
+
+  model.circuitHeightProfile.panelRise = value;
+  renderConnectionPointsEditor(model);
+  renderConnectionPointRoute(model);
+}
+
+function handleEditSlack(sceneModel) {
+  const model = sceneModel && typeof sceneModel === "object" ? sceneModel : connectionPointsEditorSceneModel;
+  if (!model || typeof model !== "object") return;
+  const profile = getCircuitHeightProfile(model);
+
+  if (!model.circuitHeightProfile || typeof model.circuitHeightProfile !== "object") {
+    model.circuitHeightProfile = {};
+  }
+  const input = prompt("余長(mm)を入力してください", String(profile.slack));
+  const value = Number(typeof input === "string" ? input.trim() : "");
+  if (!Number.isFinite(value) || value <= 0) return;
+
+  model.circuitHeightProfile.slack = value;
   renderConnectionPointsEditor(model);
   renderConnectionPointRoute(model);
 }
@@ -1761,6 +1805,7 @@ function estimateConnectionPointWireLength(sceneModel) {
   if (!Array.isArray(connectionPoints) || connectionPoints.length < 2) {
     return { trunkSegments: [], branchSegments: [] };
   }
+  const circuitHeight = getCircuitHeightProfile(sceneModel);
 
   const toCpLabel = (point, fallbackIndex) => {
     const pointId = String(point?.id || "");
@@ -1775,6 +1820,16 @@ function estimateConnectionPointWireLength(sceneModel) {
 
   const trunkSegments = [];
   const branchSegments = [];
+  const panelHorizontalRaw = Number(connectionPoints[0]?.horizontalSpanFromPanel);
+  const panelHorizontal = Number.isFinite(panelHorizontalRaw) && panelHorizontalRaw > 0 ? panelHorizontalRaw : 2000;
+  trunkSegments.push({
+    fromIndex: -1,
+    toIndex: 0,
+    fromLabel: "分電盤",
+    toLabel: toCpLabel(connectionPoints[0], 0),
+    lengthMm: panelHorizontal + circuitHeight.panelRise,
+  });
+
   connectionPoints.forEach((point, index) => {
     const current = getConnectionPointHeightProfile(point);
     const cpLabel = toCpLabel(point, index);
@@ -1784,7 +1839,7 @@ function estimateConnectionPointWireLength(sceneModel) {
       const deviceLabel = toDeviceLabel(device, deviceIndex);
       const saved = Number(heightStore?.[deviceIndex]);
       const deviceHeight = Number.isFinite(saved) && saved > 0 ? saved : getDefaultDeviceHeight(deviceLabel);
-      const lengthMm = Math.max(0, current.trunkHeight - deviceHeight) + 300;
+      const lengthMm = Math.max(0, current.trunkHeight - deviceHeight) + circuitHeight.slack;
       branchSegments.push({
         cpIndex: index,
         cpLabel,
@@ -1807,6 +1862,53 @@ function estimateConnectionPointWireLength(sceneModel) {
     });
   });
   return { trunkSegments, branchSegments };
+}
+
+function renderCircuitHeightEditor(sceneModel) {
+  const profile = getCircuitHeightProfile(sceneModel);
+  const block = document.createElement("div");
+  block.className = "circuit-height-editor";
+  block.setAttribute("style", "padding:10px;margin-top:8px;border:1px solid #ddd;border-radius:8px;");
+
+  const title = document.createElement("div");
+  title.textContent = "回路設定";
+  block.appendChild(title);
+
+  const panelRiseRow = document.createElement("div");
+  panelRiseRow.setAttribute("style", "margin-top:8px;");
+  const panelRiseLabel = document.createElement("div");
+  panelRiseLabel.textContent = "分電盤立ち上げ高さ";
+  const panelRiseValue = document.createElement("div");
+  panelRiseValue.textContent = `${profile.panelRise}mm`;
+  const panelRiseEdit = document.createElement("button");
+  panelRiseEdit.type = "button";
+  panelRiseEdit.textContent = "編集";
+  panelRiseEdit.addEventListener("click", () => {
+    handleEditPanelRise(sceneModel);
+  });
+  panelRiseRow.appendChild(panelRiseLabel);
+  panelRiseRow.appendChild(panelRiseValue);
+  panelRiseRow.appendChild(panelRiseEdit);
+  block.appendChild(panelRiseRow);
+
+  const slackRow = document.createElement("div");
+  slackRow.setAttribute("style", "margin-top:8px;");
+  const slackLabel = document.createElement("div");
+  slackLabel.textContent = "余長";
+  const slackValue = document.createElement("div");
+  slackValue.textContent = `${profile.slack}mm`;
+  const slackEdit = document.createElement("button");
+  slackEdit.type = "button";
+  slackEdit.textContent = "編集";
+  slackEdit.addEventListener("click", () => {
+    handleEditSlack(sceneModel);
+  });
+  slackRow.appendChild(slackLabel);
+  slackRow.appendChild(slackValue);
+  slackRow.appendChild(slackEdit);
+  block.appendChild(slackRow);
+
+  return block;
 }
 
 function getConnectionPointRouteSegments(sceneModel) {
@@ -1985,7 +2087,11 @@ function renderConnectionPointRoute(sceneModel) {
 
   panel.appendChild(route);
 
-  const estimate = estimateConnectionPointWireLength({ connectionPoints });
+  const routeModel =
+    connectionPointsEditorSceneModel && Array.isArray(connectionPointsEditorSceneModel.connectionPoints)
+      ? connectionPointsEditorSceneModel
+      : { connectionPoints };
+  const estimate = estimateConnectionPointWireLength(routeModel);
   if (!Array.isArray(estimate.trunkSegments) || estimate.trunkSegments.length < 1) return;
 
   const estimateBlock = document.createElement("div");
@@ -2018,7 +2124,8 @@ function renderConnectionPointRoute(sceneModel) {
   }
 
   panel.appendChild(estimateBlock);
-  panel.appendChild(renderConnectionPointSegmentEditor({ connectionPoints }));
+  panel.appendChild(renderCircuitHeightEditor(routeModel));
+  panel.appendChild(renderConnectionPointSegmentEditor(routeModel));
 }
 
 function setupCircuitListAutoRender() {
@@ -2071,6 +2178,10 @@ window.renderAiDiagramByMode = renderAiDiagramByMode;
 window.renderConnectionPointsEditor = renderConnectionPointsEditor;
 window.handleAddDeviceToConnectionPoint = handleAddDeviceToConnectionPoint;
 window.handleEditDeviceHeight = handleEditDeviceHeight;
+window.getCircuitHeightProfile = getCircuitHeightProfile;
+window.handleEditPanelRise = handleEditPanelRise;
+window.handleEditSlack = handleEditSlack;
+window.renderCircuitHeightEditor = renderCircuitHeightEditor;
 window.moveConnectionPoint = moveConnectionPoint;
 window.renderConnectionPointBranches = renderConnectionPointBranches;
 window.estimateConnectionPointWireLength = estimateConnectionPointWireLength;
