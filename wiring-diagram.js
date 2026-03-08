@@ -82,10 +82,13 @@ function parseGroupsFromDom() {
   const groups = buttons.map((btn) => {
     const text = (btn.textContent || "").trim();
     const parts = text.split("|").map((s) => s.trim());
+    const switchLabel = parts[3] || "";
+    const switchType = switchLabel === "3路" ? "threeway" : "single";
     return {
       controlId: parts[0] || "",
       label: parts[1] || "",
       purpose: parts[2] || "unknown",
+      switchType,
     };
   });
   const activeIndex = buttons.findIndex((btn) => btn.classList.contains("active"));
