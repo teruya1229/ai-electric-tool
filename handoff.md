@@ -2,6 +2,56 @@
 
 AI電気工事サポートツールを開発する。
 
+---
+
+## AI電気施工アシスタント 引き継ぎ（最新）
+
+### 現在フェーズ
+UI整理 + 表示日本語化 完了
+
+### 完了タスク
+
+1. UI整理  
+- legacy-control-card で旧UI非表示  
+- devトグル追加  
+- 折りたたみカード実装  
+
+2. 表示日本語化  
+- LABEL_JA 辞書追加  
+- outlet / cable / device 等を日本語化  
+
+3. UI同期修正  
+- 上UI → hidden UI の3路同期強化  
+- `ui-panel.js` 内 `_syncToExistingUiAndGenerate()` 修正  
+
+4. 表示文言  
+- Dev → 詳細表示  
+
+commit: `108107e`
+
+### 未確認事項
+実機で以下を確認
+
+- 3路選択 → 図が3路
+- 材料に VVF1.6-3C が出る
+- 英語表示が残っていない
+
+### 次の開発
+もし3路が正常なら次フェーズへ進む
+
+- 高さ
+- 配線長さ
+- 現場配線モード
+
+### 変更ファイル
+- `ui-panel.js`
+- `wiring-diagram.js`
+
+### 変更禁止
+- `generateDiagram()`
+- `groupDevicesByControl()`
+- `judgeSleeve()`
+
 対象
 ・第二種電気工事士
 ・現場経験の浅い電気工事士
@@ -255,3 +305,108 @@ wiring-diagram.js に
 aggregateCableLengthsByCircuit(sceneModel)
 
 renderCircuitCableLengthSummary(sceneModel)
+
+---
+
+## 現在の状態
+
+3路回路生成の不具合は解消済み
+
+確認済み
+
+・3路複線図生成 正常  
+・VVF1.6-3C 材料生成 正常  
+・UI同期 正常  
+
+## 修正内容
+
+修正箇所
+
+ui-panel.js  
+threeway UI同期 dispatch 修正
+
+index.js  
+threeway group生成修正
+
+wiring-diagram.js  
+parseGroupsFromDom() で switchType復元
+
+## 現在の材料エンジン
+
+材料一覧は
+
+簡略材料計算
+
+であり
+
+回路単位で材料を数えている
+
+例
+
+3路1灯
+
+VVF1.6-2C ×1  
+VVF1.6-3C ×1  
+
+※現場材料数とは一致しない
+
+## 今後の方針
+
+材料計算を
+
+node → node
+
+配線区間ベース
+
+に変更予定
+
+例
+
+power → switch  
+switch → switch  
+switch → light  
+
+## 次の開発タスク
+
+優先順位
+
+1 複線図生成安定化  
+2 材料エンジン改善  
+3 分岐チェック（施工ミス防止）  
+4 施工支援機能  
+
+---
+
+## テスト
+
+3路選択
+↓
+生成
+
+確認
+
+・複線図が3路
+・VVF1.6-3C 出力
+・UI同期正常
+
+---
+
+## 作業ログ
+
+【2026-03-08 作業終了時点】
+
+本日やったこと
+
+・3路回路生成修正
+・材料生成修正
+・UI同期確認
+
+現在の状態
+
+・3路回路生成正常
+・材料表示正常
+
+次回やること
+
+・材料エンジン改善
+・分岐ミス検知設計
