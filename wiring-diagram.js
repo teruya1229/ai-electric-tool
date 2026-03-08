@@ -2081,6 +2081,63 @@ function renderCircuitCableLengthSummary(sceneModel) {
   });
 }
 
+function aggregateSleeveMaterials(sceneModel) {
+  let model = sceneModel;
+  if (!model || typeof model !== "object") {
+    if (connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object") {
+      model = connectionPointsEditorSceneModel;
+    } else {
+      model = {};
+    }
+  }
+
+  const sleeveResults = Array.isArray(model?.sleeveResults) ? model.sleeveResults : [];
+  if (!sleeveResults.length) return {};
+
+  const toSleeveLabel = (item) => {
+    const raw = String(item?.sleeveSize || item?.size || item?.sleeveType || item?.type || "").toLowerCase();
+    if (raw === "small") return "小スリーブ";
+    if (raw === "middle" || raw === "medium") return "中スリーブ";
+    if (raw === "large") return "大スリーブ";
+    return null;
+  };
+
+  const result = {};
+  sleeveResults.forEach((item) => {
+    const label = toSleeveLabel(item);
+    if (!label) return;
+    const qtyRaw = Number(item?.quantity);
+    const qty = Number.isFinite(qtyRaw) && qtyRaw > 0 ? qtyRaw : 1;
+    result[label] = (result[label] || 0) + qty;
+  });
+  return result;
+}
+
+function renderSleeveMaterialSummary(sceneModel) {
+  const panel = document.getElementById("sleeve-material-summary");
+  if (!panel) return;
+
+  const summary = aggregateSleeveMaterials(sceneModel);
+  const rows = Object.entries(summary || {});
+  panel.innerHTML = "";
+  if (!rows.length) {
+    panel.textContent = "スリーブ材料データなし";
+    return;
+  }
+
+  rows.forEach(([name, qty]) => {
+    const row = document.createElement("div");
+    row.setAttribute("style", "display:flex;justify-content:space-between;gap:8px;");
+    const left = document.createElement("span");
+    left.textContent = name;
+    const right = document.createElement("strong");
+    right.textContent = String(qty);
+    row.appendChild(left);
+    row.appendChild(right);
+    panel.appendChild(row);
+  });
+}
+
 function renderCircuitHeightEditor(sceneModel) {
   const profile = getCircuitHeightProfile(sceneModel);
   const block = document.createElement("div");
@@ -2237,6 +2294,7 @@ function renderConnectionPointRoute(sceneModel) {
   if (!panel) {
     renderCableLengthSummary(sceneModel);
     renderCircuitCableLengthSummary(sceneModel);
+    renderSleeveMaterialSummary(sceneModel);
     return;
   }
 
@@ -2266,6 +2324,11 @@ function renderConnectionPointRoute(sceneModel) {
         : { connectionPoints }
     );
     renderCircuitCableLengthSummary(
+      connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object"
+        ? connectionPointsEditorSceneModel
+        : { connectionPoints }
+    );
+    renderSleeveMaterialSummary(
       connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object"
         ? connectionPointsEditorSceneModel
         : { connectionPoints }
@@ -2359,6 +2422,7 @@ function renderConnectionPointRoute(sceneModel) {
   panel.appendChild(renderConnectionPointSegmentEditor(routeModel));
   renderCableLengthSummary(routeModel);
   renderCircuitCableLengthSummary(routeModel);
+  renderSleeveMaterialSummary(routeModel);
 }
 
 function setupCircuitListAutoRender() {
@@ -2424,6 +2488,8 @@ window.aggregateCableLengthsByMaterial = aggregateCableLengthsByMaterial;
 window.aggregateCableLengthsByCircuit = aggregateCableLengthsByCircuit;
 window.renderCableLengthSummary = renderCableLengthSummary;
 window.renderCircuitCableLengthSummary = renderCircuitCableLengthSummary;
+window.aggregateSleeveMaterials = aggregateSleeveMaterials;
+window.renderSleeveMaterialSummary = renderSleeveMaterialSummary;
 window.getConnectionPointRouteSegments = getConnectionPointRouteSegments;
 window.handleEditConnectionPointSegment = handleEditConnectionPointSegment;
 window.renderConnectionPointSegmentEditor = renderConnectionPointSegmentEditor;
