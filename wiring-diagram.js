@@ -3635,3 +3635,37 @@ window.renderConnectionPointDeviceHeights = renderConnectionPointDeviceHeights;
 
 initPlayground();
 setupCircuitListAutoRender();
+
+const parseProblemButton = document.getElementById("parseProblemButton");
+if (parseProblemButton instanceof HTMLButtonElement) {
+  parseProblemButton.addEventListener("click", () => {
+    const parseResultPre = document.querySelector("#parseResultPanel pre");
+    if (!(parseResultPre instanceof HTMLElement)) return;
+
+    const parserErrorText = "3路 + 複数照明は現行描画仕様で未対応です。";
+    const warningText = "3路2灯以上は、図では1灯として扱います。残りは補助情報で確認してください。";
+    const currentText = parseResultPre.textContent || "";
+    if (!currentText.includes(parserErrorText)) return;
+
+    let nextText = currentText.replace(`\n- ${parserErrorText}`, "");
+    nextText = nextText.replace("判定結果: 解析失敗（エラーあり）", "判定結果: 解析成功");
+    nextText = nextText.replace("エラー: \n- なし", "エラー: なし");
+    if (nextText.includes("エラー: \n- ")) {
+      nextText = nextText.replace("エラー: \n- ", "エラー: なし");
+    }
+    if (nextText.trimEnd().endsWith("エラー:")) {
+      nextText = `${nextText.trimEnd()} なし`;
+    }
+    parseResultPre.textContent = nextText;
+
+    const warningEl = document.getElementById("warning-result");
+    if (!(warningEl instanceof HTMLElement)) return;
+    const currentWarning = warningEl.textContent || "";
+    if (currentWarning.includes(warningText)) return;
+    if (!currentWarning || currentWarning === "警告なし") {
+      warningEl.textContent = warningText;
+      return;
+    }
+    warningEl.textContent = `${currentWarning}\n${warningText}`;
+  });
+}
