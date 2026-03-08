@@ -215,35 +215,35 @@
             <h3>選択中系統の編集</h3>
             <div class="button-row">
               <label for="group-control-id-input">
-                controlId
+                系統記号
                 <input id="group-control-id-input" type="text" value="イ" />
               </label>
               <label for="group-label-input">
-                label
+                系統名
                 <input id="group-label-input" type="text" value="" />
               </label>
               <label for="group-purpose-input">
-                purpose
+                用途
                 <select id="group-purpose-input">
-                  <option value="light">light</option>
-                  <option value="outlet">outlet</option>
-                  <option value="ac_outlet">ac_outlet</option>
-                  <option value="fan">fan</option>
-                  <option value="kitchen_outlet">kitchen_outlet</option>
-                  <option value="washroom">washroom</option>
-                  <option value="outdoor">outdoor</option>
-                  <option value="unknown">unknown</option>
+                  <option value="light">照明</option>
+                  <option value="outlet">コンセント</option>
+                  <option value="ac_outlet">エアコンコンセント</option>
+                  <option value="fan">換気扇</option>
+                  <option value="kitchen_outlet">台所コンセント</option>
+                  <option value="washroom">洗面所</option>
+                  <option value="outdoor">屋外</option>
+                  <option value="unknown">未設定</option>
                 </select>
               </label>
               <label for="group-switch-type-select">
-                switchType
+                スイッチ種類
                 <select id="group-switch-type-select">
-                  <option value="single">single</option>
-                  <option value="threeway">threeway</option>
+                  <option value="single">片切</option>
+                  <option value="threeway">3路</option>
                 </select>
               </label>
               <label for="group-same-time-checkbox">
-                sameTime
+                同時点灯
                 <input id="group-same-time-checkbox" type="checkbox" />
               </label>
             </div>
@@ -364,15 +364,15 @@
               <div id="wire-path-debug-result" class="result-output">未生成</div>
               <div class="sleeve-form">
                 <label>
-                  wire16Count
+                  1.6mm 本数
                   <input id="wire16-count" type="number" min="0" value="2" />
                 </label>
                 <label>
-                  wire20Count
+                  2.0mm 本数
                   <input id="wire20-count" type="number" min="0" value="0" />
                 </label>
                 <label>
-                  wire26Count
+                  2.6mm 本数
                   <input id="wire26-count" type="number" min="0" value="0" />
                 </label>
                 <button id="sleeve-judge-btn" type="button">判定</button>
