@@ -387,10 +387,37 @@ function _syncToExistingUiAndGenerate() {
   const generateButton = document.querySelector("#generate-btn");
   if (!(generateButton instanceof HTMLElement)) return false;
 
+  const setValueAndDispatch = (selector, value, eventType = "change") => {
+    const el = document.querySelector(selector);
+    if (!(el instanceof HTMLElement) || !("value" in el)) return;
+    // @ts-ignore - runtime checked by "value" in el
+    el.value = value;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event(eventType, { bubbles: true }));
+  };
+  const setCheckedAndDispatch = (selector, checked) => {
+    const el = document.querySelector(selector);
+    if (!(el instanceof HTMLInputElement)) return;
+    el.checked = !!checked;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const enforceLegacyState = () => {
+    if (UI.circuit === "3路") {
+      setValueAndDispatch("#group-switch-type-select", "threeway");
+      setCheckedAndDispatch("#group-same-time-checkbox", false);
+      setValueAndDispatch("#light-count-select", "1");
+      setValueAndDispatch("#outlet-count-select", "0");
+      return;
+    }
+    setValueAndDispatch("#group-switch-type-select", "single");
+  };
+
   const circuitSelector = UI.circuit === "3路" ? "#circuit-threeway-btn" : "#circuit-single-btn";
   _clickIfExists(circuitSelector);
+  enforceLegacyState();
   if (UI.circuit === "3路") {
     _clickIfExists(circuitSelector);
+    enforceLegacyState();
   }
 
   const conditionTextMap = {
@@ -405,6 +432,7 @@ function _syncToExistingUiAndGenerate() {
   if (UI.circuit === "3路") {
     if (conditionButtons.length !== 1) {
       _clickIfExists(circuitSelector);
+      enforceLegacyState();
       conditionButtons = getConditionButtons();
     }
     if (conditionButtons.length === 1 && conditionButtons[0] instanceof HTMLElement) {
@@ -414,9 +442,10 @@ function _syncToExistingUiAndGenerate() {
       if (threewayHint instanceof HTMLElement) {
         threewayHint.click();
       } else {
-        return false;
+        enforceLegacyState();
       }
     }
+    enforceLegacyState();
   } else {
     const conditionText = conditionTextMap[UI.condition.id];
     const matchText = (rawText) => {
@@ -435,6 +464,7 @@ function _syncToExistingUiAndGenerate() {
         ? "#mode-gamidenki-btn"
         : "#mode-exam-btn";
   _clickIfExists(modeSelector);
+  enforceLegacyState();
   _clickIfExists("#generate-btn");
   return true;
 }
