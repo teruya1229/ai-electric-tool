@@ -96,3 +96,87 @@ AI電気工事サポートツールを開発する。
 ・トップページから各AIへ遷移しやすいUI整備  
 
 を実施する。
+
+---
+
+# 次の開発
+
+---
+
+## 目的
+
+3次元配線ルート計算の基礎を作る。
+
+connectionPoints に
+
+横距離
+高さ
+枝落とし
+
+を統合して
+
+配線長さ概算を計算する。
+
+---
+
+## 実装
+
+connectionPoints を使って
+
+幹線配線長
+枝配線長
+
+を計算する。
+
+計算要素
+
+horizontalSpan
+trunkHeight
+branchDrop
+slack
+
+---
+
+## UI
+
+connection-point-route の下に
+
+配線概算
+
+を表示する。
+
+例
+
+CP1 → CP2
+2.4m
+
+---
+
+## 重要
+
+以下の構造は変更しない
+
+parser
+groups
+circuits
+graph
+layout
+wirePaths
+
+---
+
+## 次のCursor作業
+
+estimateConnectionPointWireLength(sceneModel)
+
+を実装。
+
+horizontalSpan
++
+高さ差
++
+branchDrop
++
+余長
+
+で配線長さを概算する。
