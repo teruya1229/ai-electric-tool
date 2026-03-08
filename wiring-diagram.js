@@ -1822,17 +1822,23 @@ function estimateConnectionPointWireLength(sceneModel) {
   const branchSegments = [];
   const panelHorizontalRaw = Number(connectionPoints[0]?.horizontalSpanFromPanel);
   const panelHorizontal = Number.isFinite(panelHorizontalRaw) && panelHorizontalRaw > 0 ? panelHorizontalRaw : 2000;
+  const panelCircuitId =
+    typeof connectionPoints[0]?.circuitId === "number"
+      ? connectionPoints[0].circuitId
+      : null;
   trunkSegments.push({
     fromIndex: -1,
     toIndex: 0,
     fromLabel: "分電盤",
     toLabel: toCpLabel(connectionPoints[0], 0),
     lengthMm: panelHorizontal + circuitHeight.panelRise,
+    circuitId: panelCircuitId,
   });
 
   connectionPoints.forEach((point, index) => {
     const current = getConnectionPointHeightProfile(point);
     const cpLabel = toCpLabel(point, index);
+    const circuitId = typeof point?.circuitId === "number" ? point.circuitId : null;
     const devices = Array.isArray(point?.devices) ? point.devices : [];
     const heightStore = point && (Array.isArray(point.deviceHeights) || typeof point.deviceHeights === "object") ? point.deviceHeights : [];
     devices.forEach((device, deviceIndex) => {
@@ -1845,6 +1851,7 @@ function estimateConnectionPointWireLength(sceneModel) {
         cpLabel,
         deviceLabel,
         lengthMm,
+        circuitId,
       });
     });
 
@@ -1859,9 +1866,111 @@ function estimateConnectionPointWireLength(sceneModel) {
       fromLabel: cpLabel,
       toLabel: toCpLabel(connectionPoints[index + 1], index + 1),
       lengthMm,
+      circuitId,
     });
   });
   return { trunkSegments, branchSegments };
+}
+
+function aggregateCableLengthsByMaterial(sceneModel) {
+  let model = sceneModel;
+  if (!model || typeof model !== "object") {
+    if (connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object") {
+      model = connectionPointsEditorSceneModel;
+    } else {
+      model = {};
+    }
+  }
+
+  const estimate = estimateConnectionPointWireLength(model);
+  const trunkSegments = Array.isArray(estimate?.trunkSegments) ? estimate.trunkSegments : [];
+  const branchSegments = Array.isArray(estimate?.branchSegments) ? estimate.branchSegments : [];
+  const allSegments = [
+    ...trunkSegments.map((segment) => ({ ...segment, kind: "trunk" })),
+    ...branchSegments.map((segment) => ({ ...segment, kind: "branch" })),
+  ];
+  if (!allSegments.length) return [];
+
+  let circuits = Array.isArray(model?.circuits) ? model.circuits : [];
+  if (!circuits.length) {
+    const groups = Array.isArray(model?.groups) ? model.groups : parseGroupsFromDom().groups;
+    circuits = createCircuitsFromGroups(groups);
+  }
+  const materials = Array.isArray(model?.materials) ? model.materials : createMaterialsFromCircuits(circuits);
+  const firstMaterialName = (Array.isArray(materials) && materials[0]?.name) ? materials[0].name : null;
+  const materialsByCircuit = new Map();
+  circuits.forEach((circuit) => {
+    const list = createMaterialsForCircuit(circuit);
+    materialsByCircuit.set(circuit?.id, list);
+  });
+
+  const pickMaterialName = (segment) => {
+    const circuitMaterials = materialsByCircuit.get(segment?.circuitId) || [];
+    if (segment?.kind === "trunk") {
+      return circuitMaterials[0]?.name || firstMaterialName || "未判定材料";
+    }
+
+    const label = String(segment?.deviceLabel || "").toUpperCase();
+    const findByHint = (hintList) =>
+      circuitMaterials.find((material) => {
+        const text = `${material?.name || ""} ${material?.type || ""}`.toUpperCase();
+        return hintList.some((hint) => text.includes(hint));
+      });
+    if (label.includes("OUTLET")) {
+      const hit = findByHint(["OUTLET", "コンセント"]);
+      if (hit?.name) return hit.name;
+    }
+    if (label.includes("SW")) {
+      const hit = findByHint(["SWITCH", "スイッチ"]);
+      if (hit?.name) return hit.name;
+    }
+    if (label.includes("LIGHT")) {
+      const hit = findByHint(["LIGHT", "照明"]);
+      if (hit?.name) return hit.name;
+    }
+    return circuitMaterials[0]?.name || firstMaterialName || "未判定材料";
+  };
+
+  const sumByMaterial = new Map();
+  allSegments.forEach((segment) => {
+    const name = pickMaterialName(segment);
+    const lengthMm = Number(segment?.lengthMm || 0);
+    if (!Number.isFinite(lengthMm) || lengthMm <= 0) return;
+    sumByMaterial.set(name, (sumByMaterial.get(name) || 0) + lengthMm);
+  });
+
+  return Array.from(sumByMaterial.entries()).map(([name, lengthMm]) => ({
+    name,
+    lengthMm,
+  }));
+}
+
+function renderCableLengthSummary(sceneModel) {
+  const panel = document.getElementById("cable-length-summary");
+  if (!panel) return;
+
+  const rows = aggregateCableLengthsByMaterial(sceneModel);
+  panel.innerHTML = "";
+  if (!rows.length) {
+    panel.textContent = "配線材料長さデータなし";
+    return;
+  }
+
+  const title = document.createElement("div");
+  title.textContent = "配線材料長さ概算";
+  panel.appendChild(title);
+
+  rows.forEach((row) => {
+    const item = document.createElement("div");
+    item.setAttribute("style", "display:flex;justify-content:space-between;gap:8px;");
+    const left = document.createElement("span");
+    left.textContent = row.name;
+    const right = document.createElement("span");
+    right.textContent = `${(Number(row.lengthMm || 0) / 1000).toFixed(1)}m`;
+    item.appendChild(left);
+    item.appendChild(right);
+    panel.appendChild(item);
+  });
 }
 
 function renderCircuitHeightEditor(sceneModel) {
@@ -2017,7 +2126,10 @@ function renderConnectionPointSegmentEditor(sceneModel) {
 
 function renderConnectionPointRoute(sceneModel) {
   const panel = document.getElementById("connection-point-route");
-  if (!panel) return;
+  if (!panel) {
+    renderCableLengthSummary(sceneModel);
+    return;
+  }
 
   let connectionPoints = [];
   if (sceneModel && Array.isArray(sceneModel.connectionPoints)) {
@@ -2039,6 +2151,11 @@ function renderConnectionPointRoute(sceneModel) {
   panel.innerHTML = "";
   if (!Array.isArray(connectionPoints) || !connectionPoints.length) {
     panel.textContent = "ルートなし";
+    renderCableLengthSummary(
+      connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object"
+        ? connectionPointsEditorSceneModel
+        : { connectionPoints }
+    );
     return;
   }
 
@@ -2126,6 +2243,7 @@ function renderConnectionPointRoute(sceneModel) {
   panel.appendChild(estimateBlock);
   panel.appendChild(renderCircuitHeightEditor(routeModel));
   panel.appendChild(renderConnectionPointSegmentEditor(routeModel));
+  renderCableLengthSummary(routeModel);
 }
 
 function setupCircuitListAutoRender() {
@@ -2141,6 +2259,7 @@ function setupCircuitListAutoRender() {
   renderAiDiagramByMode();
   renderConnectionPointsEditor();
   renderConnectionPointRoute();
+  renderCableLengthSummary();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
@@ -2154,6 +2273,7 @@ function setupCircuitListAutoRender() {
     renderAiDiagramByMode();
     renderConnectionPointsEditor();
     renderConnectionPointRoute();
+    renderCableLengthSummary();
   });
   observer.observe(target, {
     childList: true,
@@ -2185,6 +2305,8 @@ window.renderCircuitHeightEditor = renderCircuitHeightEditor;
 window.moveConnectionPoint = moveConnectionPoint;
 window.renderConnectionPointBranches = renderConnectionPointBranches;
 window.estimateConnectionPointWireLength = estimateConnectionPointWireLength;
+window.aggregateCableLengthsByMaterial = aggregateCableLengthsByMaterial;
+window.renderCableLengthSummary = renderCableLengthSummary;
 window.getConnectionPointRouteSegments = getConnectionPointRouteSegments;
 window.handleEditConnectionPointSegment = handleEditConnectionPointSegment;
 window.renderConnectionPointSegmentEditor = renderConnectionPointSegmentEditor;
