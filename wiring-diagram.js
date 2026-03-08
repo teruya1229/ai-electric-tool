@@ -1496,6 +1496,76 @@ function renderAiDiagramByMode(sceneModel) {
   ensureAiDiagramModeSwitcher();
 }
 
+function renderConnectionPointsEditor(sceneModel) {
+  const panel = document.getElementById("connection-points-editor");
+  if (!panel) return;
+
+  let connectionPoints = [];
+  if (sceneModel && Array.isArray(sceneModel.connectionPoints)) {
+    connectionPoints = sceneModel.connectionPoints;
+  } else {
+    let groups = [];
+    if (sceneModel && Array.isArray(sceneModel.groups)) {
+      groups = sceneModel.groups;
+    } else {
+      const parsed = parseGroupsFromDom();
+      groups = parsed.groups;
+    }
+    const circuits = createCircuitsFromGroups(groups);
+    connectionPoints = createConnectionPointsFromCircuits(circuits);
+  }
+
+  panel.innerHTML = "";
+  if (!Array.isArray(connectionPoints) || !connectionPoints.length) {
+    panel.textContent = "接続点なし";
+    return;
+  }
+
+  const toPointLabel = (point, index) => {
+    const pointId = String(point?.id || "");
+    const hit = pointId.match(/(\d+)(?!.*\d)/);
+    return hit ? `CP${hit[1]}` : `CP${index + 1}`;
+  };
+
+  const toDeviceLabel = (item, fallbackIndex) => {
+    if (typeof item === "string") return item;
+    const type = item?.deviceType || item?.type || "";
+    const id = String(item?.deviceId || item?.id || "");
+    const indexHit = id.match(/(\d+)(?!.*\d)/);
+    const suffix = indexHit ? indexHit[1] : String(fallbackIndex + 1);
+    if (type === "switch") return `SW${suffix}`;
+    if (type === "light") return `LIGHT${suffix}`;
+    if (type === "outlet" || type === "ac_outlet") return `OUTLET${suffix}`;
+    if (type === "junction") return `JUNCTION${suffix}`;
+    if (id) return id.toUpperCase();
+    return `DEVICE${suffix}`;
+  };
+
+  connectionPoints.forEach((point, index) => {
+    const card = document.createElement("div");
+    card.className = "cp-card";
+    card.setAttribute("style", "padding:12px;margin-bottom:10px;border:1px solid #ddd;border-radius:8px;");
+
+    const title = document.createElement("div");
+    title.textContent = `接続点 ${toPointLabel(point, index)}`;
+    card.appendChild(title);
+
+    const list = document.createElement("ul");
+    const sourceDevices = Array.isArray(point?.devices)
+      ? point.devices
+      : Array.isArray(point?.connectedDevices)
+        ? point.connectedDevices
+        : [point];
+    sourceDevices.forEach((device, deviceIndex) => {
+      const li = document.createElement("li");
+      li.textContent = toDeviceLabel(device, deviceIndex);
+      list.appendChild(li);
+    });
+    card.appendChild(list);
+    panel.appendChild(card);
+  });
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
@@ -1507,6 +1577,7 @@ function setupCircuitListAutoRender() {
   renderWirePathDebug();
   ensureAiDiagramModeSwitcher();
   renderAiDiagramByMode();
+  renderConnectionPointsEditor();
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
@@ -1518,6 +1589,7 @@ function setupCircuitListAutoRender() {
     renderWirePathDebug();
     ensureAiDiagramModeSwitcher();
     renderAiDiagramByMode();
+    renderConnectionPointsEditor();
   });
   observer.observe(target, {
     childList: true,
@@ -1539,6 +1611,7 @@ window.renderAiDiagramPreview = renderAiDiagramPreview;
 window.renderAiDiagramEnhanced = renderAiDiagramEnhanced;
 window.renderAiDiagramExamStyle = renderAiDiagramExamStyle;
 window.renderAiDiagramByMode = renderAiDiagramByMode;
+window.renderConnectionPointsEditor = renderConnectionPointsEditor;
 
 initPlayground();
 setupCircuitListAutoRender();
