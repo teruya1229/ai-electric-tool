@@ -691,18 +691,181 @@ function createGroupFromLine(parsed) {
   return group;
 }
 
-export function parseFieldSceneText(text) {
+const STRUCTURED_ROOM_RULES = [
+  { id: "玄関", patterns: [/玄関/] },
+  { id: "廊下", patterns: [/廊下/] },
+  { id: "LDK", patterns: [/\bldk\b/, /リビング/, /居間/] },
+  { id: "トイレ", patterns: [/トイレ/] },
+  { id: "洗面", patterns: [/洗面/, /洗面所/] },
+  { id: "キッチン", patterns: [/キッチン/, /台所/] },
+  { id: "洋室", patterns: [/洋室/] },
+];
+
+function extractStructuredRoom(line) {
+  const hit = STRUCTURED_ROOM_RULES.find((item) => _matchesAny(item.patterns, line));
+  return hit ? hit.id : "";
+}
+
+function extractStructuredSwitchType(line) {
+  if (/(4路|四路)/.test(line)) return "fourway";
+  if (/(3路|三路)/.test(line)) return "threeway";
+  if (/片切/.test(line)) return "single";
+  return "";
+}
+
+function detectStructuredLight(line) {
+  return /(照明|ライト|ダウンライト|シーリング)/.test(line);
+}
+
+function detectStructuredOutlet(line) {
+  if (/エアコンコンセント/.test(line)) return "ac_outlet";
+  if (/コンセント/.test(line)) return "outlet";
+  return "";
+}
+
+/**
+ * @param {string} text
+ */
+export function parseStructuredDeviceText(text) {
   const lines = String(text || "")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+  const result = {
+    devices: [],
+    switches: [],
+    lights: [],
+    outlets: [],
+    circuits: [],
+    controlGroups: [],
+    warnings: [],
+  };
+  if (!lines.length) return result;
 
+  const groupMap = new Map();
+  let activeRoom = "";
+
+  const ensureGroup = (room) => {
+    const key = room || "未指定";
+    const existing = groupMap.get(key);
+    if (existing) return existing;
+    const group = {
+      id: key,
+      room: key,
+      switchType: "",
+      lights: [],
+      outlets: [],
+      devices: [],
+    };
+    groupMap.set(key, group);
+    return group;
+  };
+
+  lines.forEach((rawLine, idx) => {
+    const normalized = normalizeProblemText(rawLine);
+    const room = extractStructuredRoom(normalized);
+    if (room) activeRoom = room;
+    const group = ensureGroup(room || activeRoom);
+
+    const switchType = extractStructuredSwitchType(normalized);
+    if (switchType) {
+      group.switchType = switchType;
+      result.switches.push({
+        id: `sw-${result.switches.length + 1}`,
+        type: switchType,
+        room: group.room,
+        line: idx + 1,
+      });
+    }
+
+    if (detectStructuredLight(normalized)) {
+      const quantity = Math.max(1, detectQuantity(normalized));
+      const light = {
+        id: `light-${result.lights.length + 1}`,
+        room: group.room,
+        quantity,
+        line: idx + 1,
+      };
+      group.lights.push(light);
+      group.devices.push({ kind: "light", ...light });
+      result.lights.push(light);
+    }
+
+    const outletType = detectStructuredOutlet(normalized);
+    if (outletType) {
+      const quantity = Math.max(1, detectQuantity(normalized));
+      const outlet = {
+        id: `outlet-${result.outlets.length + 1}`,
+        room: group.room,
+        outletType,
+        quantity,
+        line: idx + 1,
+      };
+      group.outlets.push(outlet);
+      group.devices.push({ kind: "outlet", ...outlet });
+      result.outlets.push(outlet);
+    }
+  });
+
+  result.controlGroups = Array.from(groupMap.values()).filter((group) => group.lights.length || group.outlets.length);
+  result.devices = [...result.lights.map((item) => ({ kind: "light", ...item })), ...result.outlets.map((item) => ({ kind: "outlet", ...item }))];
+  result.circuits = result.controlGroups.map((group, index) => ({
+    id: index + 1,
+    room: group.room,
+    switchType: group.switchType || "single",
+    lights: group.lights.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    outlets: group.outlets.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+  }));
+  return result;
+}
+
+function createGroupsFromStructuredParse(structured) {
+  const groups = [];
+  const warnings = [];
+  (structured?.controlGroups || []).forEach((item) => {
+    const lightCount = item.lights.reduce((sum, light) => sum + Number(light.quantity || 0), 0);
+    const outletCount = item.outlets.reduce((sum, outlet) => sum + Number(outlet.quantity || 0), 0);
+    if (lightCount <= 0 && outletCount <= 0) return;
+    const group = createEmptyGroup("");
+    group.label = item.room || "";
+    group.purpose = lightCount > 0 ? "light" : item.outlets.some((outlet) => outlet.outletType === "ac_outlet") ? "ac_outlet" : "outlet";
+    const parsedSwitchType = item.switchType || "single";
+    if (parsedSwitchType === "fourway") {
+      warnings.push(`${group.label || "未指定"}: 4路は未対応のため3路として扱います。`);
+    }
+    group.switchType = parsedSwitchType === "threeway" || parsedSwitchType === "fourway" ? "threeway" : "single";
+    group.sameTime = lightCount >= 2;
+    _setGroupQuantity(group, "light", Math.min(lightCount, 6));
+    _setGroupQuantity(group, "outlet", Math.min(outletCount, 6));
+    group.controlId = getNextControlId(groups);
+    groups.push(group);
+  });
+  return { groups, warnings };
+}
+
+export function parseFieldSceneText(text) {
   const result = {
     groups: [],
     warnings: [],
     errors: [],
     lineResults: [],
   };
+  const structured = parseStructuredDeviceText(text);
+  const structuredBuilt = createGroupsFromStructuredParse(structured);
+  if (structuredBuilt.groups.length) {
+    result.groups = structuredBuilt.groups;
+    result.warnings.push(...structuredBuilt.warnings);
+    if (result.groups.length > 6) {
+      result.errors.push("系統数は6件までです。");
+      result.groups = result.groups.slice(0, 6);
+    }
+    return result;
+  }
+
+  const lines = String(text || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
   lines.forEach((line, idx) => {
     const parsed = parseFieldLine(line);
