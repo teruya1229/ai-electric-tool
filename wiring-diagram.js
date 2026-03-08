@@ -15,6 +15,7 @@ import {
   judgeSleevesFromConnectionPoints,
 } from "./js/engine/circuit-engine.js";
 import { createMaterialsFromCircuits } from "./js/engine/materials-engine.js";
+import { calculateWireLength } from "./js/engine/wire-length-engine.js";
 import { initPlayground } from "./js/ui/index.js";
 
 window.buildDevicesFromSelection = buildDevicesFromSelection;
@@ -1229,6 +1230,57 @@ function renderOptimizedWireLengthSummary(sceneModel, wirePaths) {
   });
 
   panel.appendChild(card);
+}
+
+function toWireLengthSegments(wirePaths) {
+  const segments = [];
+  const appendFromPath = (path) => {
+    const points = Array.isArray(path) ? path : [];
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      if (!p1 || !p2) continue;
+      if (!Number.isFinite(Number(p1.x)) || !Number.isFinite(Number(p1.y))) continue;
+      if (!Number.isFinite(Number(p2.x)) || !Number.isFinite(Number(p2.y))) continue;
+      segments.push({ x1: Number(p1.x), y1: Number(p1.y), x2: Number(p2.x), y2: Number(p2.y) });
+    }
+  };
+  (Array.isArray(wirePaths) ? wirePaths : []).forEach((wirePath) => {
+    appendFromPath(wirePath?.path);
+    (Array.isArray(wirePath?.wires) ? wirePath.wires : []).forEach((wire) => appendFromPath(wire?.path));
+  });
+  return segments;
+}
+
+function renderWireLength(wirePaths) {
+  const panel = document.getElementById("wire-length-result");
+  if (!panel) return;
+  const segments = toWireLengthSegments(wirePaths);
+  const result = calculateWireLength(segments);
+  const totalMeter = Number(result?.totalLength || 0) / 1000;
+  panel.textContent = `配線総延長\n\n${totalMeter.toFixed(1)} m`;
+}
+
+function renderWireLengthFromScene(sceneModel) {
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+  if (!groups.length) {
+    renderWireLength([]);
+    return;
+  }
+  const circuits = createCircuitsFromGroups(groups);
+  const graphs = createCircuitGraphFromCircuits(circuits);
+  const layouts = createDiagramLayoutsFromGraphs(graphs);
+  let wirePaths = createWirePathsFromLayouts(layouts);
+  wirePaths = optimizeWirePaths(sceneModel, wirePaths);
+  wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
+  wirePaths = selectConstraintSafeWirePaths(sceneModel, wirePaths);
+  renderWireLength(wirePaths);
 }
 
 function renderWirePathDebug(sceneModel) {
@@ -3494,6 +3546,7 @@ function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
   renderCircuitMaterialListFromScene();
+  renderWireLengthFromScene();
   renderSleeveJudgeList();
   renderParseDebugResult();
   renderLayoutDebug();
@@ -3507,6 +3560,7 @@ function setupCircuitListAutoRender() {
   const observer = new MutationObserver(() => {
     renderCircuitList();
     renderCircuitMaterialListFromScene();
+    renderWireLengthFromScene();
     renderSleeveJudgeList();
     renderParseDebugResult();
     renderLayoutDebug();
