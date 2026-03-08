@@ -392,3 +392,67 @@ Run確認で以下が表示された場合は、Allowlist を選択する。
 - git restore --source
 - git reset --mixed
 - git reset --soft
+
+---
+
+## Engine Layer 保護
+
+本プロジェクトは以下の3層構造で設計されています。
+
+UI Layer
+Engine Layer
+Render Layer
+
+--------------------------------
+
+Engine Layer
+
+対象
+
+parser
+groups
+circuits
+connectionPoints
+graph
+
+この層は
+
+回路生成のコアロジック
+
+であり
+
+AIは原則変更してはいけない。
+
+UI修正時も
+
+Engine Layer を変更しないこと。
+
+--------------------------------
+
+Render Layer
+
+layout
+wirePaths
+SVG
+
+レイアウト調整のみ許可。
+
+--------------------------------
+
+## 作業ログ
+
+【2026-03-08 作業終了時点】
+
+本日やったこと
+
+・3路回路修正
+・材料生成修正
+・エンジン保護ルール追加
+
+現在の状態
+
+・複線図生成正常
+
+次回やること
+
+・複線図エンジン安定化
