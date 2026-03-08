@@ -389,6 +389,9 @@ function _syncToExistingUiAndGenerate() {
 
   const circuitSelector = UI.circuit === "3路" ? "#circuit-threeway-btn" : "#circuit-single-btn";
   _clickIfExists(circuitSelector);
+  if (UI.circuit === "3路") {
+    _clickIfExists(circuitSelector);
+  }
 
   const conditionTextMap = {
     single_1light: ["1灯", "1灯のみ"],
@@ -397,15 +400,33 @@ function _syncToExistingUiAndGenerate() {
     threeway_1light: "1灯",
   };
 
-  const conditionText = conditionTextMap[UI.condition.id];
-  const conditionButtons = Array.from(document.querySelectorAll("#condition-buttons button"));
-  const matchText = (rawText) => {
-    const text = String(rawText || "").trim();
-    if (Array.isArray(conditionText)) return conditionText.some((item) => text === item);
-    return text === conditionText;
-  };
-  const target = conditionButtons.find((btn) => matchText(btn.textContent));
-  if (target instanceof HTMLElement) target.click();
+  const getConditionButtons = () => Array.from(document.querySelectorAll("#condition-buttons button"));
+  let conditionButtons = getConditionButtons();
+  if (UI.circuit === "3路") {
+    if (conditionButtons.length !== 1) {
+      _clickIfExists(circuitSelector);
+      conditionButtons = getConditionButtons();
+    }
+    if (conditionButtons.length === 1 && conditionButtons[0] instanceof HTMLElement) {
+      conditionButtons[0].click();
+    } else {
+      const threewayHint = conditionButtons.find((btn) => String(btn.textContent || "").includes("3路"));
+      if (threewayHint instanceof HTMLElement) {
+        threewayHint.click();
+      } else {
+        return false;
+      }
+    }
+  } else {
+    const conditionText = conditionTextMap[UI.condition.id];
+    const matchText = (rawText) => {
+      const text = String(rawText || "").trim();
+      if (Array.isArray(conditionText)) return conditionText.some((item) => text === item);
+      return text === conditionText;
+    };
+    const target = conditionButtons.find((btn) => matchText(btn.textContent));
+    if (target instanceof HTMLElement) target.click();
+  }
 
   const modeSelector =
     UI.mode === "現場"
@@ -518,7 +539,7 @@ window.addEventListener("DOMContentLoaded", () => {
       el.style.display = visible ? "block" : "none";
     });
     if (devToggleBtn instanceof HTMLElement) {
-      devToggleBtn.textContent = visible ? "🛠 開発者モード ON" : "🛠 開発者モード OFF";
+      devToggleBtn.textContent = visible ? "🛠 詳細表示 ON" : "🛠 詳細表示 OFF";
     }
   };
 

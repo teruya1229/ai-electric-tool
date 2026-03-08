@@ -33,8 +33,34 @@ let aiDiagramRenderState = {
 };
 let connectionPointsEditorSceneModel = null;
 
+const LABEL_JA = {
+  outlet: "コンセント",
+  ac_outlet: "エアコンコンセント",
+  light: "照明",
+  cable: "電線",
+  device: "器具",
+  unknown: "未設定",
+  single: "片切",
+  threeway: "3路",
+  three_way: "3路",
+  trunk: "幹線",
+  branch: "枝線",
+  fan: "換気扇",
+  mixed: "混在",
+  none: "なし",
+  switch: "スイッチ",
+  source: "電源",
+  junction: "ジョイント",
+};
+
+function toJaLabel(value) {
+  if (value === null || typeof value === "undefined") return value;
+  const key = String(value).trim().toLowerCase();
+  return LABEL_JA[key] || String(value);
+}
+
 function getCircuitSummaryLabel(circuit) {
-  return `回路${circuit.id} / ${circuit.type}`;
+  return `回路${circuit.id} / ${toJaLabel(circuit.type)}`;
 }
 
 function findCircuitForGroup(circuits, group) {
@@ -127,7 +153,7 @@ function renderCircuitList(sceneModel) {
     list.className = "circuit-group-list";
     (circuit.groups || []).forEach((group) => {
       const row = document.createElement("li");
-      row.textContent = `${group.controlId || "-"} / ${group.label || "-"} / ${group.purpose || "unknown"}`;
+      row.textContent = `${group.controlId || "-"} / ${group.label || "-"} / ${toJaLabel(group.purpose || "unknown")}`;
       if (activeGroup && group === activeGroup) row.classList.add("active");
       list.appendChild(row);
     });
@@ -137,7 +163,7 @@ function renderCircuitList(sceneModel) {
 }
 
 function getMaterialSummaryLabel(material) {
-  return `${material.name} / ${material.type} / ${material.quantity}`;
+  return `${material.name} / ${toJaLabel(material.type)} / ${material.quantity}`;
 }
 
 function createMaterialsForCircuit(circuit) {
@@ -146,7 +172,7 @@ function createMaterialsForCircuit(circuit) {
 
 function getCircuitMaterialSummaryLabel(material) {
   const parts = [material.name];
-  if (material.type) parts.push(material.type);
+  if (material.type) parts.push(toJaLabel(material.type));
   if (typeof material.quantity !== "undefined" && material.quantity !== null && material.quantity !== "") {
     parts.push(String(material.quantity));
   }
@@ -272,7 +298,7 @@ function renderSleeveJudgeList(sceneModel) {
     card.className = "sleeve-judge-item";
 
     const lines = [
-      `回路${judged.circuitId || "-"} / ${judged.purpose || "unknown"}`,
+      `回路${judged.circuitId || "-"} / ${toJaLabel(judged.purpose || "unknown")}`,
       `接続点 ${judged.connectionPointId || "-"}`,
       `本数: ${typeof judged.wireCount === "number" ? judged.wireCount : "-"}`,
       `推奨: ${judged.recommendedConnector || "-"}`,
@@ -330,11 +356,11 @@ function renderParseDebugResult(sceneModel) {
     const lines = [
       `Group ${group?.label || String.fromCharCode(65 + (index % 26))}`,
       `label: ${group?.label || "-"}`,
-      `type: ${detectGroupType(group)}`,
-      `purpose: ${group?.purpose || "unknown"}`,
-      `control: ${group?.controlId || "-"} / ${group?.switchType || "none"}`,
-      `assist: ${assistFeatures.length ? assistFeatures.join(" / ") : "none"}`,
-      `warning: ${warnings.length ? warnings.join(" / ") : "none"}`,
+      `種類: ${toJaLabel(detectGroupType(group))}`,
+      `用途: ${toJaLabel(group?.purpose || "unknown")}`,
+      `制御: ${group?.controlId || "-"} / ${toJaLabel(group?.switchType || "none")}`,
+      `補助: ${assistFeatures.length ? assistFeatures.map((item) => toJaLabel(item)).join(" / ") : "なし"}`,
+      `警告: ${warnings.length ? warnings.map((item) => toJaLabel(item)).join(" / ") : "なし"}`,
     ];
 
     card.textContent = lines.join("\n");
