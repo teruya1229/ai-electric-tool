@@ -2138,6 +2138,78 @@ function renderSleeveMaterialSummary(sceneModel) {
   });
 }
 
+function aggregateDeviceMaterials(sceneModel) {
+  let model = sceneModel;
+  if (!model || typeof model !== "object") {
+    if (connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object") {
+      model = connectionPointsEditorSceneModel;
+    } else {
+      model = {};
+    }
+  }
+
+  const connectionPoints = Array.isArray(model?.connectionPoints) ? model.connectionPoints : [];
+  if (!connectionPoints.length) return {};
+
+  const result = {
+    スイッチ: 0,
+    コンセント: 0,
+    照明器具: 0,
+  };
+
+  const toDeviceLabel = (device) => {
+    const raw =
+      typeof device === "string"
+        ? device
+        : String(device?.deviceId || device?.id || device?.name || device?.type || device?.deviceType || "");
+    const text = raw.toUpperCase();
+    if (text.includes("SW")) return "スイッチ";
+    if (text.includes("OUTLET")) return "コンセント";
+    if (text.includes("LIGHT")) return "照明器具";
+    return null;
+  };
+
+  connectionPoints.forEach((point) => {
+    const devices = Array.isArray(point?.devices) ? point.devices : [];
+    devices.forEach((device) => {
+      const label = toDeviceLabel(device);
+      if (!label) return;
+      result[label] += 1;
+    });
+  });
+
+  const compact = {};
+  if (result["スイッチ"] > 0) compact["スイッチ"] = result["スイッチ"];
+  if (result["コンセント"] > 0) compact["コンセント"] = result["コンセント"];
+  if (result["照明器具"] > 0) compact["照明器具"] = result["照明器具"];
+  return compact;
+}
+
+function renderDeviceMaterialSummary(sceneModel) {
+  const panel = document.getElementById("device-material-summary");
+  if (!panel) return;
+
+  const summary = aggregateDeviceMaterials(sceneModel);
+  const rows = Object.entries(summary || {});
+  panel.innerHTML = "";
+  if (!rows.length) {
+    panel.textContent = "器具材料データなし";
+    return;
+  }
+
+  rows.forEach(([name, qty]) => {
+    const row = document.createElement("div");
+    row.setAttribute("style", "display:flex;justify-content:space-between;gap:8px;");
+    const left = document.createElement("span");
+    left.textContent = name;
+    const right = document.createElement("strong");
+    right.textContent = String(qty);
+    row.appendChild(left);
+    row.appendChild(right);
+    panel.appendChild(row);
+  });
+}
+
 function renderCircuitHeightEditor(sceneModel) {
   const profile = getCircuitHeightProfile(sceneModel);
   const block = document.createElement("div");
@@ -2295,6 +2367,7 @@ function renderConnectionPointRoute(sceneModel) {
     renderCableLengthSummary(sceneModel);
     renderCircuitCableLengthSummary(sceneModel);
     renderSleeveMaterialSummary(sceneModel);
+    renderDeviceMaterialSummary(sceneModel);
     return;
   }
 
@@ -2329,6 +2402,11 @@ function renderConnectionPointRoute(sceneModel) {
         : { connectionPoints }
     );
     renderSleeveMaterialSummary(
+      connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object"
+        ? connectionPointsEditorSceneModel
+        : { connectionPoints }
+    );
+    renderDeviceMaterialSummary(
       connectionPointsEditorSceneModel && typeof connectionPointsEditorSceneModel === "object"
         ? connectionPointsEditorSceneModel
         : { connectionPoints }
@@ -2386,7 +2464,13 @@ function renderConnectionPointRoute(sceneModel) {
       ? connectionPointsEditorSceneModel
       : { connectionPoints };
   const estimate = estimateConnectionPointWireLength(routeModel);
-  if (!Array.isArray(estimate.trunkSegments) || estimate.trunkSegments.length < 1) return;
+  if (!Array.isArray(estimate.trunkSegments) || estimate.trunkSegments.length < 1) {
+    renderCableLengthSummary(routeModel);
+    renderCircuitCableLengthSummary(routeModel);
+    renderSleeveMaterialSummary(routeModel);
+    renderDeviceMaterialSummary(routeModel);
+    return;
+  }
 
   const estimateBlock = document.createElement("div");
   estimateBlock.className = "wire-length-estimate";
@@ -2423,6 +2507,7 @@ function renderConnectionPointRoute(sceneModel) {
   renderCableLengthSummary(routeModel);
   renderCircuitCableLengthSummary(routeModel);
   renderSleeveMaterialSummary(routeModel);
+  renderDeviceMaterialSummary(routeModel);
 }
 
 function setupCircuitListAutoRender() {
@@ -2490,6 +2575,8 @@ window.renderCableLengthSummary = renderCableLengthSummary;
 window.renderCircuitCableLengthSummary = renderCircuitCableLengthSummary;
 window.aggregateSleeveMaterials = aggregateSleeveMaterials;
 window.renderSleeveMaterialSummary = renderSleeveMaterialSummary;
+window.aggregateDeviceMaterials = aggregateDeviceMaterials;
+window.renderDeviceMaterialSummary = renderDeviceMaterialSummary;
 window.getConnectionPointRouteSegments = getConnectionPointRouteSegments;
 window.handleEditConnectionPointSegment = handleEditConnectionPointSegment;
 window.renderConnectionPointSegmentEditor = renderConnectionPointSegmentEditor;
