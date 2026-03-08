@@ -391,6 +391,91 @@ function renderLayoutDebug(sceneModel) {
   });
 }
 
+function normalizeWirePathPoints(path) {
+  if (!Array.isArray(path)) return [];
+
+  const toPoint = (point) => {
+    if (!point || typeof point !== "object") return null;
+    const x = Number(point.x);
+    const y = Number(point.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  };
+
+  const normalized = [];
+  path.forEach((point) => {
+    const normalizedPoint = toPoint(point);
+    if (!normalizedPoint) return;
+    const prev = normalized[normalized.length - 1];
+    if (prev && prev.x === normalizedPoint.x && prev.y === normalizedPoint.y) return;
+    normalized.push(normalizedPoint);
+  });
+  return normalized;
+}
+
+function simplifyWirePathPoints(path) {
+  const points = Array.isArray(path) ? path : [];
+  if (points.length <= 2) return points.slice();
+
+  const simplified = [points[0]];
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const prev = simplified[simplified.length - 1];
+    const current = points[i];
+    const next = points[i + 1];
+
+    const isVertical =
+      Number(prev?.x) === Number(current?.x) && Number(current?.x) === Number(next?.x);
+    const isHorizontal =
+      Number(prev?.y) === Number(current?.y) && Number(current?.y) === Number(next?.y);
+    if (isVertical || isHorizontal) continue;
+    simplified.push(current);
+  }
+  simplified.push(points[points.length - 1]);
+  return simplified;
+}
+
+function optimizeWirePaths(sceneModel, wirePaths) {
+  const hasConnectionConstraints =
+    !!sceneModel &&
+    typeof sceneModel === "object" &&
+    Array.isArray(sceneModel.connectionPoints) &&
+    sceneModel.connectionPoints.length > 0;
+
+  if (!Array.isArray(wirePaths)) return [];
+
+  const optimizePath = (rawPath) => {
+    if (!Array.isArray(rawPath)) return rawPath;
+    const normalized = normalizeWirePathPoints(rawPath);
+    const simplified = simplifyWirePathPoints(normalized);
+    if (!Array.isArray(simplified) || simplified.length < 2) {
+      return rawPath;
+    }
+    if (hasConnectionConstraints && simplified.length < 2) {
+      return rawPath;
+    }
+    return simplified;
+  };
+
+  return wirePaths.map((wirePath) => {
+    if (!wirePath || typeof wirePath !== "object") return wirePath;
+    const nextWirePath = { ...wirePath };
+    if (Array.isArray(wirePath.path)) {
+      nextWirePath.path = optimizePath(wirePath.path);
+    }
+    if (Array.isArray(wirePath.wires)) {
+      nextWirePath.wires = wirePath.wires.map((wire) => {
+        if (!wire || typeof wire !== "object") return wire;
+        const nextWire = { ...wire };
+        if (Array.isArray(wire.path)) {
+          nextWire.path = optimizePath(wire.path);
+        }
+        return nextWire;
+      });
+    }
+    return nextWirePath;
+  });
+}
+
 function renderWirePathDebug(sceneModel) {
   const panel = document.getElementById("wire-path-debug-result");
   if (!panel) return;
@@ -417,7 +502,8 @@ function renderWirePathDebug(sceneModel) {
     return;
   }
 
-  const wirePaths = createWirePathsFromLayouts(layouts);
+  let wirePaths = createWirePathsFromLayouts(layouts);
+  wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) {
     panel.textContent = "wireなし";
@@ -495,7 +581,8 @@ function renderAiDiagramPreview(sceneModel) {
     return;
   }
 
-  const wirePaths = createWirePathsFromLayouts(layouts);
+  let wirePaths = createWirePathsFromLayouts(layouts);
+  wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) {
     panel.textContent = "wireなし";
@@ -576,7 +663,8 @@ function renderAiDiagramEnhanced(sceneModel) {
   const layouts = createDiagramLayoutsFromGraphs(graphs);
   if (!layouts.length) return;
 
-  const wirePaths = createWirePathsFromLayouts(layouts);
+  let wirePaths = createWirePathsFromLayouts(layouts);
+  wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) return;
 
@@ -698,7 +786,8 @@ function renderAiDiagramExamStyle(sceneModel) {
   const layouts = createDiagramLayoutsFromGraphs(graphs);
   if (!layouts.length) return;
 
-  const wirePaths = createWirePathsFromLayouts(layouts);
+  let wirePaths = createWirePathsFromLayouts(layouts);
+  wirePaths = optimizeWirePaths(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) return;
   const connectionPoints =
@@ -2672,6 +2761,9 @@ window.renderCircuitMaterialList = renderCircuitMaterialList;
 window.renderSleeveJudgeList = renderSleeveJudgeList;
 window.renderParseDebugResult = renderParseDebugResult;
 window.renderLayoutDebug = renderLayoutDebug;
+window.normalizeWirePathPoints = normalizeWirePathPoints;
+window.simplifyWirePathPoints = simplifyWirePathPoints;
+window.optimizeWirePaths = optimizeWirePaths;
 window.renderWirePathDebug = renderWirePathDebug;
 window.renderAiDiagramPreview = renderAiDiagramPreview;
 window.renderAiDiagramEnhanced = renderAiDiagramEnhanced;
