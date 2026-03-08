@@ -476,6 +476,205 @@ function optimizeWirePaths(sceneModel, wirePaths) {
   });
 }
 
+function countWirePathSegmentIntersections(pathA, pathB) {
+  const a = Array.isArray(pathA) ? normalizeWirePathPoints(pathA) : [];
+  const b = Array.isArray(pathB) ? normalizeWirePathPoints(pathB) : [];
+  if (a.length < 2 || b.length < 2) return 0;
+
+  const toSegments = (points) => {
+    const segments = [];
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      if (!p1 || !p2) continue;
+      if (p1.x === p2.x && p1.y === p2.y) continue;
+      const isHorizontal = p1.y === p2.y;
+      const isVertical = p1.x === p2.x;
+      if (!isHorizontal && !isVertical) continue;
+      segments.push({
+        x1: p1.x,
+        y1: p1.y,
+        x2: p2.x,
+        y2: p2.y,
+        isHorizontal,
+        isVertical,
+      });
+    }
+    return segments;
+  };
+
+  const aSegments = toSegments(a);
+  const bSegments = toSegments(b);
+  if (!aSegments.length || !bSegments.length) return 0;
+
+  const isStrictBetween = (value, min, max) => value > min && value < max;
+  let count = 0;
+
+  aSegments.forEach((sa) => {
+    bSegments.forEach((sb) => {
+      if ((sa.isHorizontal && sb.isHorizontal) || (sa.isVertical && sb.isVertical)) return;
+      const h = sa.isHorizontal ? sa : sb;
+      const v = sa.isVertical ? sa : sb;
+      if (!h.isHorizontal || !v.isVertical) return;
+
+      const hxMin = Math.min(h.x1, h.x2);
+      const hxMax = Math.max(h.x1, h.x2);
+      const vyMin = Math.min(v.y1, v.y2);
+      const vyMax = Math.max(v.y1, v.y2);
+      const ix = v.x1;
+      const iy = h.y1;
+
+      if (!isStrictBetween(ix, hxMin, hxMax)) return;
+      if (!isStrictBetween(iy, vyMin, vyMax)) return;
+      count += 1;
+    });
+  });
+
+  return count;
+}
+
+function scoreWirePathIntersections(wirePaths) {
+  if (!Array.isArray(wirePaths) || !wirePaths.length) return { totalScore: 0, byIndex: [] };
+
+  const pathEntries = [];
+  wirePaths.forEach((wirePath, index) => {
+    if (!wirePath || typeof wirePath !== "object") return;
+    if (Array.isArray(wirePath.path)) {
+      const points = normalizeWirePathPoints(wirePath.path);
+      if (points.length >= 2) pathEntries.push({ ownerIndex: index, points });
+    }
+    if (Array.isArray(wirePath.wires)) {
+      wirePath.wires.forEach((wire) => {
+        if (!wire || typeof wire !== "object" || !Array.isArray(wire.path)) return;
+        const points = normalizeWirePathPoints(wire.path);
+        if (points.length >= 2) pathEntries.push({ ownerIndex: index, points });
+      });
+    }
+  });
+
+  const byIndex = Array.from({ length: wirePaths.length }, () => 0);
+  let totalScore = 0;
+  for (let i = 0; i < pathEntries.length; i += 1) {
+    for (let j = i + 1; j < pathEntries.length; j += 1) {
+      const score = countWirePathSegmentIntersections(pathEntries[i].points, pathEntries[j].points);
+      if (!score) continue;
+      totalScore += score;
+      if (Number.isInteger(pathEntries[i].ownerIndex)) byIndex[pathEntries[i].ownerIndex] += score;
+      if (Number.isInteger(pathEntries[j].ownerIndex)) byIndex[pathEntries[j].ownerIndex] += score;
+    }
+  }
+
+  return { totalScore, byIndex };
+}
+
+function buildAlternateOrthogonalPath(path) {
+  const original = Array.isArray(path) ? path : [];
+  const points = simplifyWirePathPoints(normalizeWirePathPoints(original));
+  if (points.length < 2) return original;
+
+  const start = points[0];
+  const end = points[points.length - 1];
+  if (!start || !end) return original;
+  if (start.x === end.x && start.y === end.y) return original;
+
+  const altA = simplifyWirePathPoints(
+    normalizeWirePathPoints([start, { x: end.x, y: start.y }, end])
+  );
+  if (Array.isArray(altA) && altA.length >= 2) return altA;
+
+  const altB = simplifyWirePathPoints(
+    normalizeWirePathPoints([start, { x: start.x, y: end.y }, end])
+  );
+  if (Array.isArray(altB) && altB.length >= 2) return altB;
+
+  return original;
+}
+
+function reduceWirePathIntersections(sceneModel, wirePaths) {
+  const hasConnectionConstraints =
+    !!sceneModel &&
+    typeof sceneModel === "object" &&
+    Array.isArray(sceneModel.connectionPoints) &&
+    sceneModel.connectionPoints.length >= 0;
+  void hasConnectionConstraints;
+
+  if (!Array.isArray(wirePaths)) return [];
+
+  const cloned = wirePaths.map((wirePath) => {
+    if (!wirePath || typeof wirePath !== "object") return wirePath;
+    return {
+      ...wirePath,
+      wires: Array.isArray(wirePath.wires)
+        ? wirePath.wires.map((wire) => (wire && typeof wire === "object" ? { ...wire } : wire))
+        : wirePath.wires,
+      path: Array.isArray(wirePath.path) ? wirePath.path.slice() : wirePath.path,
+    };
+  });
+
+  const score = scoreWirePathIntersections(cloned);
+  let currentTotal = Number(score?.totalScore || 0);
+  if (currentTotal <= 0) return cloned;
+
+  const byIndex = Array.isArray(score?.byIndex) ? score.byIndex : [];
+  const targetIndexes = byIndex
+    .map((value, index) => ({ index, value: Number(value || 0) }))
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .map((item) => item.index);
+
+  const swapPathAt = (ownerIndex, pathType, childIndex, nextPath) => {
+    const owner = cloned[ownerIndex];
+    if (!owner || typeof owner !== "object" || !Array.isArray(nextPath)) return false;
+    if (pathType === "root") {
+      if (!Array.isArray(owner.path)) return false;
+      owner.path = nextPath;
+      return true;
+    }
+    if (pathType === "wire") {
+      if (!Array.isArray(owner.wires) || !owner.wires[childIndex] || typeof owner.wires[childIndex] !== "object") return false;
+      owner.wires[childIndex].path = nextPath;
+      return true;
+    }
+    return false;
+  };
+
+  targetIndexes.forEach((ownerIndex) => {
+    const owner = cloned[ownerIndex];
+    if (!owner || typeof owner !== "object") return;
+    const candidates = [];
+    if (Array.isArray(owner.path)) {
+      candidates.push({ pathType: "root", childIndex: -1, path: owner.path });
+    }
+    if (Array.isArray(owner.wires)) {
+      owner.wires.forEach((wire, wireIndex) => {
+        if (wire && typeof wire === "object" && Array.isArray(wire.path)) {
+          candidates.push({ pathType: "wire", childIndex: wireIndex, path: wire.path });
+        }
+      });
+    }
+
+    candidates.forEach((candidate) => {
+      const originalPath = Array.isArray(candidate.path) ? candidate.path : [];
+      const alternate = buildAlternateOrthogonalPath(originalPath);
+      if (!Array.isArray(alternate) || alternate.length < 2) return;
+
+      const snapshot = Array.isArray(originalPath) ? originalPath.slice() : originalPath;
+      const swapped = swapPathAt(ownerIndex, candidate.pathType, candidate.childIndex, alternate);
+      if (!swapped) return;
+
+      const nextScore = scoreWirePathIntersections(cloned);
+      const nextTotal = Number(nextScore?.totalScore || 0);
+      if (nextTotal < currentTotal) {
+        currentTotal = nextTotal;
+        return;
+      }
+      swapPathAt(ownerIndex, candidate.pathType, candidate.childIndex, snapshot);
+    });
+  });
+
+  return cloned;
+}
+
 function renderWirePathDebug(sceneModel) {
   const panel = document.getElementById("wire-path-debug-result");
   if (!panel) return;
@@ -504,6 +703,7 @@ function renderWirePathDebug(sceneModel) {
 
   let wirePaths = createWirePathsFromLayouts(layouts);
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
+  wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) {
     panel.textContent = "wireなし";
@@ -583,6 +783,7 @@ function renderAiDiagramPreview(sceneModel) {
 
   let wirePaths = createWirePathsFromLayouts(layouts);
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
+  wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) {
     panel.textContent = "wireなし";
@@ -665,6 +866,7 @@ function renderAiDiagramEnhanced(sceneModel) {
 
   let wirePaths = createWirePathsFromLayouts(layouts);
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
+  wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) return;
 
@@ -788,6 +990,7 @@ function renderAiDiagramExamStyle(sceneModel) {
 
   let wirePaths = createWirePathsFromLayouts(layouts);
   wirePaths = optimizeWirePaths(sceneModel, wirePaths);
+  wirePaths = reduceWirePathIntersections(sceneModel, wirePaths);
   const hasWire = wirePaths.some((item) => Array.isArray(item?.wires) && item.wires.length > 0);
   if (!hasWire) return;
   const connectionPoints =
@@ -2764,6 +2967,10 @@ window.renderLayoutDebug = renderLayoutDebug;
 window.normalizeWirePathPoints = normalizeWirePathPoints;
 window.simplifyWirePathPoints = simplifyWirePathPoints;
 window.optimizeWirePaths = optimizeWirePaths;
+window.countWirePathSegmentIntersections = countWirePathSegmentIntersections;
+window.scoreWirePathIntersections = scoreWirePathIntersections;
+window.buildAlternateOrthogonalPath = buildAlternateOrthogonalPath;
+window.reduceWirePathIntersections = reduceWirePathIntersections;
 window.renderWirePathDebug = renderWirePathDebug;
 window.renderAiDiagramPreview = renderAiDiagramPreview;
 window.renderAiDiagramEnhanced = renderAiDiagramEnhanced;
