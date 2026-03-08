@@ -32,6 +32,54 @@ AI電気施工アシスタント
 
 --------------------------------
 
+## 現在のエンジンパイプライン
+
+AI文章
+↓
+parser
+↓
+sceneModel.structured
+↓
+groups
+↓
+circuits
+↓
+materials
+↓
+回路別材料
+↓
+graph
+↓
+layout
+↓
+wirePaths
+↓
+wireLength
+↓
+UI表示
+↓
+SVG
+
+--------------------------------
+
+## 現在存在するエンジン
+
+parser
+circuit-engine
+materials-engine
+wire-length-engine
+
+--------------------------------
+
+## 現在のUI機能
+
+複線図表示
+材料一覧
+回路別材料
+配線総延長
+
+--------------------------------
+
 ## 次にやること
 
 複線図パターンテスト
@@ -96,7 +144,7 @@ git
 
 git status
 git add PROJECT_STATE.md
-git commit -m "docs: resync project state with codebase"
+git commit -m "docs: update project engine state"
 git push
 
 --------------------------------
