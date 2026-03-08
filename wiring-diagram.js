@@ -14,7 +14,7 @@ import {
   createWirePathsFromLayouts,
   judgeSleevesFromConnectionPoints,
 } from "./js/engine/circuit-engine.js";
-import { createMaterialsFromCircuits } from "./js/engine/material-engine.js";
+import { createMaterialsFromCircuits } from "./js/engine/materials-engine.js";
 import { initPlayground } from "./js/ui/index.js";
 
 window.buildDevicesFromSelection = buildDevicesFromSelection;
@@ -166,7 +166,7 @@ function renderCircuitList(sceneModel) {
 }
 
 function getMaterialSummaryLabel(material) {
-  return `${material.name} / ${toJaLabel(material.type)} / ${material.quantity}`;
+  return `${material.name} | ${material.type} | ${material.quantity}`;
 }
 
 function createMaterialsForCircuit(circuit) {
@@ -182,23 +182,11 @@ function getCircuitMaterialSummaryLabel(material) {
   return parts.join(" / ");
 }
 
-function renderMaterialList(sceneModel) {
+function renderMaterialList(materials) {
   const panel = document.getElementById("material-list-result");
   if (!panel) return;
-
-  let groups = [];
-  if (sceneModel && Array.isArray(sceneModel.groups)) {
-    groups = sceneModel.groups;
-  } else {
-    const parsed = parseGroupsFromDom();
-    groups = parsed.groups;
-  }
-
-  const circuits = createCircuitsFromGroups(groups);
-  const materials = createMaterialsFromCircuits(circuits);
-
   panel.innerHTML = "";
-  if (!materials.length) {
+  if (!Array.isArray(materials) || !materials.length) {
     panel.textContent = "材料なし";
     return;
   }
@@ -212,6 +200,20 @@ function renderMaterialList(sceneModel) {
     list.appendChild(row);
   });
   panel.appendChild(list);
+}
+
+function renderMaterialListFromScene(sceneModel) {
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+
+  const circuits = createCircuitsFromGroups(groups);
+  const materials = createMaterialsFromCircuits(circuits);
+  renderMaterialList(materials);
 }
 
 function renderCircuitMaterialList(sceneModel) {
@@ -3479,7 +3481,7 @@ function renderConnectionPointRoute(sceneModel) {
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
   renderCircuitList();
-  renderMaterialList();
+  renderMaterialListFromScene();
   renderCircuitMaterialList();
   renderSleeveJudgeList();
   renderParseDebugResult();
@@ -3493,7 +3495,7 @@ function setupCircuitListAutoRender() {
   if (!target) return;
   const observer = new MutationObserver(() => {
     renderCircuitList();
-    renderMaterialList();
+    renderMaterialListFromScene();
     renderCircuitMaterialList();
     renderSleeveJudgeList();
     renderParseDebugResult();
