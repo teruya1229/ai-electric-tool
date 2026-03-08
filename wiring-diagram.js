@@ -1544,6 +1544,13 @@ function renderConnectionPointsEditor(sceneModel) {
     return `DEVICE${suffix}`;
   };
 
+  const detectConnectionPointType = (devices) => {
+    const labels = Array.isArray(devices) ? devices.map((item, index) => toDeviceLabel(item, index).toUpperCase()) : [];
+    if (labels.some((label) => label.includes("SW"))) return "switch_box";
+    if (labels.some((label) => label.includes("OUTLET"))) return "outlet_box";
+    return "junction";
+  };
+
   connectionPoints.forEach((point, index) => {
     const card = document.createElement("div");
     card.className = "cp-card";
@@ -1553,12 +1560,16 @@ function renderConnectionPointsEditor(sceneModel) {
     title.textContent = `接続点 ${toPointLabel(point, index)}`;
     card.appendChild(title);
 
-    const list = document.createElement("ul");
     const sourceDevices = Array.isArray(point?.devices)
       ? point.devices
       : Array.isArray(point?.connectedDevices)
         ? point.connectedDevices
         : [point];
+    const typeText = document.createElement("small");
+    typeText.textContent = `type: ${detectConnectionPointType(sourceDevices)}`;
+    card.appendChild(typeText);
+
+    const list = document.createElement("ul");
     sourceDevices.forEach((device, deviceIndex) => {
       const li = document.createElement("li");
       li.textContent = toDeviceLabel(device, deviceIndex);
