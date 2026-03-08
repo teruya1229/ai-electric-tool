@@ -111,7 +111,7 @@ AIは
 
 ## Engine Logic
 
-複線図エンジンは以下の構造で動作する。
+1 エンジン処理フロー
 
 parser
 ↓
@@ -128,42 +128,97 @@ layout
 wirePaths
 ↓
 SVG
+
+実行の起点は2系統ある。
+
+・問題文入力系
+parseProblemText()
+→ applyParsedResult()
+→ devices
+→ generateDiagram()（試験式SVG）
+
+・現場シーン入力系
+parseFieldSceneText()
+→ groups
+→ createCircuitsFromGroups()
+→ createConnectionPointsFromCircuits()
+→ createCircuitGraphFromCircuits()
+→ createDiagramLayoutsFromGraphs()
+→ createWirePathsFromLayouts()
+→ SVG描画
 
 --------------------------------
 
-役割
+2 各ステージの役割
 
 parser
-
-入力を解析する。
+入力テキストを正規化し、回路種別・灯数・コンセント数・switchType を判定する。
 
 groups
-
-回路グループを定義する。
+controlId / label / purpose / switchType / devices(数量) を持つ系統データを確定する。
 
 circuits
-
-回路構造を生成する。
+group の purpose から lighting / outlet / ac に束ね、回路単位へ再編する。
 
 connectionPoints
-
-接続ポイントを定義する。
+各回路から junction・light・outlet などの接続点を展開し、線種情報を付与する。
 
 graph
-
-回路ノード構造を作成する。
+source/switch/light/outlet ノードと edge(role) を生成し、回路トポロジを固定する。
 
 layout
-
-図面レイアウトを計算する。
+graph ノードに座標を与え、描画可能な平面配置へ変換する。
 
 wirePaths
-
-配線ルートを生成する。
+layout edge から折れ線 path を生成し、その後 optimize/reduce/select で経路調整する。
 
 SVG
+最終 path とノードから preview/enhanced/exam_style を描画する。
 
-最終図面を描画する。
+--------------------------------
+
+3 現在の依存関係
+
+主依存（現場シーン系）
+parser/index.js
+→ engine/circuit-engine.js
+→ wiring-diagram.js
+
+関数依存（固定チェーン）
+createCircuitsFromGroups()
+→ createConnectionPointsFromCircuits()
+→ createCircuitGraphFromCircuits()
+→ createDiagramLayoutsFromGraphs()
+→ createWirePathsFromLayouts()
+
+描画依存
+wiring-diagram.js の
+renderAiDiagramPreview() / renderAiDiagramEnhanced() / renderAiDiagramExamStyle()
+が wirePaths と layout を前提に SVG を構築する。
+
+補助依存
+createMaterialsFromCircuits() と judgeSleevesFromConnectionPoints() は
+circuits / connectionPoints へ依存するため、上流の groups 品質に影響される。
+
+--------------------------------
+
+4 将来壊れやすい箇所
+
+・purpose ベースの回路分類依存
+createCircuitsFromGroups() は group.purpose の値に強く依存するため、
+purpose 語彙変更で circuits の分割結果が崩れやすい。
+
+・switchType と数量の整合
+threeway で light/outlet 数が仕様外になると、
+graph / layout / SVG の想定分岐に乗らず表示崩れを起こしやすい。
+
+・wirePaths 後段の最適化連鎖
+optimizeWirePaths() → reduceWirePathIntersections() → selectConstraintSafeWirePaths()
+は順序依存が強く、1箇所の変更で交差削減や制約維持が破綻しやすい。
+
+・DOM復元経路の groups 推定
+parseGroupsFromDom() 経由はテキスト復元（3路判定・label分解）に依存するため、
+UI文言変更で groups 構造が崩れるリスクがある。
 
 --------------------------------
 
