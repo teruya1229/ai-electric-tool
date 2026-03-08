@@ -506,3 +506,56 @@ window.uiBack = uiBack;
 window.uiGenerate = uiGenerate;
 window.uiToggleDetails = uiToggleDetails;
 window.addEventListener("DOMContentLoaded", _initUiPanel);
+
+// ===== 追記: devモード表示制御 / 折りたたみ初期化（既存処理は変更しない） =====
+window.addEventListener("DOMContentLoaded", () => {
+  const devToggleBtn = document.getElementById("dev-mode-toggle");
+  const devTargets = Array.from(document.querySelectorAll('[data-dev="true"]'));
+
+  const setDevVisible = (visible) => {
+    devTargets.forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      el.style.display = visible ? "block" : "none";
+    });
+    if (devToggleBtn instanceof HTMLElement) {
+      devToggleBtn.textContent = visible ? "🛠 開発者モード ON" : "🛠 開発者モード OFF";
+    }
+  };
+
+  setDevVisible(false);
+
+  if (devToggleBtn instanceof HTMLElement) {
+    let devVisible = false;
+    devToggleBtn.addEventListener("click", () => {
+      devVisible = !devVisible;
+      setDevVisible(devVisible);
+    });
+  }
+
+  const collapseCards = Array.from(document.querySelectorAll('[data-collapse="true"]'));
+  collapseCards.forEach((card) => {
+    if (!(card instanceof HTMLElement)) return;
+    const title = card.querySelector("h3");
+    if (!(title instanceof HTMLElement)) return;
+
+    const contentNodes = Array.from(card.children).filter((node) => node !== title);
+    card.dataset.collapsed = "false";
+
+    const setCollapsed = (collapsed) => {
+      card.dataset.collapsed = collapsed ? "true" : "false";
+      title.textContent = `${title.textContent?.replace(/\s*[▲▼]$/, "") || ""} ${collapsed ? "▼" : "▲"}`;
+      contentNodes.forEach((node) => {
+        if (node instanceof HTMLElement) {
+          node.style.display = collapsed ? "none" : "";
+        }
+      });
+    };
+
+    title.style.cursor = "pointer";
+    setCollapsed(false);
+    title.addEventListener("click", () => {
+      const isCollapsed = card.dataset.collapsed === "true";
+      setCollapsed(!isCollapsed);
+    });
+  });
+});

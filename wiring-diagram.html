@@ -306,6 +306,8 @@
         <button id="generate-btn" type="button">複線図を表示</button>
       </section>
 
+      <button id="dev-mode-toggle" type="button">🛠 開発者モード OFF</button>
+
       <section class="card">
         <h2>結果ダッシュボード</h2>
         <div class="result-dashboard">
@@ -334,42 +336,42 @@
               <div id="optimized-wire-length-summary" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card detail-only">
+            <article class="result-card detail-only" data-dev="true" data-collapse="true">
               <h3>接続点一覧</h3>
               <div id="connection-point-route" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card detail-only">
+            <article class="result-card detail-only" data-dev="true" data-collapse="true">
               <h3>回路一覧</h3>
               <div id="circuit-list-result" class="result-output"></div>
             </article>
 
-            <article class="result-card detail-only">
+            <article class="result-card detail-only" data-dev="true" data-collapse="true">
               <h3>回路別材料一覧</h3>
               <div id="circuit-material-list-result" class="result-output"></div>
             </article>
 
-            <article class="result-card detail-only">
+            <article class="result-card detail-only" data-dev="true" data-collapse="true">
               <h3>回路別配線材料長さ</h3>
               <div id="circuit-cable-length-summary" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card detail-only">
+            <article class="result-card detail-only" data-dev="true" data-collapse="true">
               <h3>スリーブ材料</h3>
               <div id="sleeve-material-summary" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card detail-only">
+            <article class="result-card detail-only" data-dev="true" data-collapse="true">
               <h3>器具材料</h3>
               <div id="device-material-summary" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card detail-only">
+            <article class="result-card detail-only" data-dev="true" data-collapse="true">
               <h3>ジョイントBOX材料</h3>
               <div id="junction-box-material-summary" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card dev-only">
+            <article class="result-card dev-only" data-dev="true" data-collapse="true">
               <h3>補助情報</h3>
               <pre id="selection-result" class="result-output"></pre>
               <pre id="group-result" class="result-output"></pre>
@@ -378,7 +380,7 @@
               <pre id="notes-result" class="result-output"></pre>
             </article>
 
-            <article class="result-card dev-only">
+            <article class="result-card dev-only" data-dev="true" data-collapse="true">
               <h3>開発者確認</h3>
               <div id="sleeve-judge-list-result" class="result-output">未生成</div>
               <div id="parse-debug-result" class="result-output">未生成</div>
