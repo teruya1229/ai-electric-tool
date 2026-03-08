@@ -49,6 +49,17 @@ const CONDITIONS = {
   ],
 };
 
+const PURPOSE_LABELS = {
+  light: "照明",
+  outlet: "コンセント",
+  ac_outlet: "エアコンコンセント",
+  fan: "換気扇",
+  kitchen_outlet: "台所コンセント",
+  washroom: "洗面所",
+  outdoor: "屋外",
+  unknown: "未設定",
+};
+
 function _buildDevicesFromCondition(conditionId) {
   if (conditionId === "single_1light") {
     return [
@@ -88,6 +99,7 @@ function uiSelect(key, value) {
     UI.condition = null;
     UI.mode = null;
     _buildConditionList(value);
+    _syncGroupEditorFromUiState();
     _goStep(2);
     return;
   }
@@ -95,12 +107,14 @@ function uiSelect(key, value) {
   if (key === "condition") {
     const list = CONDITIONS[UI.circuit] || [];
     UI.condition = list.find((c) => c.id === value) || null;
+    _syncGroupEditorFromUiState();
     _goStep(3);
     return;
   }
 
   if (key === "mode") {
     UI.mode = value;
+    _syncGroupEditorFromUiState();
     _buildSummary();
     _goStep(4);
   }
@@ -112,7 +126,17 @@ function uiBack() {
 
 function uiGenerate() {
   if (!UI.circuit || !UI.condition || !UI.mode) return;
+  _syncGroupEditorFromUiState();
 
+  const syncedToLegacy = _syncToExistingUiAndGenerate();
+  if (!syncedToLegacy) {
+    _generateByDirectFallback();
+  }
+
+  _closePanelAndScrollTop();
+}
+
+function _generateByDirectFallback() {
   const circuitType = UI.circuit === "3路" ? "threeway" : "single";
   const conditionId = _normalizeConditionId(UI.condition.id);
   const devices =
@@ -146,8 +170,9 @@ function uiGenerate() {
     diagram: diagram || { groups: [], devices: [], wires: [], warnings: [] },
     renderError,
   });
+}
 
-  // パネルを閉じてSVGを見せる
+function _closePanelAndScrollTop() {
   const panel = document.getElementById("ui-panel");
   if (panel) {
     panel.style.transform = "translateY(100%)";
@@ -328,12 +353,14 @@ function _buildConditionList(circuit) {
 }
 
 function _buildSummary() {
+  const autoName = _buildAutoCircuitName();
   const el = document.getElementById("ui-summary");
   if (!el) return;
   el.innerHTML = `
     <strong>回路</strong>　${UI.circuit}<br>
     <strong>条件</strong>　${UI.condition ? UI.condition.label : "—"}<br>
-    <strong>モード</strong>　${UI.mode}
+    <strong>モード</strong>　${UI.mode}<br>
+    <strong>回路名</strong>　${autoName}
   `;
 }
 
@@ -343,11 +370,14 @@ function _clickIfExists(selector) {
 }
 
 function _syncToExistingUiAndGenerate() {
+  const generateButton = document.querySelector("#generate-btn");
+  if (!(generateButton instanceof HTMLElement)) return false;
+
   const circuitSelector = UI.circuit === "3路" ? "#circuit-threeway-btn" : "#circuit-single-btn";
   _clickIfExists(circuitSelector);
 
   const conditionTextMap = {
-    single_1light: "1灯",
+    single_1light: ["1灯", "1灯のみ"],
     single_2lights_same: "2灯同時",
     single_1light_1outlet: "コンセントあり",
     threeway_1light: "1灯",
@@ -355,12 +385,89 @@ function _syncToExistingUiAndGenerate() {
 
   const conditionText = conditionTextMap[UI.condition.id];
   const conditionButtons = Array.from(document.querySelectorAll("#condition-buttons button"));
-  const target = conditionButtons.find((btn) => btn.textContent && btn.textContent.trim() === conditionText);
+  const matchText = (rawText) => {
+    const text = String(rawText || "").trim();
+    if (Array.isArray(conditionText)) return conditionText.some((item) => text === item);
+    return text === conditionText;
+  };
+  const target = conditionButtons.find((btn) => matchText(btn.textContent));
   if (target instanceof HTMLElement) target.click();
 
-  const modeSelector = UI.mode === "現場" ? "#mode-field-btn" : "#mode-exam-btn";
+  const modeSelector =
+    UI.mode === "現場"
+      ? "#mode-field-btn"
+      : UI.mode === "ガミデンキ"
+        ? "#mode-gamidenki-btn"
+        : "#mode-exam-btn";
   _clickIfExists(modeSelector);
   _clickIfExists("#generate-btn");
+  return true;
+}
+
+function _setValueAndDispatch(el, value) {
+  if (!(el instanceof HTMLElement)) return;
+  if ("value" in el) {
+    // @ts-ignore - HTMLElement narrowed by runtime check
+    el.value = value;
+  }
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function _derivePurposeKey() {
+  const conditionId = UI?.condition?.id || "";
+  if (conditionId.includes("outlet")) return "outlet";
+  if (conditionId.includes("fan")) return "fan";
+  if (conditionId.includes("washroom")) return "washroom";
+  if (conditionId.includes("outdoor")) return "outdoor";
+  if (conditionId.includes("kitchen")) return "kitchen_outlet";
+  if (UI.circuit) return "light";
+  return "unknown";
+}
+
+function _buildAutoCircuitName() {
+  const symbolInput = document.getElementById("group-control-id-input");
+  const currentSymbol =
+    symbolInput && "value" in symbolInput && String(symbolInput.value || "").trim()
+      ? String(symbolInput.value || "").trim()
+      : "イ";
+  const purposeKey = _derivePurposeKey();
+  const purposeLabel = PURPOSE_LABELS[purposeKey] || PURPOSE_LABELS.unknown;
+  if (purposeKey === "unknown") {
+    return `${currentSymbol}：未設定`;
+  }
+  const switchLabel = UI.circuit === "3路" ? "3路" : "片切";
+  if (purposeKey === "light") {
+    return `${currentSymbol}：${purposeLabel}（${switchLabel}）`;
+  }
+  return `${currentSymbol}：${purposeLabel}`;
+}
+
+function _syncGroupEditorFromUiState() {
+  const controlInput = document.getElementById("group-control-id-input");
+  const labelInput = document.getElementById("group-label-input");
+  const purposeSelect = document.getElementById("group-purpose-input");
+  const switchTypeSelect = document.getElementById("group-switch-type-select");
+
+  const symbol =
+    controlInput && "value" in controlInput && String(controlInput.value || "").trim()
+      ? String(controlInput.value || "").trim()
+      : "イ";
+  if (controlInput && "value" in controlInput && !String(controlInput.value || "").trim()) {
+    _setValueAndDispatch(controlInput, symbol);
+  }
+
+  const purposeKey = _derivePurposeKey();
+  if (purposeSelect && "value" in purposeSelect) {
+    const nextPurpose = purposeKey || "unknown";
+    _setValueAndDispatch(purposeSelect, nextPurpose);
+  }
+  if (switchTypeSelect && "value" in switchTypeSelect) {
+    _setValueAndDispatch(switchTypeSelect, UI.circuit === "3路" ? "threeway" : "single");
+  }
+  if (labelInput && "value" in labelInput) {
+    _setValueAndDispatch(labelInput, _buildAutoCircuitName());
+  }
 }
 
 function _initUiPanel() {
@@ -370,6 +477,10 @@ function _initUiPanel() {
     panel.style.transform = "translateY(0)";
     panel.style.transition = "none";
   }
+  if (window.__WIRING_DEBUG__ === true) {
+    document.body.classList.add("dev-mode");
+  }
+  _syncGroupEditorFromUiState();
   _updateStepIndicator();
   _updateBackBtn();
 }

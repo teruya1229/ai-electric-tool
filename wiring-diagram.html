@@ -57,6 +57,14 @@
         word-break: break-word;
       }
 
+      .dev-only {
+        display: none;
+      }
+
+      body.dev-mode .dev-only {
+        display: block;
+      }
+
       @media (max-width: 768px) {
         .container {
           max-width: 100%;
@@ -143,6 +151,10 @@
           width: 100%;
           box-sizing: border-box;
         }
+
+        .legacy-control-card {
+          display: none;
+        }
       }
     </style>
   </head>
@@ -151,7 +163,7 @@
       <h1>複線図プレイグラウンド</h1>
       <p class="lead">回路を選ぶ → 条件を選ぶ → 表示モードを選ぶ で、複線図を表示します。</p>
 
-      <section class="card">
+      <section class="card legacy-control-card">
         <h2>回路を選ぶ</h2>
         <div class="controls">
           <div class="button-row" id="circuit-buttons">
@@ -161,7 +173,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card legacy-control-card">
         <h2>条件を選ぶ</h2>
         <p class="hint" id="condition-hint">先に回路を選んでください。</p>
         <div class="button-row" id="condition-buttons"></div>
@@ -191,11 +203,11 @@
               </select>
             </label>
           </div>
-          <p class="hint">現場向け拡張入力（1系統固定）。既存図は安全な範囲で簡略表示します。</p>
+          <p class="hint">現場向け拡張入力（1回路固定）。既存図は安全な範囲で簡略表示します。</p>
         </div>
       </section>
 
-      <section class="card">
+      <section class="card legacy-control-card">
         <h2>表示モード</h2>
         <div class="button-row" id="mode-buttons">
           <button id="mode-exam-btn" type="button">試験モード</button>
@@ -204,22 +216,22 @@
         </div>
       </section>
 
-      <section class="card">
-        <h2>系統管理</h2>
+      <section class="card legacy-control-card">
+        <h2>回路管理</h2>
         <div class="controls">
           <div class="button-row">
-            <button id="add-group-btn" type="button">系統を追加</button>
+            <button id="add-group-btn" type="button">回路を追加</button>
           </div>
           <div id="group-list" class="group-list"></div>
           <article id="group-editor-panel">
-            <h3>選択中系統の編集</h3>
+            <h3>選択中回路の編集</h3>
             <div class="button-row">
               <label for="group-control-id-input">
-                系統記号
+                回路記号
                 <input id="group-control-id-input" type="text" value="イ" />
               </label>
               <label for="group-label-input">
-                系統名
+                回路名
                 <input id="group-label-input" type="text" value="" />
               </label>
               <label for="group-purpose-input">
@@ -250,17 +262,17 @@
             <p class="hint">照明数 / コンセント数は上の条件エリアで編集します。</p>
           </article>
           <article id="field-scene-panel">
-            <h3>現場文章入力で系統生成</h3>
+            <h3>現場文章入力で回路生成</h3>
             <label for="field-scene-input">
               現場文章
               <textarea id="field-scene-input" rows="5" placeholder="玄関照明&#10;廊下3路&#10;トイレ照明&#10;コンセント2個"></textarea>
             </label>
-            <button id="parse-field-scene" type="button">文章から系統を生成</button>
+            <button id="parse-field-scene" type="button">文章から回路を生成</button>
           </article>
         </div>
       </section>
 
-      <section class="card">
+      <section class="card legacy-control-card">
         <h2>問題文から生成</h2>
         <div class="controls">
           <label for="problemTextInput">
@@ -275,7 +287,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card legacy-control-card">
         <h2>複線図を表示</h2>
         <button id="generate-btn" type="button">複線図を表示</button>
       </section>
@@ -347,7 +359,7 @@
               <div id="optimized-wire-length-summary" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card">
+            <article class="result-card dev-only">
               <h3>補助情報</h3>
               <pre id="selection-result" class="result-output"></pre>
               <pre id="group-result" class="result-output"></pre>
@@ -356,7 +368,7 @@
               <pre id="notes-result" class="result-output"></pre>
             </article>
 
-            <article class="result-card">
+            <article class="result-card dev-only">
               <h3>開発者確認</h3>
               <div id="sleeve-judge-list-result" class="result-output">未生成</div>
               <div id="parse-debug-result" class="result-output">未生成</div>
