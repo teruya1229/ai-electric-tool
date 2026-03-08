@@ -78,10 +78,6 @@
         display: none;
       }
 
-      body.dev-mode .legacy-control-card {
-        display: block;
-      }
-
       @media (max-width: 768px) {
         .container {
           max-width: 100%;
@@ -286,7 +282,7 @@
         </div>
       </section>
 
-      <section class="card legacy-control-card">
+      <section class="card">
         <h2>問題文から生成</h2>
         <div class="controls">
           <label for="problemTextInput">
@@ -333,20 +329,19 @@
             <article class="result-card">
               <h3>配線長さ</h3>
               <div id="cable-length-summary" class="result-output">未生成</div>
-              <div id="optimized-wire-length-summary" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card detail-only" data-dev="true" data-collapse="true">
+            <article class="result-card detail-only" data-dev="true">
               <h3>接続点一覧</h3>
               <div id="connection-point-route" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card detail-only" data-dev="true" data-collapse="true">
+            <article class="result-card detail-only" data-dev="true">
               <h3>回路一覧</h3>
               <div id="circuit-list-result" class="result-output"></div>
             </article>
 
-            <article class="result-card detail-only" data-dev="true" data-collapse="true">
+            <article class="result-card detail-only" data-dev="true">
               <h3>回路別材料一覧</h3>
               <div id="circuit-material-list-result" class="result-output"></div>
             </article>
@@ -371,7 +366,12 @@
               <div id="junction-box-material-summary" class="result-output">未生成</div>
             </article>
 
-            <article class="result-card dev-only" data-dev="true" data-collapse="true">
+            <article class="result-card detail-only" data-dev="true" data-collapse="true">
+              <h3>配線長さ精度アップ結果</h3>
+              <div id="optimized-wire-length-summary" class="result-output">未生成</div>
+            </article>
+
+            <article class="result-card dev-only" data-dev="true">
               <h3>補助情報</h3>
               <pre id="selection-result" class="result-output"></pre>
               <pre id="group-result" class="result-output"></pre>
@@ -380,7 +380,7 @@
               <pre id="notes-result" class="result-output"></pre>
             </article>
 
-            <article class="result-card dev-only" data-dev="true" data-collapse="true">
+            <article class="result-card dev-only" data-dev="true">
               <h3>開発者確認</h3>
               <div id="sleeve-judge-list-result" class="result-output">未生成</div>
               <div id="parse-debug-result" class="result-output">未生成</div>
