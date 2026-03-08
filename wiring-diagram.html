@@ -7,6 +7,116 @@
     <link rel="stylesheet" href="./wiring-diagram.css" />
     <link rel="stylesheet" href="ui-panel.css">
     <link rel="stylesheet" href="wiring-diagram-mobile.css">
+    <style>
+      .container {
+        width: 100%;
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 16px;
+        box-sizing: border-box;
+      }
+
+      #diagram-canvas,
+      #ai-diagram-preview-result,
+      #wire-path-debug-result {
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      #diagram-canvas svg,
+      #ai-diagram-preview-result svg,
+      #wire-path-debug-result svg {
+        max-width: 100%;
+        height: auto;
+        display: block;
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          max-width: 100%;
+          padding: 12px;
+        }
+
+        h1 {
+          font-size: 1.25rem;
+          line-height: 1.35;
+        }
+
+        h2 {
+          font-size: 1.05rem;
+          line-height: 1.35;
+        }
+
+        h3 {
+          font-size: 0.98rem;
+          line-height: 1.35;
+        }
+
+        p,
+        .lead,
+        .hint,
+        label,
+        input,
+        select,
+        textarea,
+        button,
+        pre,
+        li,
+        div {
+          font-size: 0.95rem;
+          line-height: 1.5;
+        }
+
+        textarea,
+        input[type="text"],
+        input[type="number"],
+        select {
+          width: 100%;
+          min-height: 42px;
+          box-sizing: border-box;
+        }
+
+        .button-row {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+
+        .button-row button,
+        #parse-field-scene,
+        #parseProblemButton,
+        #generate-btn,
+        #sleeve-judge-btn {
+          width: 100%;
+          min-height: 44px;
+          box-sizing: border-box;
+        }
+
+        .card {
+          margin-bottom: 12px;
+        }
+
+        .card article {
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        #group-editor-panel .button-row {
+          grid-template-columns: 1fr;
+        }
+
+        #group-editor-panel label,
+        #field-scene-panel label,
+        #parseResultPanel,
+        #problemTextInput,
+        #field-scene-input {
+          width: 100%;
+          box-sizing: border-box;
+        }
+      }
+    </style>
   </head>
   <body>
     <main class="container">
