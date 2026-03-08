@@ -1622,6 +1622,34 @@ function moveConnectionPoint(index, direction) {
   renderConnectionPointsEditor(model);
 }
 
+function renderConnectionPointBranches(sceneModel) {
+  const connectionPoints = sceneModel && Array.isArray(sceneModel.connectionPoints) ? sceneModel.connectionPoints : [];
+  return connectionPoints.map((point) => {
+    const list = document.createElement("ul");
+    list.className = "cp-branches";
+
+    const devices = Array.isArray(point?.devices) ? point.devices : [];
+    if (!devices.length) {
+      const li = document.createElement("li");
+      li.textContent = "枝なし";
+      list.appendChild(li);
+      return list;
+    }
+
+    devices.forEach((device, index) => {
+      const li = document.createElement("li");
+      const label =
+        typeof device === "string"
+          ? device
+          : String(device?.deviceId || device?.id || device?.name || device?.type || "UNKNOWN");
+      const prefix = index === devices.length - 1 ? "└ " : "├ ";
+      li.textContent = `${prefix}${label}`;
+      list.appendChild(li);
+    });
+    return list;
+  });
+}
+
 function renderConnectionPointRoute(sceneModel) {
   const panel = document.getElementById("connection-point-route");
   if (!panel) return;
@@ -1651,6 +1679,7 @@ function renderConnectionPointRoute(sceneModel) {
 
   const route = document.createElement("div");
   route.className = "cp-route";
+  const branchLists = renderConnectionPointBranches({ connectionPoints });
 
   const head = document.createElement("div");
   head.textContent = "分電盤";
@@ -1687,6 +1716,8 @@ function renderConnectionPointRoute(sceneModel) {
     row.appendChild(downButton);
 
     route.appendChild(row);
+    const branches = branchLists[index];
+    if (branches) route.appendChild(branches);
   });
 
   panel.appendChild(route);
@@ -1742,6 +1773,7 @@ window.renderAiDiagramByMode = renderAiDiagramByMode;
 window.renderConnectionPointsEditor = renderConnectionPointsEditor;
 window.handleAddDeviceToConnectionPoint = handleAddDeviceToConnectionPoint;
 window.moveConnectionPoint = moveConnectionPoint;
+window.renderConnectionPointBranches = renderConnectionPointBranches;
 window.renderConnectionPointRoute = renderConnectionPointRoute;
 
 initPlayground();
