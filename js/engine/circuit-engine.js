@@ -19,8 +19,72 @@ function createWire(role, color) {
   return { role, color };
 }
 
-export function createCircuitsFromGroups(groups) {
+function normalizeControlKey(value) {
+  return String(value || "").trim();
+}
+
+function normalizeStructuredSwitchLabel(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (raw === "single" || raw.includes("片切")) return "片切";
+  if (raw === "threeway" || raw === "3way" || raw.includes("3路") || raw.includes("三路")) return "3路";
+  if (raw === "fourway" || raw === "4way" || raw.includes("4路") || raw.includes("四路")) return "4路";
+  return String(value || "").trim();
+}
+
+function sumStructuredQuantity(value) {
+  if (Array.isArray(value)) {
+    return value.reduce((sum, item) => sum + Number(item?.quantity || 1), 0);
+  }
+  return Number(value || 0);
+}
+
+function buildStructuredControlGroupMap(structured) {
+  const map = new Map();
+  const controlGroups = Array.isArray(structured?.controlGroups) ? structured.controlGroups : [];
+  controlGroups.forEach((item) => {
+    const key = normalizeControlKey(item?.controlId || item?.name || item?.room || item?.id);
+    if (!key) return;
+    const lights = sumStructuredQuantity(item?.lights);
+    const outlets = sumStructuredQuantity(item?.outlets);
+    const info = {
+      switch: normalizeStructuredSwitchLabel(item?.switch || item?.switchType),
+      lights: Number.isFinite(lights) ? lights : 0,
+      outlets: Number.isFinite(outlets) ? outlets : 0,
+    };
+    map.set(key, info);
+  });
+  return map;
+}
+
+function buildCircuitLoads(groups, structuredMap) {
   const sourceGroups = Array.isArray(groups) ? groups : [];
+  return sourceGroups.map((group) => {
+    const controlId = normalizeControlKey(group?.controlId || group?.label);
+    const structured = structuredMap.get(controlId) || null;
+    const switchLabel = structured?.switch || (group?.switchType === "threeway" ? "3路" : "片切");
+    const groupLights = getGroupQuantity(group, "light");
+    const groupOutlets = getGroupQuantity(group, "outlet");
+    const lights = groupLights > 0 ? groupLights : Number(structured?.lights || 0);
+    const outlets = groupOutlets > 0 ? groupOutlets : Number(structured?.outlets || 0);
+    const loads = [];
+    if (switchLabel) loads.push("switch");
+    if (lights > 0) loads.push("light");
+    if (outlets > 0) loads.push("outlet");
+    return {
+      controlId,
+      switch: switchLabel,
+      lights,
+      outlets,
+      loads,
+    };
+  });
+}
+
+export function createCircuitsFromGroups(input) {
+  const sourceGroups = Array.isArray(input) ? input : Array.isArray(input?.groups) ? input.groups : [];
+  const structured = Array.isArray(input) ? input?.structured : input?.structured;
+  const structuredMap = buildStructuredControlGroupMap(structured);
   const bucket = {
     lighting: [],
     outlet: [],
@@ -40,6 +104,7 @@ export function createCircuitsFromGroups(groups) {
       id,
       type: "lighting",
       groups: bucket.lighting,
+      loads: buildCircuitLoads(bucket.lighting, structuredMap),
     });
     id += 1;
   }
@@ -49,6 +114,7 @@ export function createCircuitsFromGroups(groups) {
       id,
       type: "outlet",
       groups: bucket.outlet,
+      loads: buildCircuitLoads(bucket.outlet, structuredMap),
     });
     id += 1;
   }
@@ -58,6 +124,7 @@ export function createCircuitsFromGroups(groups) {
       id,
       type: "ac",
       groups: bucket.ac,
+      loads: buildCircuitLoads(bucket.ac, structuredMap),
     });
   }
 
