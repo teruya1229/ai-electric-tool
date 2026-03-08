@@ -264,10 +264,14 @@ export function _inferConditionIdFromCounts(circuitType, lightCount, outletCount
  * @param {{circuitType:"single"|"threeway"|null,mode?:string,lightCount:number|null,outletCount:number,sameTime:boolean,controlCount?:number}} input
  */
 export function buildDeviceListFromUi(input) {
-  if (!input.circuitType || !input.lightCount) return null;
+  if (!input.circuitType) return null;
+  const lightCount = Number(input.lightCount || 0);
+  const outletCount = Number(input.outletCount || 0);
+  if (lightCount <= 0 && outletCount <= 0) return null;
   const controlId = input.circuitType === "threeway" ? "イ" : "イ";
-  const devices = [{ type: "light", quantity: input.lightCount }];
-  if (input.outletCount > 0) devices.push({ type: "outlet", quantity: input.outletCount });
+  const devices = [];
+  if (lightCount > 0) devices.push({ type: "light", quantity: lightCount });
+  if (outletCount > 0) devices.push({ type: "outlet", quantity: outletCount });
 
   return {
     circuitType: input.circuitType,
@@ -301,14 +305,14 @@ export function buildDiagramInputFromDevices(model) {
   result.resolved.lightCount = lightCount;
   result.resolved.outletCount = outletCount;
 
-  if (lightCount < 1) result.errors.push("照明数は1灯以上が必要です。");
+  if (lightCount < 1 && outletCount < 1) result.errors.push("照明数またはコンセント数を1以上にしてください。");
   if (lightCount > 6) result.errors.push("照明数は6灯以下で入力してください。");
   if (outletCount > 6) result.errors.push("コンセント数は6個以下で入力してください。");
   if (result.errors.length) return result;
 
-  if (model.circuitType === "threeway" && lightCount !== 1) {
-    result.errors.push("3路 + 複数照明は現行描画仕様で未対応です。");
-    return result;
+  // 3路 + 複数照明は入力として受ける。既存図は1灯のみ図示し、残りは補助情報扱いとする。
+  if (model.circuitType === "threeway" && lightCount > 1) {
+    result.warnings.push("3路 + 2灯以上は1灯のみ図示し、残りは補助情報として扱います。");
   }
   if (model.circuitType === "threeway" && outletCount > 0) {
     result.errors.push("3路 + コンセントは現行描画仕様で未対応です。");
@@ -321,6 +325,9 @@ export function buildDiagramInputFromDevices(model) {
 
   let renderLightCount = lightCount;
   let renderOutletCount = outletCount;
+  if (model.circuitType === "threeway" && lightCount > 1) {
+    renderLightCount = 1;
+  }
   if (model.circuitType === "single" && lightCount > 2) {
     renderLightCount = 2;
     result.warnings.push("照明3灯以上は2灯まで図示し、残りは補助情報として扱います。");
@@ -420,7 +427,9 @@ export function buildDiagramInputFromGroup(group) {
   if (lightCount > 6) result.errors.push("照明数は6灯以下で入力してください。");
   if (outletCount > 6) result.errors.push("コンセント数は6個以下で入力してください。");
   if (circuitType === "threeway" && outletCount > 0) result.errors.push("3路 + コンセントは未対応です。");
-  if (circuitType === "threeway" && lightCount >= 2) result.errors.push("3路 + 2灯以上は未対応です。");
+  if (circuitType === "threeway" && lightCount >= 2) {
+    result.warnings.push("3路 + 2灯以上は1灯のみ図示し、残りは補助情報として扱います。");
+  }
   if (circuitType === "single" && lightCount >= 2 && !sameTime) {
     result.warnings.push("2灯以上のため同時点灯として扱います。");
   }
