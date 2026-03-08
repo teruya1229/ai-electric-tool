@@ -399,7 +399,18 @@ function _syncToExistingUiAndGenerate() {
     const el = document.querySelector(selector);
     if (!(el instanceof HTMLInputElement)) return;
     el.checked = !!checked;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const getValue = (selector) => {
+    const el = document.querySelector(selector);
+    if (!el || !("value" in el)) return "";
+    // @ts-ignore - runtime checked by "value" in el
+    return String(el.value ?? "");
+  };
+  const getChecked = (selector) => {
+    const el = document.querySelector(selector);
+    return el instanceof HTMLInputElement ? !!el.checked : false;
   };
   const enforceLegacyState = () => {
     if (UI.circuit === "3路") {
@@ -465,6 +476,16 @@ function _syncToExistingUiAndGenerate() {
         : "#mode-exam-btn";
   _clickIfExists(modeSelector);
   enforceLegacyState();
+  console.info("[ui-panel] pre-generate legacy sync", {
+    topCircuit: UI.circuit,
+    switchTypeValue: getValue("#group-switch-type-select"),
+    sameTime: getChecked("#group-same-time-checkbox"),
+    lightCount: getValue("#light-count-select"),
+    outletCount: getValue("#outlet-count-select"),
+    activeCondition: String(
+      document.querySelector("#condition-buttons button.active")?.textContent || ""
+    ).trim(),
+  });
   _clickIfExists("#generate-btn");
   return true;
 }
