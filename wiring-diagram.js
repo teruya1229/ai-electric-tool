@@ -1605,12 +1605,30 @@ function handleAddDeviceToConnectionPoint(cpIndex) {
   renderConnectionPointsEditor(model);
 }
 
+function moveConnectionPoint(index, direction) {
+  const model = connectionPointsEditorSceneModel;
+  if (!model || !Array.isArray(model.connectionPoints)) return;
+  const points = model.connectionPoints;
+  if (!Number.isInteger(index) || index < 0 || index >= points.length) return;
+
+  const targetIndex = direction === "up" ? index - 1 : direction === "down" ? index + 1 : -1;
+  if (targetIndex < 0 || targetIndex >= points.length) return;
+
+  const temp = points[index];
+  points[index] = points[targetIndex];
+  points[targetIndex] = temp;
+
+  renderConnectionPointRoute(model);
+  renderConnectionPointsEditor(model);
+}
+
 function renderConnectionPointRoute(sceneModel) {
   const panel = document.getElementById("connection-point-route");
   if (!panel) return;
 
   let connectionPoints = [];
   if (sceneModel && Array.isArray(sceneModel.connectionPoints)) {
+    connectionPointsEditorSceneModel = sceneModel;
     connectionPoints = sceneModel.connectionPoints;
   } else {
     let groups = [];
@@ -1622,6 +1640,7 @@ function renderConnectionPointRoute(sceneModel) {
     }
     const circuits = createCircuitsFromGroups(groups);
     connectionPoints = createConnectionPointsFromCircuits(circuits);
+    connectionPointsEditorSceneModel = { connectionPoints };
   }
 
   panel.innerHTML = "";
@@ -1643,9 +1662,30 @@ function renderConnectionPointRoute(sceneModel) {
     route.appendChild(arrow);
 
     const row = document.createElement("div");
+    row.setAttribute("style", "display:flex;align-items:center;gap:8px;");
+
+    const label = document.createElement("span");
     const pointId = String(point?.id || "");
     const hit = pointId.match(/(\d+)(?!.*\d)/);
-    row.textContent = hit ? `CP${hit[1]}` : `CP${index + 1}`;
+    label.textContent = hit ? `CP${hit[1]}` : `CP${index + 1}`;
+    row.appendChild(label);
+
+    const upButton = document.createElement("button");
+    upButton.type = "button";
+    upButton.textContent = "⬆";
+    upButton.addEventListener("click", () => {
+      moveConnectionPoint(index, "up");
+    });
+    row.appendChild(upButton);
+
+    const downButton = document.createElement("button");
+    downButton.type = "button";
+    downButton.textContent = "⬇";
+    downButton.addEventListener("click", () => {
+      moveConnectionPoint(index, "down");
+    });
+    row.appendChild(downButton);
+
     route.appendChild(row);
   });
 
@@ -1701,6 +1741,7 @@ window.renderAiDiagramExamStyle = renderAiDiagramExamStyle;
 window.renderAiDiagramByMode = renderAiDiagramByMode;
 window.renderConnectionPointsEditor = renderConnectionPointsEditor;
 window.handleAddDeviceToConnectionPoint = handleAddDeviceToConnectionPoint;
+window.moveConnectionPoint = moveConnectionPoint;
 window.renderConnectionPointRoute = renderConnectionPointRoute;
 
 initPlayground();
