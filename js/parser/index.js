@@ -312,7 +312,10 @@ export function buildDiagramInputFromDevices(model) {
 
   // 3路 + 複数照明は入力として受ける。既存図は1灯のみ図示し、残りは補助情報扱いとする。
   if (model.circuitType === "threeway" && lightCount > 1) {
-    result.warnings.push("3路 + 2灯以上は1灯のみ図示し、残りは補助情報として扱います。");
+    result.warnings.push("3路2灯以上は、図では1灯として扱います。残りは補助情報で確認してください。");
+  }
+  if (model.circuitType === "single" && lightCount === 0 && outletCount > 0) {
+    result.warnings.push("照明なしのコンセントのみでも、簡略図を生成できます。");
   }
   if (model.circuitType === "threeway" && outletCount > 0) {
     result.errors.push("3路 + コンセントは現行描画仕様で未対応です。");
@@ -428,7 +431,7 @@ export function buildDiagramInputFromGroup(group) {
   if (outletCount > 6) result.errors.push("コンセント数は6個以下で入力してください。");
   if (circuitType === "threeway" && outletCount > 0) result.errors.push("3路 + コンセントは未対応です。");
   if (circuitType === "threeway" && lightCount >= 2) {
-    result.warnings.push("3路 + 2灯以上は1灯のみ図示し、残りは補助情報として扱います。");
+    result.warnings.push("3路2灯以上は、図では1灯として扱います。残りは補助情報で確認してください。");
   }
   if (circuitType === "single" && lightCount >= 2 && !sameTime) {
     result.warnings.push("2灯以上のため同時点灯として扱います。");
