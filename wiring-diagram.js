@@ -1687,21 +1687,55 @@ function estimateConnectionPointWireLength(sceneModel) {
     return { trunkSegments: [], branchSegments: [] };
   }
 
+  const toCpLabel = (point, fallbackIndex) => {
+    const pointId = String(point?.id || "");
+    const hit = pointId.match(/(\d+)(?!.*\d)/);
+    return hit ? `CP${hit[1]}` : `CP${fallbackIndex + 1}`;
+  };
+  const detectDeviceHeight = (device) => {
+    const label =
+      typeof device === "string"
+        ? device
+        : String(device?.deviceId || device?.id || device?.name || device?.type || device?.deviceType || "");
+    const upper = label.toUpperCase();
+    if (upper.includes("LIGHT")) return 2400;
+    if (upper.includes("SW")) return 1200;
+    if (upper.includes("OUTLET")) return 300;
+    return 1200;
+  };
+  const toDeviceLabel = (device, fallbackIndex) => {
+    if (typeof device === "string") return device;
+    const raw = String(device?.deviceId || device?.id || device?.name || device?.type || device?.deviceType || "");
+    return raw || `DEVICE${fallbackIndex + 1}`;
+  };
+
   const trunkSegments = [];
   const branchSegments = [];
   connectionPoints.forEach((point, index) => {
     const current = getConnectionPointHeightProfile(point);
-    branchSegments.push({
-      cpIndex: index,
-      lengthMm: current.branchDrop + 200,
+    const cpLabel = toCpLabel(point, index);
+    const devices = Array.isArray(point?.devices) ? point.devices : [];
+    devices.forEach((device, deviceIndex) => {
+      const deviceHeight = detectDeviceHeight(device);
+      const lengthMm = Math.max(0, current.trunkHeight - deviceHeight) + 300;
+      branchSegments.push({
+        cpIndex: index,
+        cpLabel,
+        deviceLabel: toDeviceLabel(device, deviceIndex),
+        lengthMm,
+      });
     });
 
     if (index >= connectionPoints.length - 1) return;
     const next = getConnectionPointHeightProfile(connectionPoints[index + 1]);
-    const lengthMm = 2000 + Math.abs(current.trunkHeight - next.trunkHeight);
+    const horizontalRaw = Number(point?.horizontalSpanToNext);
+    const horizontalSpan = Number.isFinite(horizontalRaw) && horizontalRaw > 0 ? horizontalRaw : 2000;
+    const lengthMm = horizontalSpan + Math.abs(current.trunkHeight - next.trunkHeight);
     trunkSegments.push({
       fromIndex: index,
       toIndex: index + 1,
+      fromLabel: cpLabel,
+      toLabel: toCpLabel(connectionPoints[index + 1], index + 1),
       lengthMm,
     });
   });
@@ -1895,8 +1929,8 @@ function renderConnectionPointRoute(sceneModel) {
 
   estimate.trunkSegments.forEach((segment) => {
     const row = document.createElement("div");
-    const from = `CP${segment.fromIndex + 1}`;
-    const to = `CP${segment.toIndex + 1}`;
+    const from = segment.fromLabel || `CP${segment.fromIndex + 1}`;
+    const to = segment.toLabel || `CP${segment.toIndex + 1}`;
     const lengthM = (Number(segment.lengthMm || 0) / 1000).toFixed(1);
     row.textContent = `${from} → ${to}  ${lengthM}m`;
     estimateBlock.appendChild(row);
@@ -1908,9 +1942,10 @@ function renderConnectionPointRoute(sceneModel) {
     estimateBlock.appendChild(branchTitle);
     estimate.branchSegments.forEach((segment) => {
       const row = document.createElement("div");
-      const cp = `CP${segment.cpIndex + 1}`;
+      const cp = segment.cpLabel || `CP${segment.cpIndex + 1}`;
+      const device = segment.deviceLabel || "DEVICE";
       const lengthM = (Number(segment.lengthMm || 0) / 1000).toFixed(1);
-      row.textContent = `${cp}  ${lengthM}m`;
+      row.textContent = `${cp} → ${device}  ${lengthM}m`;
       estimateBlock.appendChild(row);
     });
   }
