@@ -218,6 +218,56 @@ function Open-PageWithRetry([int]$maxAttempts = 2, [int]$retryWaitMs = 700) {
   }
 }
 
+function Get-UiInitDiagnostics() {
+  try {
+    Exec-Script @'
+const byId = (id) => document.getElementById(id);
+const panel = byId("parseResultPanel");
+const bodyText = (document.body && document.body.innerText ? document.body.innerText : "").replace(/\s+/g, " ").slice(0, 120);
+return {
+  readyState: document.readyState || "",
+  href: (location && location.href) || "",
+  title: document.title || "",
+  hasBody: !!document.body,
+  hasProblemTextInput: !!byId("problemTextInput"),
+  hasParseProblemButton: !!byId("parseProblemButton"),
+  hasParseResultPanel: !!panel,
+  hasParseResultPre: !!(panel && panel.querySelector("pre")),
+  bodyPreview: bodyText
+};
+'@
+  } catch {
+    [ordered]@{
+      readyState = "exec-error"
+      href = ""
+      title = ""
+      hasBody = $false
+      hasProblemTextInput = $false
+      hasParseProblemButton = $false
+      hasParseResultPanel = $false
+      hasParseResultPre = $false
+      bodyPreview = ""
+      error = $_.Exception.Message
+    }
+  }
+}
+
+function Wait-UiInitWithDiagnostics([int]$timeoutSec = 40, [int]$intervalMs = 800) {
+  $until = (Get-Date).AddSeconds($timeoutSec)
+  $last = $null
+  while ((Get-Date) -lt $until) {
+    $d = Get-UiInitDiagnostics
+    $last = $d
+    Write-Host "[stability-test] ui-init readyState=$($d.readyState) input=$($d.hasProblemTextInput) button=$($d.hasParseProblemButton) panel=$($d.hasParseResultPanel) pre=$($d.hasParseResultPre) url=$($d.href)"
+    if (($d.readyState -eq "interactive" -or $d.readyState -eq "complete") -and $d.hasProblemTextInput -and $d.hasParseProblemButton -and $d.hasParseResultPanel -and $d.hasParseResultPre) {
+      return @{ ok = $true; last = $d }
+    }
+    Start-Sleep -Milliseconds $intervalMs
+  }
+  Write-Host "[stability-test] ui-init timeout last readyState=$($last.readyState) input=$($last.hasProblemTextInput) button=$($last.hasParseProblemButton) panel=$($last.hasParseResultPanel) pre=$($last.hasParseResultPre) url=$($last.href) title=$($last.title) body='$($last.bodyPreview)' error=$($last.error)"
+  @{ ok = $false; last = $last }
+}
+
 function Wait-Until([scriptblock]$condition, [int]$timeoutSec = 15) {
   $until = (Get-Date).AddSeconds($timeoutSec)
   while ((Get-Date) -lt $until) {
@@ -372,36 +422,14 @@ try {
   Log-Step "page open" "done"
 
   Log-Step "wait start(ui init)" "start"
-  $initialized = Wait-Until {
-    $initScript = @(
-      'return !!document.getElementById("problemTextInput")'
-      '&& !!document.getElementById("parseProblemButton")'
-      '&& !!document.querySelector("#parseResultPanel pre");'
-    ) -join "`n"
-    try {
-      [bool](Exec-Script $initScript)
-    } catch {
-      Write-Host "[stability-test] ui init probe timeout: $($_.Exception.Message)"
-      $false
-    }
-  } 40
+  $uiInit = Wait-UiInitWithDiagnostics 40 800
+  $initialized = [bool]$uiInit.ok
   if (-not $initialized) {
     Write-Host "[stability-test] ui init retry after page-open"
     Wait-BrowserReady 700
     Open-PageWithRetry
-    $initialized = Wait-Until {
-      $initScript = @(
-        'return !!document.getElementById("problemTextInput")'
-        '&& !!document.getElementById("parseProblemButton")'
-        '&& !!document.querySelector("#parseResultPanel pre");'
-      ) -join "`n"
-      try {
-        [bool](Exec-Script $initScript)
-      } catch {
-        Write-Host "[stability-test] ui init probe timeout(retry): $($_.Exception.Message)"
-        $false
-      }
-    } 40
+    $uiInit = Wait-UiInitWithDiagnostics 40 800
+    $initialized = [bool]$uiInit.ok
   }
   Log-Step "wait start(ui init)" "done"
   if (-not $initialized) { throw "UI init timeout." }
