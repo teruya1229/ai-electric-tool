@@ -18,6 +18,52 @@ function Log-Step([string]$step, [string]$phase = "start") {
   Write-Host "[stability-test] step=$step phase=$phase"
 }
 
+function Get-ChromeDriverVersion() {
+  try {
+    $version = (& $chromeDriverPath --version 2>$null | Select-Object -First 1)
+    if ([string]::IsNullOrWhiteSpace($version)) { $version = "unknown" }
+    Write-Host "[stability-test] chromedriver-version=$version"
+    return $version
+  } catch {
+    Write-Host "[stability-test] chromedriver-version=unavailable error=$($_.Exception.Message)"
+    return "unavailable"
+  }
+}
+
+function Get-ChromeVersion() {
+  $candidates = @(
+    "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+    "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+    "$env:LocalAppData\Google\Chrome\Application\chrome.exe"
+  )
+  foreach ($path in $candidates) {
+    if (Test-Path $path -PathType Leaf) {
+      try {
+        $v = (Get-Item $path).VersionInfo.FileVersion
+        if ([string]::IsNullOrWhiteSpace($v)) { $v = "unknown" }
+        Write-Host "[stability-test] chrome-version=$v path=$path"
+        return $v
+      } catch {
+        Write-Host "[stability-test] chrome-version=unavailable path=$path error=$($_.Exception.Message)"
+        return "unavailable"
+      }
+    }
+  }
+  Write-Host "[stability-test] chrome-version=unavailable reason=chrome-exe-not-found"
+  "unavailable"
+}
+
+function Log-WebDriverExecuteRequestInfo(
+  [string]$scriptLabel,
+  [string]$requestUrl,
+  [string]$endpointPath,
+  [string[]]$payloadKeys,
+  [bool]$hasArgs
+) {
+  $keys = if ($payloadKeys) { ($payloadKeys -join ",") } else { "" }
+  Write-Host "[stability-test] wd-exec-request label=$scriptLabel url=$requestUrl endpoint=$endpointPath payloadKeys=$keys hasArgs=$hasArgs"
+}
+
 function Get-ContentType([string]$path) {
   switch ([IO.Path]::GetExtension($path).ToLowerInvariant()) {
     ".html" { "text/html; charset=utf-8" }
@@ -176,9 +222,12 @@ function Remove-Session {
   }
 }
 
-function Exec-Script([string]$js, [object[]]$args = @()) {
-  $body = @{ script = $js; args = $args } | ConvertTo-Json -Depth 8
-  $resp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/execute/sync" -ContentType "application/json" -Body $body -TimeoutSec 20
+function Exec-Script([string]$js, [object[]]$args = @(), [string]$scriptLabel = "unlabeled") {
+  $payload = @{ script = $js; args = $args }
+  $requestUrl = "$($script:driverBaseUrl)/session/$($script:sessionId)/execute/sync"
+  Log-WebDriverExecuteRequestInfo $scriptLabel $requestUrl "/session/{id}/execute/sync" @($payload.Keys) ($null -ne $args)
+  $body = $payload | ConvertTo-Json -Depth 8
+  $resp = Invoke-RestMethod -Method Post -Uri $requestUrl -ContentType "application/json" -Body $body -TimeoutSec 20
   $resp.value
 }
 
@@ -228,7 +277,7 @@ function Invoke-WebDriverExecuteWithFallback(
   for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
     Write-Host "[stability-test] wd-exec label=$label attempt=$attempt/$maxAttempts phase=start"
     try {
-      $value = Exec-Script $scriptText $args
+      $value = Exec-Script $scriptText $args $label
       Write-Host "[stability-test] wd-exec label=$label attempt=$attempt/$maxAttempts phase=success"
       return [ordered]@{ ok = $true; value = $value; error = "" }
     } catch {
@@ -451,6 +500,8 @@ $cases = @(
 )
 
 try {
+  Get-ChromeDriverVersion | Out-Null
+  Get-ChromeVersion | Out-Null
   Log-Step "port detect" "start"
   $script:port = Get-AvailablePort $portCandidates
   $script:baseUrl = "http://127.0.0.1:$($script:port)"
