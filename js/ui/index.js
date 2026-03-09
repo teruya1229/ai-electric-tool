@@ -483,9 +483,31 @@ export function initPlayground() {
     renderActiveButtons();
   }
 
+  /**
+   * @param {string} raw
+   * @returns {string}
+   */
+  function normalizeProblemText(raw) {
+    return String(raw ?? "").replace(/\r\n?/g, "\n").trim();
+  }
+
+  /**
+   * @returns {string}
+   */
+  function getProblemTextForParse() {
+    if (!(problemTextInput instanceof HTMLTextAreaElement)) return "";
+    return normalizeProblemText(problemTextInput.value);
+  }
+
   function parseAndApplyProblemText() {
-    if (!(problemTextInput instanceof HTMLTextAreaElement)) return;
-    const parsed = parseProblemText(problemTextInput.value);
+    const problemText = getProblemTextForParse();
+    if (!problemText.length) {
+      console.info("[problem-parser] skip parse: empty normalized input");
+      return;
+    }
+    console.info("[problem-parser] input length:", problemText.length);
+    console.info("[problem-parser] input preview:", problemText.slice(0, 40));
+    const parsed = parseProblemText(problemText);
     const diagramFormState = toDiagramFormState(parsed);
     console.info("[problem-parser] normalizedText:", parsed.normalizedText);
     console.info("[problem-parser] parsedResult:", parsed);
