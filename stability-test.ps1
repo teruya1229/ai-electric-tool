@@ -15,6 +15,7 @@ $httpListener = $null
 $listenerTask = $null
 $curlProbeBodyPath = $null
 $curlProbeTracePath = $null
+$chromeDriverLogPath = $null
 
 function Log-Step([string]$step, [string]$phase = "start") {
   Write-Host "[stability-test] step=$step phase=$phase"
@@ -53,6 +54,34 @@ function Get-ChromeVersion() {
   }
   Write-Host "[stability-test] chrome-version=unavailable reason=chrome-exe-not-found"
   "unavailable"
+}
+
+function Start-ChromeDriverVerbose() {
+  if (-not $script:driverPort) {
+    throw "Driver port is not initialized."
+  }
+  $script:chromeDriverLogPath = Join-Path $script:projectRoot "cd.log"
+  $script:driverProc = Start-Process -FilePath $chromeDriverPath -ArgumentList @("--port=$($script:driverPort)", "--verbose", "--log-path=$($script:chromeDriverLogPath)") -PassThru
+  Write-Host "[stability-test] chromedriver-log=$($script:chromeDriverLogPath)"
+}
+
+function Read-ChromeDriverVerboseHighlights([string]$logPath) {
+  if (-not (Test-Path $logPath -PathType Leaf)) {
+    Write-Host "[stability-test] cd-log highlights: log not found ($logPath)"
+    return
+  }
+  $patterns = @("execute", "DevTools", "Runtime", "timeout", "pipe", "error", "warning")
+  $lines = Get-Content -Path $logPath -ErrorAction SilentlyContinue
+  foreach ($pattern in $patterns) {
+    $hit = $lines | Select-String -Pattern $pattern -CaseSensitive:$false | Select-Object -Last 2
+    if ($hit) {
+      foreach ($h in $hit) {
+        Write-Host "[stability-test] cd-log[$pattern] $($h.Line)"
+      }
+    } else {
+      Write-Host "[stability-test] cd-log[$pattern] <none>"
+    }
+  }
 }
 
 function Log-WebDriverExecuteRequestInfo(
@@ -317,7 +346,7 @@ function Start-Driver {
   if (-not $script:driverPort) {
     throw "Driver port is not initialized."
   }
-  $script:driverProc = Start-Process -FilePath $chromeDriverPath -ArgumentList "--port=$($script:driverPort)" -PassThru
+  Start-ChromeDriverVerbose
   Write-Host "[stability-test] chromedriver on $($script:driverBaseUrl)"
   $until = (Get-Date).AddSeconds(10)
   while ((Get-Date) -lt $until) {
@@ -663,6 +692,8 @@ try {
   Log-Step "page open" "done"
 
   Log-Step "webdriver curl file execute probe" "start"
+  $chromeCount = (Get-Process chrome -ErrorAction SilentlyContinue | Measure-Object).Count
+  Write-Host "[stability-test] chrome-process-count=$chromeCount"
   Invoke-ExecuteSyncViaCurlFile $script:sessionId "return 1;" | Out-Null
   Log-Step "webdriver curl file execute probe" "done"
 
@@ -676,9 +707,11 @@ try {
   if (-not $wdProbe.ok) {
     $firstFail = $wdProbe.results | Where-Object { -not $_.ok } | Select-Object -First 1
     if ($wdProbe.executeLayerDead) {
+      Read-ChromeDriverVerboseHighlights $script:chromeDriverLogPath
       Write-Host "[stability-test] webdriver execute layer dead before ui-init label=$($firstFail.label) error=$($firstFail.error)"
       throw "WebDriver execute layer is unavailable before ui init."
     }
+    Read-ChromeDriverVerboseHighlights $script:chromeDriverLogPath
     Write-Host "[stability-test] webdriver execute probe failed at label=$($firstFail.label) error=$($firstFail.error)"
     throw "WebDriver execute probe failed before ui init."
   }
@@ -734,5 +767,6 @@ finally {
   if ($script:curlProbeBodyPath) {
     try { Remove-Item $script:curlProbeBodyPath -Force -ErrorAction SilentlyContinue } catch {}
   }
+  Read-ChromeDriverVerboseHighlights $script:chromeDriverLogPath
   Log-Step "finally cleanup" "done"
 }
