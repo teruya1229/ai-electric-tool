@@ -158,6 +158,7 @@ function New-Session {
   $caps = @{
     capabilities = @{
       alwaysMatch = @{
+        pageLoadStrategy = "none"
         "goog:chromeOptions" = @{
           args = @("--headless=new", "--disable-gpu", "--no-sandbox", "--window-size=1400,2200")
         }
@@ -184,6 +185,37 @@ function Exec-Script([string]$js, [object[]]$args = @()) {
 function Open-Page {
   $body = @{ url = "$baseUrl/wiring-diagram.html" } | ConvertTo-Json
   Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $body -TimeoutSec 20 | Out-Null
+}
+
+function Wait-BrowserReady([int]$waitMs = 500) {
+  Start-Sleep -Milliseconds $waitMs
+}
+
+function Open-PageWithRetry([int]$maxAttempts = 2, [int]$retryWaitMs = 700) {
+  $targetUrl = "$baseUrl/wiring-diagram.html"
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    Write-Host "[stability-test] page-open sessionIdPresent=$([bool]$script:sessionId) target=$targetUrl attempt=$attempt/$maxAttempts"
+    try {
+      Open-Page
+      return
+    } catch {
+      Write-Host "[stability-test] page-open failed attempt=$attempt message=$($_.Exception.Message)"
+      if ($attempt -ge $maxAttempts) { break }
+      Write-Host "[stability-test] page-open recreate session before retry"
+      try { Remove-Session } catch {}
+      New-Session
+      Wait-BrowserReady
+      Start-Sleep -Milliseconds $retryWaitMs
+    }
+  }
+  Write-Host "[stability-test] page-open fallback via execute/sync target=$targetUrl"
+  Exec-Script "window.location.href = arguments[0]; return true;" @($targetUrl) | Out-Null
+  $navigated = Wait-Until {
+    [bool](Exec-Script "return location.href.indexOf('wiring-diagram.html') >= 0;")
+  } 10
+  if (-not $navigated) {
+    throw "Page open fallback did not reach target URL."
+  }
 }
 
 function Wait-Until([scriptblock]$condition, [int]$timeoutSec = 15) {
@@ -244,7 +276,12 @@ function Run-Case([string]$inputText) {
       'const b = window.__testBeforeParse || "";'
       'return t.length > 0 && t !== b;'
     ) -join "`n"
-    [bool](Exec-Script $waitScript)
+    try {
+      [bool](Exec-Script $waitScript)
+    } catch {
+      Write-Host "[stability-test] result wait probe timeout: $($_.Exception.Message)"
+      $false
+    }
   } 20
   Log-Step "result wait" "done"
 
@@ -329,8 +366,9 @@ try {
   Log-Step "browser launch(session)" "start"
   New-Session
   Log-Step "browser launch(session)" "done"
+  Wait-BrowserReady
   Log-Step "page open" "start"
-  Open-Page
+  Open-PageWithRetry
   Log-Step "page open" "done"
 
   Log-Step "wait start(ui init)" "start"
@@ -340,8 +378,31 @@ try {
       '&& !!document.getElementById("parseProblemButton")'
       '&& !!document.querySelector("#parseResultPanel pre");'
     ) -join "`n"
-    [bool](Exec-Script $initScript)
-  } 20
+    try {
+      [bool](Exec-Script $initScript)
+    } catch {
+      Write-Host "[stability-test] ui init probe timeout: $($_.Exception.Message)"
+      $false
+    }
+  } 40
+  if (-not $initialized) {
+    Write-Host "[stability-test] ui init retry after page-open"
+    Wait-BrowserReady 700
+    Open-PageWithRetry
+    $initialized = Wait-Until {
+      $initScript = @(
+        'return !!document.getElementById("problemTextInput")'
+        '&& !!document.getElementById("parseProblemButton")'
+        '&& !!document.querySelector("#parseResultPanel pre");'
+      ) -join "`n"
+      try {
+        [bool](Exec-Script $initScript)
+      } catch {
+        Write-Host "[stability-test] ui init probe timeout(retry): $($_.Exception.Message)"
+        $false
+      }
+    } 40
+  }
   Log-Step "wait start(ui init)" "done"
   if (-not $initialized) { throw "UI init timeout." }
 
