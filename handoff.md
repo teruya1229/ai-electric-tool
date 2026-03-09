@@ -505,3 +505,25 @@ handoff.md 更新のみ
 次回やること
 
 ・複線図エンジン安定化
+
+---
+
+## Current Debug Phase
+
+ChromeDriver execute script timeout investigation
+
+### Confirmed
+
+navigation works
+DevTools communication works
+execute script hangs
+
+### Next Step
+
+bare minimum WebDriver session を作成して
+execute/sync の挙動を比較する
+
+### Goal
+
+current session capability が原因か
+ChromeDriver 145 系の挙動かを切り分ける

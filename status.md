@@ -375,3 +375,35 @@ status.md 更新のみ
 次回やること
 
 ・複線図エンジン安定化
+
+---
+
+## 2026-03-09 Debug Session
+
+### 確認済み
+
+ChromeDriver version = Chrome version
+execute endpoint = /session/{id}/execute/sync
+payload = {"script":"return 1;","args":[]}
+
+### execute テスト結果
+
+PowerShell Invoke-RestMethod -> timeout
+curl inline JSON -> invalid argument
+curl file-based JSON -> timeout
+
+ChromeDriver verbose log:
+
+ExecuteScript ERROR script timeout
+
+### DevTools 状態
+
+Runtime.enable -> OK
+Page.getFrameTree -> OK
+execute script -> timeout
+
+### 判定
+
+execute/sync は ChromeDriver 内部で script timeout
+
+parser / UI / engine 層の問題ではない
