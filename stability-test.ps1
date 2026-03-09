@@ -64,6 +64,54 @@ function Log-WebDriverExecuteRequestInfo(
   Write-Host "[stability-test] wd-exec-request label=$scriptLabel url=$requestUrl endpoint=$endpointPath payloadKeys=$keys hasArgs=$hasArgs"
 }
 
+function Build-ExecutePayloadJson([string]$scriptText) {
+  @{ script = $scriptText; args = @() } | ConvertTo-Json -Compress -Depth 5
+}
+
+function Invoke-ExecuteSyncViaCurl([string]$sessionId, [string]$scriptText = "return 1;") {
+  $url = "$($script:driverBaseUrl)/session/$sessionId/execute/sync"
+  $payload = Build-ExecutePayloadJson $scriptText
+  Write-Host "[stability-test] curl-exec target=$url"
+  Write-Host "[stability-test] curl-exec payload=$payload"
+
+  $stdoutPath = [IO.Path]::GetTempFileName()
+  $stderrPath = [IO.Path]::GetTempFileName()
+  try {
+    $args = @(
+      "--silent",
+      "--show-error",
+      "--max-time", "20",
+      "-X", "POST",
+      "-H", "Content-Type:application/json",
+      "--data", $payload,
+      $url
+    )
+    $proc = Start-Process -FilePath "curl.exe" -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+    $stdout = ""
+    $stderr = ""
+    try { $stdout = Get-Content -Raw -Path $stdoutPath } catch {}
+    try { $stderr = Get-Content -Raw -Path $stderrPath } catch {}
+    $stdoutShort = if ($stdout.Length -gt 240) { $stdout.Substring(0, 240) } else { $stdout }
+    $stderrShort = if ($stderr.Length -gt 240) { $stderr.Substring(0, 240) } else { $stderr }
+    Write-Host "[stability-test] curl-exec exitCode=$($proc.ExitCode)"
+    Write-Host "[stability-test] curl-exec stdout=$stdoutShort"
+    Write-Host "[stability-test] curl-exec stderr=$stderrShort"
+    if ($proc.ExitCode -eq 0 -and $stdout -match '"value"\s*:\s*1') {
+      Write-Host "[stability-test] curl execute succeeded; likely PowerShell request construction issue"
+      return $true
+    }
+    Write-Host "[stability-test] curl execute failed; likely ChromeDriver-side issue"
+    return $false
+  } catch {
+    Write-Host "[stability-test] curl-exec failed error=$($_.Exception.Message)"
+    Write-Host "[stability-test] curl execute failed; likely ChromeDriver-side issue"
+    return $false
+  } finally {
+    try { Remove-Item $stdoutPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $stderrPath -Force -ErrorAction SilentlyContinue } catch {}
+  }
+}
+
 function Get-ContentType([string]$path) {
   switch ([IO.Path]::GetExtension($path).ToLowerInvariant()) {
     ".html" { "text/html; charset=utf-8" }
@@ -524,6 +572,10 @@ try {
   Log-Step "page open" "start"
   Open-PageWithRetry
   Log-Step "page open" "done"
+
+  Log-Step "webdriver curl execute probe" "start"
+  Invoke-ExecuteSyncViaCurl $script:sessionId "return 1;" | Out-Null
+  Log-Step "webdriver curl execute probe" "done"
 
   Log-Step "webdriver execute probe" "start"
   $wdProbe = Test-WebDriverExecutionLayer
