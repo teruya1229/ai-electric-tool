@@ -380,6 +380,96 @@ function New-Session {
   $resp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session" -ContentType "application/json" -Body $caps -TimeoutSec 30
   $script:sessionId = if ($resp.value.sessionId) { $resp.value.sessionId } else { $resp.sessionId }
   if (-not $script:sessionId) { throw "Cannot create WebDriver session." }
+  $resp
+}
+
+function New-WebDriverSessionMinimal() {
+  $caps = @{
+    capabilities = @{
+      alwaysMatch = @{
+        browserName = "chrome"
+      }
+    }
+  } | ConvertTo-Json -Depth 8
+  $resp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session" -ContentType "application/json" -Body $caps -TimeoutSec 30
+  $sessionId = if ($resp.value.sessionId) { $resp.value.sessionId } else { $resp.sessionId }
+  if (-not $sessionId) { throw "Cannot create minimal WebDriver session." }
+  [ordered]@{
+    sessionId = $sessionId
+    response = $resp
+  }
+}
+
+function Log-SessionCapabilitiesSummary($sessionResponse, [string]$label) {
+  $caps = $null
+  if ($sessionResponse -and $sessionResponse.value -and $sessionResponse.value.capabilities) {
+    $caps = $sessionResponse.value.capabilities
+  } elseif ($sessionResponse -and $sessionResponse.capabilities) {
+    $caps = $sessionResponse.capabilities
+  }
+  $sessionId = if ($sessionResponse -and $sessionResponse.value -and $sessionResponse.value.sessionId) { $sessionResponse.value.sessionId } elseif ($sessionResponse) { $sessionResponse.sessionId } else { "" }
+  $browserName = if ($caps -and $caps.browserName) { [string]$caps.browserName } else { "" }
+  $pageLoadStrategy = if ($caps -and $caps.pageLoadStrategy) { [string]$caps.pageLoadStrategy } else { "" }
+  $hasChromeOptions = [bool]($caps -and $caps.'goog:chromeOptions')
+  $chromeArgsCount = 0
+  if ($hasChromeOptions -and $caps.'goog:chromeOptions'.args) {
+    $chromeArgsCount = @($caps.'goog:chromeOptions'.args).Count
+  }
+  Write-Host "[stability-test] session-caps label=$label sessionId=$sessionId browserName=$browserName pageLoadStrategy=$pageLoadStrategy hasChromeOptions=$hasChromeOptions chromeArgsCount=$chromeArgsCount"
+}
+
+function Test-MinimalSessionExecute() {
+  $currentSessionId = $script:sessionId
+  $minimalSessionId = $null
+  $result = [ordered]@{
+    sessionCreated = $false
+    pageOpenOk = $false
+    pageOpenError = ""
+    executeSyncOk = $false
+    executeSyncValue = $null
+    executeSyncError = ""
+    executeSyncStatus = "not-run"
+  }
+  try {
+    Log-Step "minimal session create" "start"
+    $minimal = New-WebDriverSessionMinimal
+    $minimalSessionId = $minimal.sessionId
+    $result.sessionCreated = $true
+    Log-SessionCapabilitiesSummary $minimal.response "minimal"
+    Log-Step "minimal session create" "done"
+
+    $script:sessionId = $minimalSessionId
+    Log-Step "minimal page open" "start"
+    try {
+      Open-Page
+      $result.pageOpenOk = $true
+    } catch {
+      $result.pageOpenError = $_.Exception.Message
+      Write-Host "[stability-test] minimal page-open failed error=$($result.pageOpenError)"
+    }
+    Log-Step "minimal page open" "done"
+
+    Log-Step "minimal execute probe" "start"
+    $exec = Invoke-WebDriverExecuteWithFallback "minimal-const-1" "return 1;" @() 1 0
+    $result.executeSyncOk = [bool]$exec.ok
+    $result.executeSyncValue = $exec.value
+    $result.executeSyncError = $exec.error
+    if ($result.executeSyncOk) {
+      $result.executeSyncStatus = "success"
+    } elseif ($result.executeSyncError -match "(?i)timeout") {
+      $result.executeSyncStatus = "timeout"
+    } else {
+      $result.executeSyncStatus = "error"
+    }
+    Write-Host "[stability-test] minimal execute status=$($result.executeSyncStatus) ok=$($result.executeSyncOk) error=$($result.executeSyncError)"
+    Log-Step "minimal execute probe" "done"
+  } finally {
+    if ($minimalSessionId) {
+      try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$minimalSessionId" -TimeoutSec 10 | Out-Null } catch {}
+    }
+    $script:sessionId = $currentSessionId
+  }
+  $result
 }
 
 function Remove-Session {
@@ -684,7 +774,8 @@ try {
   Start-Driver
   Log-Step "browser launch" "done"
   Log-Step "browser launch(session)" "start"
-  New-Session
+  $currentSessionResponse = New-Session
+  Log-SessionCapabilitiesSummary $currentSessionResponse "current"
   Log-Step "browser launch(session)" "done"
   Wait-BrowserReady
   Log-Step "page open" "start"
@@ -704,6 +795,18 @@ try {
   Log-Step "webdriver execute probe" "start"
   $wdProbe = Test-WebDriverExecutionLayer
   Log-Step "webdriver execute probe" "done"
+  Log-Step "minimal session compare" "start"
+  $minimalSessionCompare = Test-MinimalSessionExecute
+  Log-Step "minimal session compare" "done"
+  $currentFirst = if ($wdProbe.results.Count -gt 0) { $wdProbe.results[0] } else { $null }
+  $currentExecuteOk = [bool]($currentFirst -and $currentFirst.ok)
+  if ((-not $currentExecuteOk) -and $minimalSessionCompare.executeSyncOk) {
+    Write-Host "[stability-test] compare-result current=timeout-or-error minimal=success verdict=current-session-capabilities-likely"
+  } elseif ((-not $currentExecuteOk) -and (-not $minimalSessionCompare.executeSyncOk)) {
+    Write-Host "[stability-test] compare-result current=timeout-or-error minimal=timeout-or-error verdict=chromedriver-or-browser-behavior-likely"
+  } else {
+    Write-Host "[stability-test] compare-result current=success minimal=$($minimalSessionCompare.executeSyncStatus)"
+  }
   if (-not $wdProbe.ok) {
     $firstFail = $wdProbe.results | Where-Object { -not $_.ok } | Select-Object -First 1
     if ($wdProbe.executeLayerDead) {
