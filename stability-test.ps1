@@ -218,6 +218,59 @@ function Open-PageWithRetry([int]$maxAttempts = 2, [int]$retryWaitMs = 700) {
   }
 }
 
+function Invoke-WebDriverExecuteWithFallback(
+  [string]$label,
+  [string]$scriptText,
+  [object[]]$args = @(),
+  [int]$maxAttempts = 2,
+  [int]$retryWaitMs = 300
+) {
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    Write-Host "[stability-test] wd-exec label=$label attempt=$attempt/$maxAttempts phase=start"
+    try {
+      $value = Exec-Script $scriptText $args
+      Write-Host "[stability-test] wd-exec label=$label attempt=$attempt/$maxAttempts phase=success"
+      return [ordered]@{ ok = $true; value = $value; error = "" }
+    } catch {
+      $message = $_.Exception.Message
+      Write-Host "[stability-test] wd-exec label=$label attempt=$attempt/$maxAttempts phase=fail error=$message"
+      if ($attempt -ge $maxAttempts) {
+        return [ordered]@{ ok = $false; value = $null; error = $message }
+      }
+      Start-Sleep -Milliseconds $retryWaitMs
+    }
+  }
+}
+
+function Test-WebDriverExecutionLayer() {
+  $probes = @(
+    @{ label = "const-1"; script = "return 1;" },
+    @{ label = "ready-state"; script = "return document.readyState;" },
+    @{ label = "href"; script = "return location.href;" },
+    @{ label = "has-body"; script = "return !!document.body;" }
+  )
+  $results = @()
+  foreach ($probe in $probes) {
+    $result = Invoke-WebDriverExecuteWithFallback $probe.label $probe.script
+    $results += [ordered]@{
+      label = $probe.label
+      ok = [bool]$result.ok
+      value = $result.value
+      error = $result.error
+    }
+    if (-not $result.ok) {
+      break
+    }
+  }
+  $first = if ($results.Count -gt 0) { $results[0] } else { $null }
+  $executeLayerDead = ($first -and -not $first.ok)
+  [ordered]@{
+    ok = (-not ($results | Where-Object { -not $_.ok }))
+    executeLayerDead = [bool]$executeLayerDead
+    results = $results
+  }
+}
+
 function Get-UiInitDiagnostics() {
   try {
     Exec-Script @'
@@ -420,6 +473,19 @@ try {
   Log-Step "page open" "start"
   Open-PageWithRetry
   Log-Step "page open" "done"
+
+  Log-Step "webdriver execute probe" "start"
+  $wdProbe = Test-WebDriverExecutionLayer
+  Log-Step "webdriver execute probe" "done"
+  if (-not $wdProbe.ok) {
+    $firstFail = $wdProbe.results | Where-Object { -not $_.ok } | Select-Object -First 1
+    if ($wdProbe.executeLayerDead) {
+      Write-Host "[stability-test] webdriver execute layer dead before ui-init label=$($firstFail.label) error=$($firstFail.error)"
+      throw "WebDriver execute layer is unavailable before ui init."
+    }
+    Write-Host "[stability-test] webdriver execute probe failed at label=$($firstFail.label) error=$($firstFail.error)"
+    throw "WebDriver execute probe failed before ui init."
+  }
 
   Log-Step "wait start(ui init)" "start"
   $uiInit = Wait-UiInitWithDiagnostics 40 800
