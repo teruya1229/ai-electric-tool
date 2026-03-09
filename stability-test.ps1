@@ -13,6 +13,8 @@ $sessionId = $null
 $driverProc = $null
 $httpListener = $null
 $listenerTask = $null
+$curlProbeBodyPath = $null
+$curlProbeTracePath = $null
 
 function Log-Step([string]$step, [string]$phase = "start") {
   Write-Host "[stability-test] step=$step phase=$phase"
@@ -105,6 +107,93 @@ function Invoke-ExecuteSyncViaCurl([string]$sessionId, [string]$scriptText = "re
   } catch {
     Write-Host "[stability-test] curl-exec failed error=$($_.Exception.Message)"
     Write-Host "[stability-test] curl execute failed; likely ChromeDriver-side issue"
+    return $false
+  } finally {
+    try { Remove-Item $stdoutPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $stderrPath -Force -ErrorAction SilentlyContinue } catch {}
+  }
+}
+
+function Invoke-ExecuteSyncViaCurlFileTrace([string]$sessionId, [string]$bodyPath) {
+  $url = "$($script:driverBaseUrl)/session/$sessionId/execute/sync"
+  $script:curlProbeTracePath = Join-Path $script:projectRoot "curl-trace.txt"
+  try {
+    $args = @(
+      "--silent",
+      "--show-error",
+      "--max-time", "20",
+      "--trace-ascii", $script:curlProbeTracePath,
+      "-X", "POST",
+      "-H", "Content-Type:application/json",
+      "--data-binary", "@$bodyPath",
+      $url
+    )
+    $traceOutPath = [IO.Path]::GetTempFileName()
+    $traceErrPath = [IO.Path]::GetTempFileName()
+    try {
+      $proc = Start-Process -FilePath "curl.exe" -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput $traceOutPath -RedirectStandardError $traceErrPath
+      Write-Host "[stability-test] curl-file-trace exitCode=$($proc.ExitCode) trace=$($script:curlProbeTracePath)"
+      if (Test-Path $script:curlProbeTracePath -PathType Leaf) {
+        $traceLines = Get-Content -Path $script:curlProbeTracePath -ErrorAction SilentlyContinue
+        $sendLine = ($traceLines | Select-String "Send data").LineNumber | Select-Object -First 1
+        if ($sendLine) {
+          $start = [Math]::Max(1, $sendLine - 2)
+          $end = [Math]::Min($traceLines.Count, $sendLine + 6)
+          $snippet = ($traceLines[($start - 1)..($end - 1)] -join " | ")
+          Write-Host "[stability-test] curl-file-trace snippet=$snippet"
+        }
+      }
+    } finally {
+      try { Remove-Item $traceOutPath -Force -ErrorAction SilentlyContinue } catch {}
+      try { Remove-Item $traceErrPath -Force -ErrorAction SilentlyContinue } catch {}
+    }
+  } catch {
+    Write-Host "[stability-test] curl-file-trace error=$($_.Exception.Message)"
+  }
+}
+
+function Invoke-ExecuteSyncViaCurlFile([string]$sessionId, [string]$scriptText = "return 1;") {
+  $url = "$($script:driverBaseUrl)/session/$sessionId/execute/sync"
+  $script:curlProbeBodyPath = Join-Path $script:projectRoot "body.json"
+  $payload = Build-ExecutePayloadJson $scriptText
+  [IO.File]::WriteAllText($script:curlProbeBodyPath, $payload, [Text.UTF8Encoding]::new($false))
+  Write-Host "[stability-test] curl-file-exec target=$url"
+  Write-Host "[stability-test] curl-file-exec bodyFile=$($script:curlProbeBodyPath)"
+  Write-Host "[stability-test] curl-file-exec payload=$payload"
+
+  $stdoutPath = [IO.Path]::GetTempFileName()
+  $stderrPath = [IO.Path]::GetTempFileName()
+  try {
+    $args = @(
+      "--silent",
+      "--show-error",
+      "--max-time", "20",
+      "-X", "POST",
+      "-H", "Content-Type:application/json",
+      "--data-binary", "@$($script:curlProbeBodyPath)",
+      $url
+    )
+    $proc = Start-Process -FilePath "curl.exe" -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+    $stdout = ""
+    $stderr = ""
+    try { $stdout = Get-Content -Raw -Path $stdoutPath } catch {}
+    try { $stderr = Get-Content -Raw -Path $stderrPath } catch {}
+    $stdoutShort = if ($stdout.Length -gt 240) { $stdout.Substring(0, 240) } else { $stdout }
+    $stderrShort = if ($stderr.Length -gt 240) { $stderr.Substring(0, 240) } else { $stderr }
+    Write-Host "[stability-test] curl-file-exec exitCode=$($proc.ExitCode)"
+    Write-Host "[stability-test] curl-file-exec stdout=$stdoutShort"
+    Write-Host "[stability-test] curl-file-exec stderr=$stderrShort"
+    if ($proc.ExitCode -eq 0 -and $stdout -match '"value"\s*:\s*1') {
+      Write-Host "[stability-test] file-based curl execute succeeded; quoting/body construction was the likely issue"
+      return $true
+    }
+    Write-Host "[stability-test] file-based curl execute failed; running trace for raw request inspection"
+    Invoke-ExecuteSyncViaCurlFileTrace $sessionId $script:curlProbeBodyPath
+    return $false
+  } catch {
+    Write-Host "[stability-test] curl-file-exec failed error=$($_.Exception.Message)"
+    Write-Host "[stability-test] file-based curl execute failed; running trace for raw request inspection"
+    Invoke-ExecuteSyncViaCurlFileTrace $sessionId $script:curlProbeBodyPath
     return $false
   } finally {
     try { Remove-Item $stdoutPath -Force -ErrorAction SilentlyContinue } catch {}
@@ -573,6 +662,10 @@ try {
   Open-PageWithRetry
   Log-Step "page open" "done"
 
+  Log-Step "webdriver curl file execute probe" "start"
+  Invoke-ExecuteSyncViaCurlFile $script:sessionId "return 1;" | Out-Null
+  Log-Step "webdriver curl file execute probe" "done"
+
   Log-Step "webdriver curl execute probe" "start"
   Invoke-ExecuteSyncViaCurl $script:sessionId "return 1;" | Out-Null
   Log-Step "webdriver curl execute probe" "done"
@@ -638,5 +731,8 @@ finally {
   Remove-Session
   Stop-Driver
   Stop-StaticServer
+  if ($script:curlProbeBodyPath) {
+    try { Remove-Item $script:curlProbeBodyPath -Force -ErrorAction SilentlyContinue } catch {}
+  }
   Log-Step "finally cleanup" "done"
 }
