@@ -1281,6 +1281,11 @@ try {
     $navigateErrorType = ""
     $navigateStatusCode = $null
     $navigateResponseBody = ""
+    $curlNavigateAttempted = $false
+    $curlNavigateSucceeded = $false
+    $curlNavigateExitCode = $null
+    $curlNavigateStdout = ""
+    $curlNavigateStderr = ""
     try {
       $directNavBody = @{ url = $navigateTargetUrl } | ConvertTo-Json -Compress
       Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $directNavBody -TimeoutSec 20 | Out-Null
@@ -1297,6 +1302,28 @@ try {
     $hrefAfterDirectNavigate = ""
     try { $hrefAfterDirectNavigate = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-direct-navigate") } catch { $hrefAfterDirectNavigate = "" }
     Write-Host "[stability-test] href after direct navigate=$hrefAfterDirectNavigate"
+    $curlNavigateAttempted = $true
+    $curlOutPath = [IO.Path]::GetTempFileName()
+    $curlErrPath = [IO.Path]::GetTempFileName()
+    try {
+      $curlArgs = @("--silent", "--show-error", "--max-time", "20", "-X", "POST", "-H", "Content-Type:application/json", "--data-binary", $directNavBody, "$($script:driverBaseUrl)/session/$($script:sessionId)/url")
+      $curlProc = Start-Process -FilePath "curl.exe" -ArgumentList $curlArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $curlOutPath -RedirectStandardError $curlErrPath
+      $curlNavigateExitCode = $curlProc.ExitCode
+      $curlNavigateSucceeded = ($curlProc.ExitCode -eq 0)
+      try { $curlNavigateStdout = [string](Get-Content -Raw -Path $curlOutPath) } catch { $curlNavigateStdout = "" }
+      try { $curlNavigateStderr = [string](Get-Content -Raw -Path $curlErrPath) } catch { $curlNavigateStderr = "" }
+    } catch {
+      $curlNavigateExitCode = -1
+      $curlNavigateStderr = $_.Exception.Message
+    } finally {
+      try { Remove-Item $curlOutPath -Force -ErrorAction SilentlyContinue } catch {}
+      try { Remove-Item $curlErrPath -Force -ErrorAction SilentlyContinue } catch {}
+    }
+    if ($curlNavigateStdout.Length -gt 500) { $curlNavigateStdout = $curlNavigateStdout.Substring(0, 500) }
+    if ($curlNavigateStderr.Length -gt 500) { $curlNavigateStderr = $curlNavigateStderr.Substring(0, 500) }
+    Wait-BrowserReady 300
+    $hrefAfterCurlNavigate = ""
+    try { $hrefAfterCurlNavigate = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-curl-navigate") } catch { $hrefAfterCurlNavigate = "" }
     $directNavigateDiagnostic = [ordered]@{
       phase = "direct-webdriver-navigate"
       navigateTargetUrl = $navigateTargetUrl
@@ -1307,6 +1334,12 @@ try {
       navigateStatusCode = $navigateStatusCode
       navigateResponseBody = $navigateResponseBody
       hrefAfterDirectNavigate = $hrefAfterDirectNavigate
+      curlNavigateAttempted = $curlNavigateAttempted
+      curlNavigateSucceeded = $curlNavigateSucceeded
+      curlNavigateExitCode = $curlNavigateExitCode
+      curlNavigateStdout = $curlNavigateStdout
+      curlNavigateStderr = $curlNavigateStderr
+      hrefAfterCurlNavigate = $hrefAfterCurlNavigate
       timestamp = (Get-Date).ToString("o")
     }
     [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $directNavigateDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -1348,6 +1381,12 @@ try {
             navigateStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateStatusCode } else { $null }
             navigateResponseBody = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateResponseBody } else { "" }
             hrefAfterDirectNavigate = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.hrefAfterDirectNavigate } else { "" }
+            curlNavigateAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.curlNavigateAttempted } else { $false }
+            curlNavigateSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.curlNavigateSucceeded } else { $false }
+            curlNavigateExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.curlNavigateExitCode } else { $null }
+            curlNavigateStdout = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.curlNavigateStdout } else { "" }
+            curlNavigateStderr = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.curlNavigateStderr } else { "" }
+            hrefAfterCurlNavigate = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.hrefAfterCurlNavigate } else { "" }
             timestamp = (Get-Date).ToString("o")
           }
           [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -1505,6 +1544,12 @@ try {
         navigateStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateStatusCode } else { $null }
         navigateResponseBody = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateResponseBody } else { "" }
         hrefAfterDirectNavigate = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.hrefAfterDirectNavigate } else { "" }
+        curlNavigateAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.curlNavigateAttempted } else { $false }
+        curlNavigateSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.curlNavigateSucceeded } else { $false }
+        curlNavigateExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.curlNavigateExitCode } else { $null }
+        curlNavigateStdout = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.curlNavigateStdout } else { "" }
+        curlNavigateStderr = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.curlNavigateStderr } else { "" }
+        hrefAfterCurlNavigate = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.hrefAfterCurlNavigate } else { "" }
         timestamp = (Get-Date).ToString("o")
       }
       [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
