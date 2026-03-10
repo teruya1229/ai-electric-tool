@@ -264,6 +264,7 @@ aggregateCableLengthsByMaterial()
 ## UI
 
 回路ごとの材料長さ表示
+#material-list-result は通常回路別材料一覧を表示し、全体材料一覧は明示呼び出し時のみ使用する
 
 例
 
