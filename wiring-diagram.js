@@ -3656,6 +3656,21 @@ setupCircuitListAutoRender();
 
 const parseProblemButton = document.getElementById("parseProblemButton");
 if (parseProblemButton instanceof HTMLButtonElement) {
+  // parse完了後は updateUiFromParseResult(...) を唯一のUI更新入口として使う
+  parseProblemButton.addEventListener("click", () => {
+    queueMicrotask(() => {
+      const parseResultPre = document.querySelector("#parseResultPanel pre");
+      const parseResultText =
+        parseResultPre instanceof HTMLElement ? String(parseResultPre.textContent || "") : "";
+      const parseSucceeded = parseResultText.includes("判定結果: 解析成功");
+      if (parseSucceeded) {
+        updateUiFromParseResult({ groups: parseGroupsFromDom().groups });
+      } else {
+        updateUiFromParseResult(null);
+      }
+    });
+  });
+
   parseProblemButton.addEventListener("click", () => {
     const parseResultPre = document.querySelector("#parseResultPanel pre");
     if (!(parseResultPre instanceof HTMLElement)) return;
