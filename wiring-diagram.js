@@ -2384,6 +2384,8 @@ function renderAiDiagramByMode(sceneModel) {
   }
 
   try {
+    // モード描画仕様: aiDiagramPreviewMode の現在値に従って描画する
+    // 初期モードは preview、再描画時は現在モードを維持（handoff.md 参照）
     if (aiDiagramPreviewMode === "preview") {
       renderAiDiagramPreview(sceneModel);
     } else if (aiDiagramPreviewMode === "enhanced") {
