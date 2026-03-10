@@ -1295,11 +1295,12 @@ try {
     $chromeDriverStatusStdout = ""
     $chromeDriverStatusStderr = ""
     $chromeDriverStatusExitCode = $null
-    $sessionCheckAttempted = $false
-    $sessionCheckStdout = ""
-    $sessionCheckStderr = ""
-    $sessionCheckExitCode = $null
+    $sessionsCheckAttempted = $false
+    $sessionsCheckStdout = ""
+    $sessionsCheckStderr = ""
+    $sessionsCheckExitCode = $null
     $checkedSessionId = [string]$script:sessionId
+    $sessionIdFoundInSessions = $false
     Write-Host "[stability-test] check chromedriver status"
     $chromeStatusOutPath = [IO.Path]::GetTempFileName()
     $chromeStatusErrPath = [IO.Path]::GetTempFileName()
@@ -1316,22 +1317,23 @@ try {
     }
     if ($chromeDriverStatusStdout.Length -gt 500) { $chromeDriverStatusStdout = $chromeDriverStatusStdout.Substring(0, 500) }
     if ($chromeDriverStatusStderr.Length -gt 500) { $chromeDriverStatusStderr = $chromeDriverStatusStderr.Substring(0, 500) }
-    Write-Host "[stability-test] check session status"
+    Write-Host "[stability-test] check sessions list"
     $sessionStatusOutPath = [IO.Path]::GetTempFileName()
     $sessionStatusErrPath = [IO.Path]::GetTempFileName()
     try {
-      $sessionCheckAttempted = $true
-      $sessionArgs = @("--silent", "--show-error", "--max-time", "3", "$($script:driverBaseUrl)/session/$($script:sessionId)")
+      $sessionsCheckAttempted = $true
+      $sessionArgs = @("--silent", "--show-error", "--max-time", "3", "$($script:driverBaseUrl)/sessions")
       $sessionProc = Start-Process -FilePath "curl.exe" -ArgumentList $sessionArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $sessionStatusOutPath -RedirectStandardError $sessionStatusErrPath
-      $sessionCheckExitCode = $sessionProc.ExitCode
-      try { $sessionCheckStdout = [string](Get-Content -Raw -Path $sessionStatusOutPath) } catch { $sessionCheckStdout = "" }
-      try { $sessionCheckStderr = [string](Get-Content -Raw -Path $sessionStatusErrPath) } catch { $sessionCheckStderr = "" }
+      $sessionsCheckExitCode = $sessionProc.ExitCode
+      try { $sessionsCheckStdout = [string](Get-Content -Raw -Path $sessionStatusOutPath) } catch { $sessionsCheckStdout = "" }
+      try { $sessionsCheckStderr = [string](Get-Content -Raw -Path $sessionStatusErrPath) } catch { $sessionsCheckStderr = "" }
     } finally {
       try { Remove-Item $sessionStatusOutPath -Force -ErrorAction SilentlyContinue } catch {}
       try { Remove-Item $sessionStatusErrPath -Force -ErrorAction SilentlyContinue } catch {}
     }
-    if ($sessionCheckStdout.Length -gt 500) { $sessionCheckStdout = $sessionCheckStdout.Substring(0, 500) }
-    if ($sessionCheckStderr.Length -gt 500) { $sessionCheckStderr = $sessionCheckStderr.Substring(0, 500) }
+    if ($sessionsCheckStdout.Length -gt 500) { $sessionsCheckStdout = $sessionsCheckStdout.Substring(0, 500) }
+    if ($sessionsCheckStderr.Length -gt 500) { $sessionsCheckStderr = $sessionsCheckStderr.Substring(0, 500) }
+    $sessionIdFoundInSessions = (-not [string]::IsNullOrWhiteSpace($checkedSessionId)) -and $sessionsCheckStdout.Contains($checkedSessionId)
     try {
       $directNavBody = @{ url = $navigateTargetUrl } | ConvertTo-Json -Compress
       Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $directNavBody -TimeoutSec 20 | Out-Null
@@ -1421,11 +1423,12 @@ try {
       chromeDriverStatusStdout = $chromeDriverStatusStdout
       chromeDriverStatusStderr = $chromeDriverStatusStderr
       chromeDriverStatusExitCode = $chromeDriverStatusExitCode
-      sessionCheckAttempted = $sessionCheckAttempted
-      sessionCheckStdout = $sessionCheckStdout
-      sessionCheckStderr = $sessionCheckStderr
-      sessionCheckExitCode = $sessionCheckExitCode
+      sessionsCheckAttempted = $sessionsCheckAttempted
+      sessionsCheckStdout = $sessionsCheckStdout
+      sessionsCheckStderr = $sessionsCheckStderr
+      sessionsCheckExitCode = $sessionsCheckExitCode
       checkedSessionId = $checkedSessionId
+      sessionIdFoundInSessions = $sessionIdFoundInSessions
       timestamp = (Get-Date).ToString("o")
     }
     [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $directNavigateDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -1483,11 +1486,12 @@ try {
             chromeDriverStatusStdout = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.chromeDriverStatusStdout } else { "" }
             chromeDriverStatusStderr = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.chromeDriverStatusStderr } else { "" }
             chromeDriverStatusExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.chromeDriverStatusExitCode } else { $null }
-            sessionCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionCheckAttempted } else { $false }
-            sessionCheckStdout = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.sessionCheckStdout } else { "" }
-            sessionCheckStderr = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.sessionCheckStderr } else { "" }
-            sessionCheckExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.sessionCheckExitCode } else { $null }
+            sessionsCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionsCheckAttempted } else { $false }
+            sessionsCheckStdout = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.sessionsCheckStdout } else { "" }
+            sessionsCheckStderr = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.sessionsCheckStderr } else { "" }
+            sessionsCheckExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.sessionsCheckExitCode } else { $null }
             checkedSessionId = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.checkedSessionId } else { "" }
+            sessionIdFoundInSessions = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionIdFoundInSessions } else { $false }
             timestamp = (Get-Date).ToString("o")
           }
           [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -1661,11 +1665,12 @@ try {
         chromeDriverStatusStdout = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.chromeDriverStatusStdout } else { "" }
         chromeDriverStatusStderr = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.chromeDriverStatusStderr } else { "" }
         chromeDriverStatusExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.chromeDriverStatusExitCode } else { $null }
-        sessionCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionCheckAttempted } else { $false }
-        sessionCheckStdout = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.sessionCheckStdout } else { "" }
-        sessionCheckStderr = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.sessionCheckStderr } else { "" }
-        sessionCheckExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.sessionCheckExitCode } else { $null }
+        sessionsCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionsCheckAttempted } else { $false }
+        sessionsCheckStdout = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.sessionsCheckStdout } else { "" }
+        sessionsCheckStderr = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.sessionsCheckStderr } else { "" }
+        sessionsCheckExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.sessionsCheckExitCode } else { $null }
         checkedSessionId = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.checkedSessionId } else { "" }
+        sessionIdFoundInSessions = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionIdFoundInSessions } else { $false }
         timestamp = (Get-Date).ToString("o")
       }
       [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
