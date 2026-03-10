@@ -534,3 +534,36 @@ execute/sync の挙動を比較する
 
 current session capability が原因か
 ChromeDriver 145 系の挙動かを切り分ける
+
+---
+
+## E2E診断メモ（2026-03-10）
+
+### 今回確定したこと
+
+- ChromeDriver `/status` は `ready:true`
+- `/sessions` に `checkedSessionId` が存在
+- `sessionsExtractedIds` に `checkedSessionId` が含まれ、`sessionIdFoundInExtractedIds = true`
+- ChromeDriver本体とsessionは生存
+- それでも `ui-init timeout` は継続
+- `executeSyncErrorClass = timeout`
+- `hrefBeforeUiInit = ""`
+- `elementCheckSucceeded = false`
+
+### 現時点の技術的な解釈
+
+- 主原因候補は session 消失ではなく、`execute/sync` 系またはウィンドウ未生成/無効
+- Claude見解: ページが何もロードされていない、または実ウィンドウが無効な状態で `executeScript` が timeout している可能性が高い
+- 次の最小確認は `GET /session/{id}/window` による window handle 確認
+
+### 直近の関連コミット
+
+- `cb3347f` test: classify execute sync diagnostic errors
+- `3fa3a85` test: persist ui-init execute sync diagnostics
+- `c5add48` test: extract session ids from sessions response
+- `5405709` test: use w3c sessions check for health diagnostic
+- `0aee900` test: persist chromedriver and session health checks
+
+### 次にやるべき1手
+
+- `stability-test.ps1` の e2e-only 分岐で minimal session 作成直後に `GET /session/{sessionId}/window` を1回追加し、`windowHandleFound / windowHandleValue` を `preUiInitDiagnostic` に保存する
