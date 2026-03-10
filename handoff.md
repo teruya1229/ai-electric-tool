@@ -195,6 +195,7 @@ connection-point-route の下に
 
 を表示する。
 #wire-length-result は wirePaths が空でも 0.0 m を表示し、配線なし にはしない
+#wire-length-result の表示ラベルは「配線総延長」で固定する
 
 例
 
