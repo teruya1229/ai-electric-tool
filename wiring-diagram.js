@@ -193,6 +193,9 @@ function getCircuitControlIdLabel(circuit) {
   return String(circuit?.id || "-");
 }
 
+// 表示ルール: #material-list-result は通常回路別一覧を表示する。
+// 全体材料一覧 renderMaterialList(...) は明示呼び出し時のみ使用する。
+// 詳細は handoff.md を参照。
 function renderMaterialList(materials) {
   const panel = document.getElementById("material-list-result");
   if (!panel) return;
