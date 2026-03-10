@@ -438,10 +438,7 @@ function Test-MinimalSessionExecute() {
     $minimal = New-WebDriverSessionMinimal
     $minimalSessionId = $minimal.sessionId
     $result.sessionCreated = $true
-    try {
-      $minimalSessionInfo = Invoke-RestMethod -Method Get -Uri "$($script:driverBaseUrl)/session/$minimalSessionId" -TimeoutSec 20
-      $result.capabilities = $minimalSessionInfo.value.capabilities
-    } catch {}
+    $result.capabilities = if ($minimal.response -and $minimal.response.value) { $minimal.response.value.capabilities } else { $null }
     Log-SessionCapabilitiesSummary $minimal.response "minimal"
     Log-Step "minimal session create" "done"
 
@@ -911,11 +908,7 @@ try {
   Log-Step "browser launch(session)" "start"
   $currentSessionResponse = New-Session
   Log-SessionCapabilitiesSummary $currentSessionResponse "current"
-  $currentCapabilities = $null
-  try {
-    $currentSessionInfo = Invoke-RestMethod -Method Get -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)" -TimeoutSec 20
-    $currentCapabilities = $currentSessionInfo.value.capabilities
-  } catch {}
+  $currentCapabilities = if ($currentSessionResponse -and $currentSessionResponse.value) { $currentSessionResponse.value.capabilities } else { $null }
   Log-Step "browser launch(session)" "done"
   Wait-BrowserReady
   Log-Step "page open" "start"
@@ -954,7 +947,7 @@ try {
     capabilityBisect = $capabilityBisect
   }
   [IO.File]::WriteAllText($outputPath, ($compareSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
-  Write-Host "Capabilities captured"
+  Write-Host "Capabilities captured from session response"
   Write-Host "Saved test results to $outputPath"
   if ((-not $currentExecuteOk) -and $minimalSessionCompare.executeSyncOk) {
     Write-Host "[stability-test] compare-result current=timeout-or-error minimal=success verdict=current-session-capabilities-likely"
