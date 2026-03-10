@@ -197,6 +197,7 @@ connection-point-route の下に
 #wire-length-result は wirePaths が空でも 0.0 m を表示し、配線なし にはしない
 #wire-length-result の表示ラベルは「配線総延長」で固定する
 #ai-diagram-preview-result は groups / circuits / layouts が不足している場合、フォールバック文言「複線図を表示できません / 回路情報が不足しています」を表示する
+AI複線図の初期モードは preview とし、再描画時は現在選択中のモードを維持する
 
 例
 
