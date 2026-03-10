@@ -1291,7 +1291,24 @@ try {
       }
       if ($hrefProbe.StartsWith("data:")) {
         Write-Host "[stability-test] fallback to Open-PageWithRetry because url is still data:"
-        Open-PageWithRetry 1 300
+        try {
+          Open-PageWithRetry 1 300
+        } catch {
+          $preDiag = Get-UiInitDiagnostics
+          $preUiInitDiagnostic = [ordered]@{
+            phase = "pre-ui-init-diagnostic"
+            href = [string]$preDiag.href
+            readyState = [string]$preDiag.readyState
+            hasProblemTextInput = [bool]$preDiag.hasProblemTextInput
+            hasParseProblemButton = [bool]$preDiag.hasParseProblemButton
+            hasParseResultPanel = [bool]$preDiag.hasParseResultPanel
+            hasParseResultPre = [bool]$preDiag.hasParseResultPre
+            timestamp = (Get-Date).ToString("o")
+          }
+          [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+          Write-Host "[stability-test] save pre-ui-init diagnostic to json"
+          throw
+        }
         Wait-BrowserReady 400
         try { $hrefProbe = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-fallback") } catch { $hrefProbe = "" }
         if ($hrefProbe.Contains("wiring-diagram.html")) {
@@ -1424,7 +1441,24 @@ try {
     $initialized = [bool]$uiInit.ok
   }
   Log-Step "wait start(ui init)" "done"
-  if (-not $initialized) { throw "UI init timeout." }
+  if (-not $initialized) {
+    if ($skipDiagnosticsForE2E) {
+      $preDiag = Get-UiInitDiagnostics
+      $preUiInitDiagnostic = [ordered]@{
+        phase = "pre-ui-init-diagnostic"
+        href = [string]$preDiag.href
+        readyState = [string]$preDiag.readyState
+        hasProblemTextInput = [bool]$preDiag.hasProblemTextInput
+        hasParseProblemButton = [bool]$preDiag.hasParseProblemButton
+        hasParseResultPanel = [bool]$preDiag.hasParseResultPanel
+        hasParseResultPre = [bool]$preDiag.hasParseResultPre
+        timestamp = (Get-Date).ToString("o")
+      }
+      [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+      Write-Host "[stability-test] save pre-ui-init diagnostic to json"
+    }
+    throw "UI init timeout."
+  }
 
   $successInput = (Make-Japanese @(29255,20999,49,28783))
   $failureInput = "###"
