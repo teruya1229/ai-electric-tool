@@ -1289,6 +1289,16 @@ try {
           break
         }
       }
+      if ($hrefProbe.StartsWith("data:")) {
+        Write-Host "[stability-test] fallback to Open-PageWithRetry because url is still data:"
+        Open-PageWithRetry 1 300
+        Wait-BrowserReady 400
+        try { $hrefProbe = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-fallback") } catch { $hrefProbe = "" }
+        if ($hrefProbe.Contains("wiring-diagram.html")) {
+          Write-Host "[stability-test] page fallback open success"
+        }
+        Write-Host "[stability-test] href after fallback=$hrefProbe"
+      }
     }
     Wait-BrowserReady 500
   } else {
