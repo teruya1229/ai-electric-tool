@@ -199,6 +199,7 @@ connection-point-route の下に
 #ai-diagram-preview-result は groups / circuits / layouts が不足している場合、フォールバック文言「複線図を表示できません / 回路情報が不足しています」を表示する
 AI複線図の初期モードは preview とし、再描画時は現在選択中のモードを維持する
 対象実装: wiring-diagram.js（state / switcher / dispatcher）
+parse完了後のUI更新は updateUiFromParseResult(...) を唯一の入口として行う
 
 例
 
