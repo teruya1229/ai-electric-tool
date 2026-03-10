@@ -1481,6 +1481,15 @@ try {
           Open-PageWithRetry 1 300
         } catch {
           $preDiag = Get-UiInitDiagnostics
+          $executeSyncErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
+          $executeSyncErrorClass = "other"
+          $timeoutJa = Make-Japanese @(12479,12452,12512,12450,12454,12488)
+          $executeSyncErrorLower = $executeSyncErrorMessage.ToLowerInvariant()
+          if (($executeSyncErrorLower -match 'timeout') -or $executeSyncErrorMessage.Contains($timeoutJa)) {
+            $executeSyncErrorClass = "timeout"
+          } elseif (($executeSyncErrorLower -match 'no such window') -or ($executeSyncErrorLower -match '404')) {
+            $executeSyncErrorClass = "no-such-window-or-404"
+          }
           $preUiInitDiagnostic = [ordered]@{
             phase = "pre-ui-init-diagnostic"
             href = [string]$preDiag.href
@@ -1524,8 +1533,9 @@ try {
             sessionIdFoundInExtractedIds = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionIdFoundInExtractedIds } else { $false }
             uiInitCheckMethod = "Get-UiInitDiagnostics"
             executeSyncAttempted = $true
-            executeSyncErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
+            executeSyncErrorMessage = $executeSyncErrorMessage
             executeSyncErrorType = if ($preDiag.error) { "ExecScriptError" } else { "" }
+            executeSyncErrorClass = $executeSyncErrorClass
             hrefBeforeUiInit = [string]$preDiag.href
             elementCheckSucceeded = (-not [string]::Equals([string]$preDiag.readyState, "exec-error", [StringComparison]::OrdinalIgnoreCase))
             elementCheckErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
@@ -1670,6 +1680,15 @@ try {
   if (-not $initialized) {
     if ($skipDiagnosticsForE2E) {
       $preDiag = if ($uiInit -and $uiInit.last) { $uiInit.last } else { Get-UiInitDiagnostics }
+      $executeSyncErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
+      $executeSyncErrorClass = "other"
+      $timeoutJa = Make-Japanese @(12479,12452,12512,12450,12454,12488)
+      $executeSyncErrorLower = $executeSyncErrorMessage.ToLowerInvariant()
+      if (($executeSyncErrorLower -match 'timeout') -or $executeSyncErrorMessage.Contains($timeoutJa)) {
+        $executeSyncErrorClass = "timeout"
+      } elseif (($executeSyncErrorLower -match 'no such window') -or ($executeSyncErrorLower -match '404')) {
+        $executeSyncErrorClass = "no-such-window-or-404"
+      }
       $preUiInitDiagnostic = [ordered]@{
         phase = "pre-ui-init-diagnostic"
         href = [string]$preDiag.href
@@ -1713,8 +1732,9 @@ try {
         sessionIdFoundInExtractedIds = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionIdFoundInExtractedIds } else { $false }
         uiInitCheckMethod = "Get-UiInitDiagnostics"
         executeSyncAttempted = $true
-        executeSyncErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
+        executeSyncErrorMessage = $executeSyncErrorMessage
         executeSyncErrorType = if ($preDiag.error) { "ExecScriptError" } else { "" }
+        executeSyncErrorClass = $executeSyncErrorClass
         hrefBeforeUiInit = [string]$preDiag.href
         elementCheckSucceeded = (-not [string]::Equals([string]$preDiag.readyState, "exec-error", [StringComparison]::OrdinalIgnoreCase))
         elementCheckErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
