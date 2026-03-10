@@ -1273,6 +1273,17 @@ try {
     $script:sessionId = $minimalForE2E.sessionId
     Log-SessionCapabilitiesSummary $minimalForE2E.response "minimal-e2e-only"
     Wait-BrowserReady 700
+    Write-Host "[stability-test] direct webdriver navigate"
+    try {
+      $directNavBody = @{ url = "$($script:baseUrl)/wiring-diagram.html" } | ConvertTo-Json -Compress
+      Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $directNavBody -TimeoutSec 20 | Out-Null
+    } catch {
+      Write-Host "[stability-test] direct webdriver navigate error=$($_.Exception.Message)"
+    }
+    Wait-BrowserReady 350
+    $hrefAfterDirectNavigate = ""
+    try { $hrefAfterDirectNavigate = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-direct-navigate") } catch { $hrefAfterDirectNavigate = "" }
+    Write-Host "[stability-test] href after direct navigate=$hrefAfterDirectNavigate"
     if (-not (Open-PageViaCurl $script:sessionId 25)) {
       throw "Minimal session page-open failed in e2e-only mode."
     }
