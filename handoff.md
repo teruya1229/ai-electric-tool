@@ -194,6 +194,7 @@ connection-point-route の下に
 配線概算
 
 を表示する。
+#wire-length-result は wirePaths が空でも 0.0 m を表示し、配線なし にはしない
 
 例
 
