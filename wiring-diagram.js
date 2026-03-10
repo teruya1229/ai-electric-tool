@@ -214,17 +214,9 @@ function renderMaterialList(materials) {
 }
 
 function renderMaterialListFromScene(sceneModel) {
-  let groups = [];
-  if (sceneModel && Array.isArray(sceneModel.groups)) {
-    groups = sceneModel.groups;
-  } else {
-    const parsed = parseGroupsFromDom();
-    groups = parsed.groups;
-  }
-
-  const circuits = createCircuitsFromGroups(groups);
-  const materials = createMaterialsFromCircuits(circuits);
-  renderMaterialList(materials);
+  // #material-list-result は通常、回路別材料一覧を表示する
+  // 全体材料一覧は renderMaterialList(...) の明示呼び出し時のみ使用する
+  renderCircuitMaterialList(sceneModel);
 }
 
 function renderCircuitMaterialList(sceneModel) {
