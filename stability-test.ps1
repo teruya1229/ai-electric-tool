@@ -717,6 +717,121 @@ pageLoadStrategy 単独では断定不可。current session の他条件影響�
   }
 }
 
+function Test-ChromeArgsSubtractCompare() {
+  $baseCaps = Get-CurrentSessionCapabilitiesObject
+  $baseArgs = @()
+  if ($baseCaps.capabilities.alwaysMatch.'goog:chromeOptions' -and $baseCaps.capabilities.alwaysMatch.'goog:chromeOptions'.args) {
+    $baseArgs = @($baseCaps.capabilities.alwaysMatch.'goog:chromeOptions'.args)
+  }
+  $cases = @(
+    [ordered]@{ label = "base"; removedArgs = @(); skip = $false },
+    [ordered]@{ label = "without --headless"; removedArgs = @("--headless"); skip = (-not ($baseArgs -contains "--headless")) },
+    [ordered]@{ label = "without --no-sandbox"; removedArgs = @("--no-sandbox"); skip = (-not ($baseArgs -contains "--no-sandbox")) },
+    [ordered]@{ label = "without --disable-dev-shm-usage"; removedArgs = @("--disable-dev-shm-usage"); skip = (-not ($baseArgs -contains "--disable-dev-shm-usage")) }
+  )
+  $results = @()
+  foreach ($case in $cases) {
+    $sessionId = $null
+    $sessionCreated = $false
+    $navigationOk = $false
+    $executeOk = $false
+    $executeValue = $null
+    $errorType = ""
+    $errorMessage = ""
+    if ($case.skip) {
+      $errorType = "SKIP"
+      $errorMessage = "target arg is not present in current session args"
+    } else {
+      try {
+        $capsObject = Get-CurrentSessionCapabilitiesObject
+        $caseArgs = @($baseArgs)
+        foreach ($arg in $case.removedArgs) {
+          $caseArgs = @($caseArgs | Where-Object { $_ -ne $arg })
+        }
+        $capsObject.capabilities.alwaysMatch.'goog:chromeOptions'.args = $caseArgs
+        $caps = $capsObject | ConvertTo-Json -Depth 8
+        $sessionResp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session" -ContentType "application/json" -Body $caps -TimeoutSec 30
+        $sessionId = if ($sessionResp.value.sessionId) { $sessionResp.value.sessionId } else { $sessionResp.sessionId }
+        if (-not $sessionId) { throw "Cannot create chrome args subtraction compare session." }
+        $sessionCreated = $true
+
+        $navBody = @{ url = "$baseUrl/wiring-diagram.html" } | ConvertTo-Json -Depth 8
+        Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$sessionId/url" -ContentType "application/json" -Body $navBody -TimeoutSec 10 | Out-Null
+        $navigationOk = $true
+
+        $execBody = @{ script = "return 1;"; args = @() } | ConvertTo-Json -Depth 8
+        $execResp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$sessionId/execute/sync" -ContentType "application/json" -Body $execBody -TimeoutSec 10
+        $executeOk = $true
+        $executeValue = $execResp.value
+      } catch {
+        $errorMessage = $_.Exception.Message
+        $errorType = if ($errorMessage -match "(?i)timeout") { "TIMEOUT" } else { "ERROR" }
+      } finally {
+        if ($sessionId) {
+          try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$sessionId" -TimeoutSec 10 | Out-Null } catch {}
+        }
+      }
+    }
+    $results += [ordered]@{
+      label = $case.label
+      removedArgs = $case.removedArgs
+      sessionCreated = [bool]$sessionCreated
+      navigationOk = [bool]$navigationOk
+      executeOk = [bool]$executeOk
+      executeValue = $executeValue
+      errorType = $errorType
+      errorMessage = $errorMessage
+    }
+    [IO.File]::WriteAllText($outputPath, (@{ chromeArgsSubtractCompare = @{ results = $results } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+  }
+  $baseCase = $results | Where-Object { $_.label -eq "base" } | Select-Object -First 1
+  $baseResult = if ($baseCase.executeOk) { "OK" } else { "NG" }
+  $firstImprovedCase = "NONE"
+  $conclusion = "今回の args 減算比較では単独原因を断定できません"
+  foreach ($r in $results) {
+    if ($r.label -eq "base" -or $r.errorType -eq "SKIP") { continue }
+    if ((-not $baseCase.executeOk) -and $r.executeOk) {
+      $firstImprovedCase = $r.label
+      $removed = if (@($r.removedArgs).Count -gt 0) { ($r.removedArgs -join " ") } else { $r.label }
+      $conclusion = "$removed が execute failure の有力原因です"
+      break
+    }
+  }
+  if ($firstImprovedCase -eq "NONE") {
+    foreach ($r in $results) {
+      if ($r.label -eq "base" -or $r.errorType -eq "SKIP") { continue }
+      if ((-not $baseCase.navigationOk) -and $r.navigationOk) {
+        $firstImprovedCase = $r.label
+        $removed = if (@($r.removedArgs).Count -gt 0) { ($r.removedArgs -join " ") } else { $r.label }
+        $conclusion = "$removed が navigation failure の有力原因候補です"
+        break
+      }
+    }
+  }
+  $byLabel = @{}
+  foreach ($r in $results) { $byLabel[$r.label] = $r }
+  $withoutHeadless = if ($byLabel["without --headless"]) { if ($byLabel["without --headless"].errorType -eq "SKIP") { "SKIP" } elseif ($byLabel["without --headless"].executeOk) { "OK" } else { "NG" } } else { "SKIP" }
+  $withoutNoSandbox = if ($byLabel["without --no-sandbox"]) { if ($byLabel["without --no-sandbox"].errorType -eq "SKIP") { "SKIP" } elseif ($byLabel["without --no-sandbox"].executeOk) { "OK" } else { "NG" } } else { "SKIP" }
+  $withoutDevShm = if ($byLabel["without --disable-dev-shm-usage"]) { if ($byLabel["without --disable-dev-shm-usage"].errorType -eq "SKIP") { "SKIP" } elseif ($byLabel["without --disable-dev-shm-usage"].executeOk) { "OK" } else { "NG" } } else { "SKIP" }
+  $summary = [ordered]@{
+    baseResult = $baseResult
+    firstImprovedCase = $firstImprovedCase
+    conclusion = $conclusion
+  }
+  Write-Host "----- Chrome Args Subtract Compare -----"
+  Write-Host "base: $baseResult"
+  Write-Host "without --headless: $withoutHeadless"
+  Write-Host "without --no-sandbox: $withoutNoSandbox"
+  Write-Host "without --disable-dev-shm-usage: $withoutDevShm"
+  Write-Host "firstImprovedCase: $firstImprovedCase"
+  Write-Host "Conclusion: $conclusion"
+  Write-Host "-----------------------------------------"
+  [ordered]@{
+    results = $results
+    summary = $summary
+  }
+}
+
 function Remove-Session {
   if ($script:sessionId) {
     try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)" -TimeoutSec 10 | Out-Null } catch {}
@@ -1050,6 +1165,9 @@ try {
   Log-Step "pageLoadStrategy compare" "start"
   $pageLoadStrategyCompare = Test-PageLoadStrategyCompare
   Log-Step "pageLoadStrategy compare" "done"
+  Log-Step "chrome args subtract compare" "start"
+  $chromeArgsSubtractCompare = Test-ChromeArgsSubtractCompare
+  Log-Step "chrome args subtract compare" "done"
   $currentFirst = if ($wdProbe.results.Count -gt 0) { $wdProbe.results[0] } else { $null }
   $currentExecuteOk = [bool]($currentFirst -and $currentFirst.ok)
   $compareSnapshot = [ordered]@{
@@ -1062,6 +1180,7 @@ try {
     }
     capabilityBisect = $capabilityBisect
     pageLoadStrategyCompare = $pageLoadStrategyCompare
+    chromeArgsSubtractCompare = $chromeArgsSubtractCompare
   }
   [IO.File]::WriteAllText($outputPath, ($compareSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
   Write-Host "Capabilities captured from session response"
