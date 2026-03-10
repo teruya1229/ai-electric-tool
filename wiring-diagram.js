@@ -3546,6 +3546,8 @@ function renderConnectionPointRoute(sceneModel) {
   renderJunctionBoxMaterialSummary(routeModel);
 }
 
+// UI更新仕様: parse完了後のUI更新はこの関数を唯一の入口とする
+// 詳細仕様は handoff.md を参照
 // parse完了後のUI更新入口
 // 成功時は最新sceneModelを反映し、失敗時は安全表示へ切り替える
 function updateUiFromParseResult(sceneModel) {
