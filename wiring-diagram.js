@@ -2247,6 +2247,7 @@ function renderAiDiagramExamStyle(sceneModel) {
   });
 }
 
+// モード仕様: 初期は preview、再描画時は現在モードを維持（handoff.md 参照）
 function ensureAiDiagramModeSwitcher() {
   const panel = document.getElementById("ai-diagram-preview-result");
   if (!panel || !panel.parentElement) return;
