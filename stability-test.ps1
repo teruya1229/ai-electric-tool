@@ -366,8 +366,8 @@ function Stop-Driver {
   }
 }
 
-function New-Session {
-  $caps = @{
+function Get-CurrentSessionCapabilitiesObject() {
+  @{
     capabilities = @{
       alwaysMatch = @{
         pageLoadStrategy = "none"
@@ -376,7 +376,11 @@ function New-Session {
         }
       }
     }
-  } | ConvertTo-Json -Depth 8
+  }
+}
+
+function New-Session {
+  $caps = Get-CurrentSessionCapabilitiesObject | ConvertTo-Json -Depth 8
   $resp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session" -ContentType "application/json" -Body $caps -TimeoutSec 30
   $script:sessionId = if ($resp.value.sessionId) { $resp.value.sessionId } else { $resp.sessionId }
   if (-not $script:sessionId) { throw "Cannot create WebDriver session." }
@@ -628,6 +632,84 @@ function Test-CapabilityBisect() {
     firstTimeout = if ($firstTimeout) { $firstTimeout } else { "NONE" }
     firstError = if ($firstError) { $firstError } else { "NONE" }
     results = $results
+  }
+}
+
+function Test-PageLoadStrategyCompare() {
+  $labels = @("none", "eager")
+  $results = @()
+  foreach ($label in $labels) {
+    $sessionId = $null
+    $sessionCreated = $false
+    $navigationOk = $false
+    $executeOk = $false
+    $executeValue = $null
+    $errorType = ""
+    $errorMessage = ""
+    try {
+      $capsObject = Get-CurrentSessionCapabilitiesObject
+      $capsObject.capabilities.alwaysMatch.pageLoadStrategy = $label
+      $caps = $capsObject | ConvertTo-Json -Depth 8
+      $sessionResp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session" -ContentType "application/json" -Body $caps -TimeoutSec 30
+      $sessionId = if ($sessionResp.value.sessionId) { $sessionResp.value.sessionId } else { $sessionResp.sessionId }
+      if (-not $sessionId) { throw "Cannot create pageLoadStrategy compare session." }
+      $sessionCreated = $true
+
+      $navBody = @{ url = "$baseUrl/wiring-diagram.html" } | ConvertTo-Json -Depth 8
+      Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$sessionId/url" -ContentType "application/json" -Body $navBody -TimeoutSec 10 | Out-Null
+      $navigationOk = $true
+
+      $execBody = @{ script = "return 1;"; args = @() } | ConvertTo-Json -Depth 8
+      $execResp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$sessionId/execute/sync" -ContentType "application/json" -Body $execBody -TimeoutSec 10
+      $executeOk = $true
+      $executeValue = $execResp.value
+    } catch {
+      $errorMessage = $_.Exception.Message
+      $errorType = if ($errorMessage -match "(?i)timeout") { "TIMEOUT" } else { "ERROR" }
+    } finally {
+      if ($sessionId) {
+        try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$sessionId" -TimeoutSec 10 | Out-Null } catch {}
+      }
+    }
+    $results += [ordered]@{
+      label = $label
+      sessionCreated = [bool]$sessionCreated
+      navigationOk = [bool]$navigationOk
+      executeOk = [bool]$executeOk
+      executeValue = $executeValue
+      errorType = $errorType
+      errorMessage = $errorMessage
+    }
+    [IO.File]::WriteAllText($outputPath, (@{ pageLoadStrategyCompare = @{ results = $results } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+  }
+  $noneCase = $results | Where-Object { $_.label -eq "none" } | Select-Object -First 1
+  $eagerCase = $results | Where-Object { $_.label -eq "eager" } | Select-Object -First 1
+  $noneNg = (-not $noneCase.executeOk)
+  $eagerOk = [bool]$eagerCase.executeOk
+  $eagerNg = (-not $eagerCase.executeOk)
+  $conclusion =
+    if ($noneNg -and $eagerOk) {
+      "pageLoadStrategy:none が execute failure の有力原因です"
+    } elseif ($noneNg -and $eagerNg) {
+      "pageLoadStrategy 単独では断定不可。current session の他条件影響が残ります"
+    } else {
+      "pageLoadStrategy:none 単独再現せず。他条件組み合わせ要因の可能性があります"
+    }
+  $summary = [ordered]@{
+    noneResult = if ($noneCase.executeOk) { "OK" } else { "NG" }
+    eagerResult = if ($eagerCase.executeOk) { "OK" } else { "NG" }
+    normalResult = "SKIP"
+    conclusion = $conclusion
+  }
+  Write-Host "----- PageLoadStrategy Compare -----"
+  Write-Host "none: $($summary.noneResult)"
+  Write-Host "eager: $($summary.eagerResult)"
+  Write-Host "normal: $($summary.normalResult)"
+  Write-Host "Conclusion: $($summary.conclusion)"
+  Write-Host "------------------------------------"
+  [ordered]@{
+    results = $results
+    summary = $summary
   }
 }
 
@@ -961,6 +1043,9 @@ try {
   Log-Step "capability bisect" "start"
   $capabilityBisect = Test-CapabilityBisect
   Log-Step "capability bisect" "done"
+  Log-Step "pageLoadStrategy compare" "start"
+  $pageLoadStrategyCompare = Test-PageLoadStrategyCompare
+  Log-Step "pageLoadStrategy compare" "done"
   $currentFirst = if ($wdProbe.results.Count -gt 0) { $wdProbe.results[0] } else { $null }
   $currentExecuteOk = [bool]($currentFirst -and $currentFirst.ok)
   $compareSnapshot = [ordered]@{
@@ -972,6 +1057,7 @@ try {
       current = $currentCapabilities
     }
     capabilityBisect = $capabilityBisect
+    pageLoadStrategyCompare = $pageLoadStrategyCompare
   }
   [IO.File]::WriteAllText($outputPath, ($compareSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
   Write-Host "Capabilities captured from session response"
