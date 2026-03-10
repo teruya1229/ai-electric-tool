@@ -787,13 +787,13 @@ function Test-ChromeArgsSubtractCompare() {
   $baseCase = $results | Where-Object { $_.label -eq "base" } | Select-Object -First 1
   $baseResult = if ($baseCase.executeOk) { "OK" } else { "NG" }
   $firstImprovedCase = "NONE"
-  $conclusion = "今回の args 減算比較では単独原因を断定できません"
+  $conclusion = "No single-cause identified in args subtraction comparison."
   foreach ($r in $results) {
     if ($r.label -eq "base" -or $r.errorType -eq "SKIP") { continue }
     if ((-not $baseCase.executeOk) -and $r.executeOk) {
       $firstImprovedCase = $r.label
       $removed = if (@($r.removedArgs).Count -gt 0) { ($r.removedArgs -join " ") } else { $r.label }
-      $conclusion = "$removed が execute failure の有力原因です"
+      $conclusion = "Likely execute failure cause: $removed"
       break
     }
   }
@@ -803,7 +803,7 @@ function Test-ChromeArgsSubtractCompare() {
       if ((-not $baseCase.navigationOk) -and $r.navigationOk) {
         $firstImprovedCase = $r.label
         $removed = if (@($r.removedArgs).Count -gt 0) { ($r.removedArgs -join " ") } else { $r.label }
-        $conclusion = "$removed が navigation failure の有力原因候補です"
+        $conclusion = "Likely navigation failure contributor: $removed"
         break
       }
     }
