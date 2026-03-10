@@ -944,6 +944,67 @@ function Invoke-WindowHandleCheck([string]$sessionId) {
   $result
 }
 
+function Invoke-CurrentUrlCheck([string]$sessionId) {
+  $result = [ordered]@{
+    currentUrlCheckAttempted = $false
+    currentUrlFound = $false
+    currentUrlValue = $null
+    currentUrlErrorClass = $null
+    currentUrlErrorMessage = $null
+  }
+  $stdoutRaw = ""
+  $outPath = [IO.Path]::GetTempFileName()
+  $errPath = [IO.Path]::GetTempFileName()
+  try {
+    $result.currentUrlCheckAttempted = $true
+    $args = @("--silent", "--show-error", "--max-time", "5", "$($script:driverBaseUrl)/session/$sessionId/url")
+    $proc = Start-Process -FilePath "curl.exe" -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput $outPath -RedirectStandardError $errPath
+    try { $stdoutRaw = [string](Get-Content -Raw -Path $outPath) } catch { $stdoutRaw = "" }
+    try { $stderr = [string](Get-Content -Raw -Path $errPath) } catch { $stderr = "" }
+    if ($proc.ExitCode -ne 0) {
+      $errLower = ""
+      try { $errLower = $stderr.ToLowerInvariant() } catch { $errLower = "" }
+      if (($proc.ExitCode -eq 28) -or ($errLower -match "timeout")) {
+        $result.currentUrlErrorClass = "timeout"
+      } else {
+        $result.currentUrlErrorClass = "curl-error"
+      }
+      $result.currentUrlErrorMessage = $stderr
+      return $result
+    }
+    try {
+      $json = $stdoutRaw | ConvertFrom-Json -ErrorAction Stop
+      if ($json -and $json.PSObject.Properties.Name -contains "value" -and $json.value -is [string]) {
+        $result.currentUrlFound = $true
+        $result.currentUrlValue = [string]$json.value
+      } elseif ($json -and $json.value -and $json.value.error) {
+        $rawError = [string]$json.value.error
+        $rawMessage = if ($json.value.message) { [string]$json.value.message } else { "" }
+        $errorLower = $rawError.ToLowerInvariant()
+        $messageLower = $rawMessage.ToLowerInvariant()
+        if (($errorLower -match "timeout") -or ($messageLower -match "timeout")) {
+          $result.currentUrlErrorClass = "timeout"
+        } elseif (($errorLower -match "no such window") -or ($messageLower -match "no such window") -or ($messageLower -match "404")) {
+          $result.currentUrlErrorClass = "no-such-window-or-404"
+        } else {
+          $result.currentUrlErrorClass = "webdriver-error"
+        }
+        $result.currentUrlErrorMessage = $rawMessage
+      } else {
+        $result.currentUrlErrorClass = "parse-error"
+        $result.currentUrlErrorMessage = "missing value in response"
+      }
+    } catch {
+      $result.currentUrlErrorClass = "parse-error"
+      $result.currentUrlErrorMessage = $_.Exception.Message
+    }
+  } finally {
+    try { Remove-Item $outPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $errPath -Force -ErrorAction SilentlyContinue } catch {}
+  }
+  $result
+}
+
 function Wait-BrowserReady([int]$waitMs = 500) {
   Start-Sleep -Milliseconds $waitMs
 }
@@ -1346,6 +1407,8 @@ try {
     $script:sessionId = $minimalForE2E.sessionId
     Write-Host "[stability-test] check window handle"
     $windowCheck = Invoke-WindowHandleCheck $script:sessionId
+    Write-Host "[stability-test] check current url"
+    $currentUrlCheck = Invoke-CurrentUrlCheck $script:sessionId
     Log-SessionCapabilitiesSummary $minimalForE2E.response "minimal-e2e-only"
     Wait-BrowserReady 700
     Write-Host "[stability-test] direct webdriver navigate"
@@ -1387,6 +1450,11 @@ try {
     $windowHandleValue = ""
     $windowHandleErrorClass = $null
     $windowHandleErrorMessage = $null
+    $currentUrlCheckAttempted = $false
+    $currentUrlFound = $false
+    $currentUrlValue = $null
+    $currentUrlErrorClass = $null
+    $currentUrlErrorMessage = $null
     $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
     $windowCheckStdout = [string]$windowCheck.windowCheckStdout
     $windowCheckStderr = [string]$windowCheck.windowCheckStderr
@@ -1395,6 +1463,11 @@ try {
     $windowHandleValue = if ($null -ne $windowCheck.windowHandleValue) { [string]$windowCheck.windowHandleValue } else { $null }
     $windowHandleErrorClass = if ($null -ne $windowCheck.windowHandleErrorClass) { [string]$windowCheck.windowHandleErrorClass } else { $null }
     $windowHandleErrorMessage = if ($null -ne $windowCheck.windowHandleErrorMessage) { [string]$windowCheck.windowHandleErrorMessage } else { $null }
+    $currentUrlCheckAttempted = [bool]$currentUrlCheck.currentUrlCheckAttempted
+    $currentUrlFound = [bool]$currentUrlCheck.currentUrlFound
+    $currentUrlValue = if ($null -ne $currentUrlCheck.currentUrlValue) { [string]$currentUrlCheck.currentUrlValue } else { $null }
+    $currentUrlErrorClass = if ($null -ne $currentUrlCheck.currentUrlErrorClass) { [string]$currentUrlCheck.currentUrlErrorClass } else { $null }
+    $currentUrlErrorMessage = if ($null -ne $currentUrlCheck.currentUrlErrorMessage) { [string]$currentUrlCheck.currentUrlErrorMessage } else { $null }
     Write-Host "[stability-test] check chromedriver status"
     $chromeStatusOutPath = [IO.Path]::GetTempFileName()
     $chromeStatusErrPath = [IO.Path]::GetTempFileName()
@@ -1554,6 +1627,11 @@ try {
       windowHandleValue = $windowHandleValue
       windowHandleErrorClass = $windowHandleErrorClass
       windowHandleErrorMessage = $windowHandleErrorMessage
+      currentUrlCheckAttempted = $currentUrlCheckAttempted
+      currentUrlFound = $currentUrlFound
+      currentUrlValue = $currentUrlValue
+      currentUrlErrorClass = $currentUrlErrorClass
+      currentUrlErrorMessage = $currentUrlErrorMessage
       timestamp = (Get-Date).ToString("o")
     }
     [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $directNavigateDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -1637,6 +1715,11 @@ try {
             windowHandleValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleValue) { [string]$directNavigateDiagnostic.windowHandleValue } else { $null }
             windowHandleErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleErrorClass) { [string]$directNavigateDiagnostic.windowHandleErrorClass } else { $null }
             windowHandleErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleErrorMessage) { [string]$directNavigateDiagnostic.windowHandleErrorMessage } else { $null }
+            currentUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.currentUrlCheckAttempted } else { $false }
+            currentUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.currentUrlFound } else { $false }
+            currentUrlValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.currentUrlValue) { [string]$directNavigateDiagnostic.currentUrlValue } else { $null }
+            currentUrlErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.currentUrlErrorClass) { [string]$directNavigateDiagnostic.currentUrlErrorClass } else { $null }
+            currentUrlErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.currentUrlErrorMessage) { [string]$directNavigateDiagnostic.currentUrlErrorMessage } else { $null }
             uiInitCheckMethod = "Get-UiInitDiagnostics"
             executeSyncAttempted = $true
             executeSyncErrorMessage = $executeSyncErrorMessage
@@ -1844,6 +1927,11 @@ try {
         windowHandleValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleValue) { [string]$directNavigateDiagnostic.windowHandleValue } else { $null }
         windowHandleErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleErrorClass) { [string]$directNavigateDiagnostic.windowHandleErrorClass } else { $null }
         windowHandleErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleErrorMessage) { [string]$directNavigateDiagnostic.windowHandleErrorMessage } else { $null }
+        currentUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.currentUrlCheckAttempted } else { $false }
+        currentUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.currentUrlFound } else { $false }
+        currentUrlValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.currentUrlValue) { [string]$directNavigateDiagnostic.currentUrlValue } else { $null }
+        currentUrlErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.currentUrlErrorClass) { [string]$directNavigateDiagnostic.currentUrlErrorClass } else { $null }
+        currentUrlErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.currentUrlErrorMessage) { [string]$directNavigateDiagnostic.currentUrlErrorMessage } else { $null }
         uiInitCheckMethod = "Get-UiInitDiagnostics"
         executeSyncAttempted = $true
         executeSyncErrorMessage = $executeSyncErrorMessage
