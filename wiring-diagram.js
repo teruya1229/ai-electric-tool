@@ -3570,17 +3570,7 @@ function updateUiFromParseResult(sceneModel) {
 
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
-  updateUiFromParseResult();
-  renderSleeveJudgeList();
-  renderParseDebugResult();
-  renderLayoutDebug();
-  renderWirePathDebug();
-  ensureAiDiagramModeSwitcher();
-  renderConnectionPointsEditor();
-  renderConnectionPointRoute();
-  renderCableLengthSummary();
-  if (!target) return;
-  const observer = new MutationObserver(() => {
+  const renderFromCurrentDom = () => {
     updateUiFromParseResult();
     renderSleeveJudgeList();
     renderParseDebugResult();
@@ -3590,6 +3580,22 @@ function setupCircuitListAutoRender() {
     renderConnectionPointsEditor();
     renderConnectionPointRoute();
     renderCableLengthSummary();
+  };
+
+  let observerRefreshScheduled = false;
+  const scheduleObserverRefresh = () => {
+    if (observerRefreshScheduled) return;
+    observerRefreshScheduled = true;
+    queueMicrotask(() => {
+      observerRefreshScheduled = false;
+      renderFromCurrentDom();
+    });
+  };
+
+  renderFromCurrentDom();
+  if (!target) return;
+  const observer = new MutationObserver(() => {
+    scheduleObserverRefresh();
   });
   observer.observe(target, {
     childList: true,
