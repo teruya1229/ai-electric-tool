@@ -509,6 +509,104 @@ function Test-MinimalSessionExecute() {
   $result
 }
 
+function Test-CapabilityBisect() {
+  $tests = @(
+    [ordered]@{
+      name = "pageLoadStrategy:none"
+      alwaysMatch = @{
+        browserName = "chrome"
+        pageLoadStrategy = "none"
+      }
+    },
+    [ordered]@{
+      name = "goog:chromeOptions --headless"
+      alwaysMatch = @{
+        browserName = "chrome"
+        "goog:chromeOptions" = @{
+          args = @("--headless")
+        }
+      }
+    },
+    [ordered]@{
+      name = "goog:chromeOptions --no-sandbox"
+      alwaysMatch = @{
+        browserName = "chrome"
+        "goog:chromeOptions" = @{
+          args = @("--no-sandbox")
+        }
+      }
+    },
+    [ordered]@{
+      name = "goog:chromeOptions --disable-dev-shm-usage"
+      alwaysMatch = @{
+        browserName = "chrome"
+        "goog:chromeOptions" = @{
+          args = @("--disable-dev-shm-usage")
+        }
+      }
+    },
+    [ordered]@{
+      name = "goog:chromeOptions --headless + --no-sandbox"
+      alwaysMatch = @{
+        browserName = "chrome"
+        "goog:chromeOptions" = @{
+          args = @("--headless", "--no-sandbox")
+        }
+      }
+    }
+  )
+  $results = @()
+  $rootCauseCandidate = ""
+  foreach ($test in $tests) {
+    Write-Host "[BISECT] Testing: $($test.name)"
+    $sessionId = $null
+    $status = "OK"
+    $error = ""
+    try {
+      $caps = @{ capabilities = @{ alwaysMatch = $test.alwaysMatch } } | ConvertTo-Json -Depth 8
+      $createResp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session" -ContentType "application/json" -Body $caps -TimeoutSec 30
+      $sessionId = if ($createResp.value.sessionId) { $createResp.value.sessionId } else { $createResp.sessionId }
+      if (-not $sessionId) { throw "Cannot create bisect session." }
+
+      $navBody = @{ url = "$baseUrl/wiring-diagram.html" } | ConvertTo-Json -Depth 8
+      Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$sessionId/url" -ContentType "application/json" -Body $navBody -TimeoutSec 20 | Out-Null
+
+      $execBody = @{ script = "return 1;"; args = @() } | ConvertTo-Json -Depth 8
+      Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$sessionId/execute/sync" -ContentType "application/json" -Body $execBody -TimeoutSec 20 | Out-Null
+      Write-Host "[BISECT] result OK"
+    } catch {
+      $error = $_.Exception.Message
+      if ($error -match "(?i)timeout") {
+        $status = "TIMEOUT"
+        Write-Host "[BISECT] TIMEOUT"
+      } else {
+        $status = "ERROR"
+        Write-Host "[BISECT] result ERROR"
+      }
+    } finally {
+      if ($sessionId) {
+        try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$sessionId" -TimeoutSec 10 | Out-Null } catch {}
+      }
+    }
+    if (-not $rootCauseCandidate -and $status -eq "TIMEOUT") {
+      $rootCauseCandidate = $test.name
+      Write-Host "[BISECT] ROOT CAUSE CANDIDATE: $rootCauseCandidate"
+    }
+    $results += [ordered]@{
+      capability = $test.name
+      status = $status
+      error = $error
+    }
+  }
+  if (-not $rootCauseCandidate) {
+    Write-Host "[BISECT] ROOT CAUSE CANDIDATE: <none>"
+  }
+  [ordered]@{
+    rootCauseCandidate = $rootCauseCandidate
+    results = $results
+  }
+}
+
 function Remove-Session {
   if ($script:sessionId) {
     try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)" -TimeoutSec 10 | Out-Null } catch {}
@@ -840,6 +938,9 @@ try {
   Log-Step "minimal session compare" "start"
   $minimalSessionCompare = Test-MinimalSessionExecute
   Log-Step "minimal session compare" "done"
+  Log-Step "capability bisect" "start"
+  $capabilityBisect = Test-CapabilityBisect
+  Log-Step "capability bisect" "done"
   $currentFirst = if ($wdProbe.results.Count -gt 0) { $wdProbe.results[0] } else { $null }
   $currentExecuteOk = [bool]($currentFirst -and $currentFirst.ok)
   $compareSnapshot = [ordered]@{
@@ -850,6 +951,7 @@ try {
       minimal = $minimalSessionCompare.capabilities
       current = $currentCapabilities
     }
+    capabilityBisect = $capabilityBisect
   }
   [IO.File]::WriteAllText($outputPath, ($compareSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
   Write-Host "Capabilities captured"
