@@ -1265,6 +1265,7 @@ try {
 
   $wdProbe = [ordered]@{ ok = $true; executeLayerDead = $false; results = @() }
   $minimalSessionCompare = [ordered]@{ executeSyncOk = $true; executeSyncStatus = "skipped"; capabilities = $currentCapabilities }
+  $directNavigateDiagnostic = $null
 
   if ($skipDiagnosticsForE2E) {
     Write-Host "[stability-test] e2e-only mode: skip diagnostics and use minimal session"
@@ -1274,16 +1275,41 @@ try {
     Log-SessionCapabilitiesSummary $minimalForE2E.response "minimal-e2e-only"
     Wait-BrowserReady 700
     Write-Host "[stability-test] direct webdriver navigate"
+    $navigateTargetUrl = "$($script:baseUrl)/wiring-diagram.html"
+    $navigateSucceeded = $false
+    $navigateErrorMessage = ""
+    $navigateErrorType = ""
+    $navigateStatusCode = $null
+    $navigateResponseBody = ""
     try {
-      $directNavBody = @{ url = "$($script:baseUrl)/wiring-diagram.html" } | ConvertTo-Json -Compress
+      $directNavBody = @{ url = $navigateTargetUrl } | ConvertTo-Json -Compress
       Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $directNavBody -TimeoutSec 20 | Out-Null
+      $navigateSucceeded = $true
     } catch {
+      $navigateErrorMessage = $_.Exception.Message
+      $navigateErrorType = $_.Exception.GetType().FullName
+      try { $navigateStatusCode = [int]$_.Exception.Response.StatusCode.value__ } catch { $navigateStatusCode = $null }
+      try { $navigateResponseBody = [string]$_.ErrorDetails.Message } catch { $navigateResponseBody = "" }
+      if ($navigateResponseBody.Length -gt 500) { $navigateResponseBody = $navigateResponseBody.Substring(0, 500) }
       Write-Host "[stability-test] direct webdriver navigate error=$($_.Exception.Message)"
     }
     Wait-BrowserReady 350
     $hrefAfterDirectNavigate = ""
     try { $hrefAfterDirectNavigate = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-direct-navigate") } catch { $hrefAfterDirectNavigate = "" }
     Write-Host "[stability-test] href after direct navigate=$hrefAfterDirectNavigate"
+    $directNavigateDiagnostic = [ordered]@{
+      phase = "direct-webdriver-navigate"
+      navigateTargetUrl = $navigateTargetUrl
+      navigateAttempted = $true
+      navigateSucceeded = $navigateSucceeded
+      navigateErrorMessage = $navigateErrorMessage
+      navigateErrorType = $navigateErrorType
+      navigateStatusCode = $navigateStatusCode
+      navigateResponseBody = $navigateResponseBody
+      hrefAfterDirectNavigate = $hrefAfterDirectNavigate
+      timestamp = (Get-Date).ToString("o")
+    }
+    [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $directNavigateDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
     if (-not (Open-PageViaCurl $script:sessionId 25)) {
       throw "Minimal session page-open failed in e2e-only mode."
     }
@@ -1314,6 +1340,14 @@ try {
             hasParseProblemButton = [bool]$preDiag.hasParseProblemButton
             hasParseResultPanel = [bool]$preDiag.hasParseResultPanel
             hasParseResultPre = [bool]$preDiag.hasParseResultPre
+            navigateTargetUrl = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateTargetUrl } else { "" }
+            navigateAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateAttempted } else { $false }
+            navigateSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateSucceeded } else { $false }
+            navigateErrorMessage = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorMessage } else { "" }
+            navigateErrorType = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorType } else { "" }
+            navigateStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateStatusCode } else { $null }
+            navigateResponseBody = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateResponseBody } else { "" }
+            hrefAfterDirectNavigate = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.hrefAfterDirectNavigate } else { "" }
             timestamp = (Get-Date).ToString("o")
           }
           [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -1463,6 +1497,14 @@ try {
         hasParseProblemButton = [bool]$preDiag.hasParseProblemButton
         hasParseResultPanel = [bool]$preDiag.hasParseResultPanel
         hasParseResultPre = [bool]$preDiag.hasParseResultPre
+        navigateTargetUrl = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateTargetUrl } else { "" }
+        navigateAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateAttempted } else { $false }
+        navigateSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateSucceeded } else { $false }
+        navigateErrorMessage = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorMessage } else { "" }
+        navigateErrorType = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorType } else { "" }
+        navigateStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateStatusCode } else { $null }
+        navigateResponseBody = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateResponseBody } else { "" }
+        hrefAfterDirectNavigate = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.hrefAfterDirectNavigate } else { "" }
         timestamp = (Get-Date).ToString("o")
       }
       [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
