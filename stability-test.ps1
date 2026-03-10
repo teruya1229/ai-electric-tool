@@ -1276,6 +1276,20 @@ try {
     if (-not (Open-PageViaCurl $script:sessionId 25)) {
       throw "Minimal session page-open failed in e2e-only mode."
     }
+    $hrefProbe = ""
+    try { $hrefProbe = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-probe") } catch { $hrefProbe = "" }
+    if ($hrefProbe.StartsWith("data:")) {
+      Write-Host "[stability-test] retry open page because url is data:"
+      for ($retry = 1; $retry -le 3; $retry++) {
+        Open-PageViaCurl $script:sessionId 10 | Out-Null
+        Wait-BrowserReady 350
+        try { $hrefProbe = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-retry") } catch { $hrefProbe = "" }
+        if ($hrefProbe.Contains("wiring-diagram.html")) {
+          Write-Host "[stability-test] page open retry success"
+          break
+        }
+      }
+    }
     Wait-BrowserReady 500
   } else {
     Log-Step "webdriver curl file execute probe" "start"
