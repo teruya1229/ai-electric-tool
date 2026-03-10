@@ -687,14 +687,18 @@ function Test-PageLoadStrategyCompare() {
   $noneNg = (-not $noneCase.executeOk)
   $eagerOk = [bool]$eagerCase.executeOk
   $eagerNg = (-not $eagerCase.executeOk)
-  $conclusion =
-    if ($noneNg -and $eagerOk) {
-      "pageLoadStrategy:none が execute failure の有力原因です"
-    } elseif ($noneNg -and $eagerNg) {
-      "pageLoadStrategy 単独では断定不可。current session の他条件影響が残ります"
-    } else {
-      "pageLoadStrategy:none 単独再現せず。他条件組み合わせ要因の可能性があります"
-    }
+  $conclusion = @'
+pageLoadStrategy:none 単独再現せず。他条件組み合わせ要因の可能性があります
+'@
+  if ($noneNg -and $eagerOk) {
+    $conclusion = @'
+pageLoadStrategy:none が execute failure の有力原因です
+'@
+  } elseif ($noneNg -and $eagerNg) {
+    $conclusion = @'
+pageLoadStrategy 単独では断定不可。current session の他条件影響が残ります
+'@
+  }
   $summary = [ordered]@{
     noneResult = if ($noneCase.executeOk) { "OK" } else { "NG" }
     eagerResult = if ($eagerCase.executeOk) { "OK" } else { "NG" }
@@ -1070,11 +1074,11 @@ try {
   $firstTimeoutSummary = if ($capabilityBisect.firstTimeout) { $capabilityBisect.firstTimeout } else { "NONE" }
   $firstErrorSummary = if ($capabilityBisect.firstError) { $capabilityBisect.firstError } else { "NONE" }
   $rootCauseSummary = if ($capabilityBisect.rootCauseCandidate) { $capabilityBisect.rootCauseCandidate } else { "NONE" }
-  $resultSummary = "今回の bisect 対象では再現せず、他の capability 組み合わせ要因の可能性があります"
+  $resultSummary = "No reproduction in current bisect targets; other capability combinations may be involved."
   if ($firstTimeoutSummary -ne "NONE") {
-    $resultSummary = "$firstTimeoutSummary が execute timeout の最有力原因候補です"
+    $resultSummary = "Likely execute timeout cause: $firstTimeoutSummary"
   } elseif ($firstErrorSummary -ne "NONE") {
-    $resultSummary = "$firstErrorSummary が execute failure の最有力原因候補です"
+    $resultSummary = "Likely execute failure cause: $firstErrorSummary"
   }
   Write-Host "----- Capability Bisect Summary -----"
   Write-Host "Most likely cause: $rootCauseSummary"
