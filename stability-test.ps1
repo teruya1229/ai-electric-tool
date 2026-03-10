@@ -872,6 +872,47 @@ function Open-PageViaCurl([string]$sessionId, [int]$maxTimeSec = 20) {
   }
 }
 
+function Invoke-WindowHandleCheck([string]$sessionId) {
+  $result = [ordered]@{
+    windowCheckAttempted = $false
+    windowCheckStdout = ""
+    windowCheckStderr = ""
+    windowCheckExitCode = $null
+    windowHandleFound = $false
+    windowHandleValue = ""
+  }
+  $windowStdoutRaw = ""
+  $windowOutPath = [IO.Path]::GetTempFileName()
+  $windowErrPath = [IO.Path]::GetTempFileName()
+  try {
+    $result.windowCheckAttempted = $true
+    $windowArgs = @("--silent", "--show-error", "--max-time", "5", "$($script:driverBaseUrl)/session/$sessionId/window")
+    $windowProc = Start-Process -FilePath "curl.exe" -ArgumentList $windowArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $windowOutPath -RedirectStandardError $windowErrPath
+    $result.windowCheckExitCode = $windowProc.ExitCode
+    try { $result.windowCheckStdout = [string](Get-Content -Raw -Path $windowOutPath) } catch { $result.windowCheckStdout = "" }
+    $windowStdoutRaw = $result.windowCheckStdout
+    try { $result.windowCheckStderr = [string](Get-Content -Raw -Path $windowErrPath) } catch { $result.windowCheckStderr = "" }
+  } finally {
+    try { Remove-Item $windowOutPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $windowErrPath -Force -ErrorAction SilentlyContinue } catch {}
+  }
+  if ($result.windowCheckStdout.Length -gt 500) { $result.windowCheckStdout = $result.windowCheckStdout.Substring(0, 500) }
+  if ($result.windowCheckStderr.Length -gt 500) { $result.windowCheckStderr = $result.windowCheckStderr.Substring(0, 500) }
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($windowStdoutRaw)) {
+      $windowJson = $windowStdoutRaw | ConvertFrom-Json -ErrorAction Stop
+      if ($windowJson -and $windowJson.PSObject.Properties.Name -contains "value" -and $windowJson.value -is [string]) {
+        $result.windowHandleValue = [string]$windowJson.value
+        $result.windowHandleFound = $result.windowHandleValue.StartsWith("CDwindow-")
+      }
+    }
+  } catch {
+    $result.windowHandleValue = ""
+    $result.windowHandleFound = $false
+  }
+  $result
+}
+
 function Wait-BrowserReady([int]$waitMs = 500) {
   Start-Sleep -Milliseconds $waitMs
 }
@@ -1272,6 +1313,8 @@ try {
     try { Remove-Session } catch {}
     $minimalForE2E = New-WebDriverSessionMinimal
     $script:sessionId = $minimalForE2E.sessionId
+    Write-Host "[stability-test] check window handle"
+    $windowCheck = Invoke-WindowHandleCheck $script:sessionId
     Log-SessionCapabilitiesSummary $minimalForE2E.response "minimal-e2e-only"
     Wait-BrowserReady 700
     Write-Host "[stability-test] direct webdriver navigate"
@@ -1307,11 +1350,16 @@ try {
     $sessionIdFoundInExtractedIds = $false
     $windowCheckAttempted = $false
     $windowCheckStdout = ""
-    $windowCheckStdoutRaw = ""
     $windowCheckStderr = ""
     $windowCheckExitCode = $null
     $windowHandleFound = $false
     $windowHandleValue = ""
+    $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
+    $windowCheckStdout = [string]$windowCheck.windowCheckStdout
+    $windowCheckStderr = [string]$windowCheck.windowCheckStderr
+    $windowCheckExitCode = $windowCheck.windowCheckExitCode
+    $windowHandleFound = [bool]$windowCheck.windowHandleFound
+    $windowHandleValue = [string]$windowCheck.windowHandleValue
     Write-Host "[stability-test] check chromedriver status"
     $chromeStatusOutPath = [IO.Path]::GetTempFileName()
     $chromeStatusErrPath = [IO.Path]::GetTempFileName()
@@ -1365,37 +1413,6 @@ try {
     }
     $sessionsExtractedCount = @($sessionsExtractedIds).Count
     $sessionIdFoundInExtractedIds = (-not [string]::IsNullOrWhiteSpace($checkedSessionId)) -and (@($sessionsExtractedIds) -contains $checkedSessionId)
-    Write-Host "[stability-test] check window handle"
-    $windowOutPath = [IO.Path]::GetTempFileName()
-    $windowErrPath = [IO.Path]::GetTempFileName()
-    try {
-      $windowCheckAttempted = $true
-      $windowArgs = @("--silent", "--show-error", "--max-time", "5", "$($script:driverBaseUrl)/session/$($script:sessionId)/window")
-      $windowProc = Start-Process -FilePath "curl.exe" -ArgumentList $windowArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $windowOutPath -RedirectStandardError $windowErrPath
-      $windowCheckExitCode = $windowProc.ExitCode
-      try { $windowCheckStdout = [string](Get-Content -Raw -Path $windowOutPath) } catch { $windowCheckStdout = "" }
-      $windowCheckStdoutRaw = $windowCheckStdout
-      try { $windowCheckStderr = [string](Get-Content -Raw -Path $windowErrPath) } catch { $windowCheckStderr = "" }
-    } finally {
-      try { Remove-Item $windowOutPath -Force -ErrorAction SilentlyContinue } catch {}
-      try { Remove-Item $windowErrPath -Force -ErrorAction SilentlyContinue } catch {}
-    }
-    if ($windowCheckStdout.Length -gt 500) { $windowCheckStdout = $windowCheckStdout.Substring(0, 500) }
-    if ($windowCheckStderr.Length -gt 500) { $windowCheckStderr = $windowCheckStderr.Substring(0, 500) }
-    try {
-      if (-not [string]::IsNullOrWhiteSpace($windowCheckStdoutRaw)) {
-        $windowJson = $windowCheckStdoutRaw | ConvertFrom-Json -ErrorAction Stop
-        if ($windowJson -and $null -ne $windowJson.value) {
-          if ($windowJson.value -is [string]) {
-            $windowHandleValue = [string]$windowJson.value
-            $windowHandleFound = $windowHandleValue.StartsWith("CDwindow-")
-          }
-        }
-      }
-    } catch {
-      $windowHandleValue = ""
-      $windowHandleFound = $false
-    }
     try {
       $directNavBody = @{ url = $navigateTargetUrl } | ConvertTo-Json -Compress
       Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $directNavBody -TimeoutSec 20 | Out-Null
