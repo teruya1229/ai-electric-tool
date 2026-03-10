@@ -425,6 +425,8 @@ function Test-MinimalSessionExecute() {
     sessionCreated = $false
     pageOpenOk = $false
     pageOpenError = ""
+    readyState = ""
+    readyStateError = ""
     executeSyncOk = $false
     executeSyncValue = $null
     executeSyncError = ""
@@ -440,14 +442,44 @@ function Test-MinimalSessionExecute() {
 
     $script:sessionId = $minimalSessionId
     Log-Step "minimal page open" "start"
+    $openEndpoint = "$($script:driverBaseUrl)/session/$($script:sessionId)/url"
+    $openPayload = @{ url = "$baseUrl/wiring-diagram.html" } | ConvertTo-Json -Compress
+    $openOutPath = [IO.Path]::GetTempFileName()
+    $openErrPath = [IO.Path]::GetTempFileName()
     try {
-      Open-Page
-      $result.pageOpenOk = $true
+      $openArgs = @("--silent", "--show-error", "--max-time", "20", "-X", "POST", "-H", "Content-Type:application/json", "--data", $openPayload, $openEndpoint)
+      $openProc = Start-Process -FilePath "curl.exe" -ArgumentList $openArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $openOutPath -RedirectStandardError $openErrPath
+      if ($openProc.ExitCode -eq 0) {
+        $result.pageOpenOk = $true
+      } else {
+        try { $result.pageOpenError = Get-Content -Raw -Path $openErrPath } catch { $result.pageOpenError = "curl exit $($openProc.ExitCode)" }
+      }
     } catch {
       $result.pageOpenError = $_.Exception.Message
+    } finally {
+      try { Remove-Item $openOutPath -Force -ErrorAction SilentlyContinue } catch {}
+      try { Remove-Item $openErrPath -Force -ErrorAction SilentlyContinue } catch {}
+    }
+    if (-not $result.pageOpenOk) {
       Write-Host "[stability-test] minimal page-open failed error=$($result.pageOpenError)"
     }
     Log-Step "minimal page open" "done"
+
+    $readyStateResult = $null
+    try {
+      $readyStateBody = @{ script = "return document.readyState;"; args = @() } | ConvertTo-Json -Depth 8
+      $readyStateResult = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/execute/sync" -ContentType "application/json" -Body $readyStateBody -TimeoutSec 20
+      $result.readyState = $readyStateResult.value
+      Write-Host "ReadyState:" $readyStateResult.value
+    } catch {
+      $result.readyStateError = $_.Exception.Message
+      Write-Host "ReadyState:" "error"
+    }
+    $readyStateSnapshot = [ordered]@{
+      readyState = $result.readyState
+      readyStateError = $result.readyStateError
+    }
+    [IO.File]::WriteAllText($outputPath, ($readyStateSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
 
     Log-Step "minimal execute probe" "start"
     $exec = Invoke-WebDriverExecuteWithFallback "minimal-const-1" "return 1;" @() 1 0
@@ -800,6 +832,13 @@ try {
   Log-Step "minimal session compare" "done"
   $currentFirst = if ($wdProbe.results.Count -gt 0) { $wdProbe.results[0] } else { $null }
   $currentExecuteOk = [bool]($currentFirst -and $currentFirst.ok)
+  $compareSnapshot = [ordered]@{
+    currentExecuteOk = $currentExecuteOk
+    currentExecuteError = if ($currentFirst) { $currentFirst.error } else { "" }
+    minimalSessionCompare = $minimalSessionCompare
+  }
+  [IO.File]::WriteAllText($outputPath, ($compareSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+  Write-Host "Saved test results to $outputPath"
   if ((-not $currentExecuteOk) -and $minimalSessionCompare.executeSyncOk) {
     Write-Host "[stability-test] compare-result current=timeout-or-error minimal=success verdict=current-session-capabilities-likely"
   } elseif ((-not $currentExecuteOk) -and (-not $minimalSessionCompare.executeSyncOk)) {
