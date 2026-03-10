@@ -25,7 +25,7 @@ window.groupDevicesByControl = groupDevicesByControl;
 window.judgeSleeve = judgeSleeve;
 window.renderDiagram = renderDiagram;
 
-let aiDiagramPreviewMode = "exam_style";
+let aiDiagramPreviewMode = "preview";
 let aiDiagramDeveloperMode = false;
 let aiDiagramRenderState = {
   circuits: "-",
@@ -2247,9 +2247,6 @@ function renderAiDiagramExamStyle(sceneModel) {
 function ensureAiDiagramModeSwitcher() {
   const panel = document.getElementById("ai-diagram-preview-result");
   if (!panel || !panel.parentElement) return;
-  if (!aiDiagramDeveloperMode && aiDiagramPreviewMode !== "exam_style") {
-    aiDiagramPreviewMode = "exam_style";
-  }
 
   let switcher = document.getElementById("ai-diagram-mode-switcher");
   if (!switcher) {
@@ -2301,9 +2298,6 @@ function ensureAiDiagramModeSwitcher() {
   );
   developerBtn.addEventListener("click", () => {
     aiDiagramDeveloperMode = !aiDiagramDeveloperMode;
-    if (!aiDiagramDeveloperMode && aiDiagramPreviewMode !== "exam_style") {
-      aiDiagramPreviewMode = "exam_style";
-    }
     ensureAiDiagramModeSwitcher();
     renderAiDiagramByMode();
   });
