@@ -9,6 +9,7 @@ $baseUrl = $null
 $driverPortCandidates = @(9515, 9516, 9517)
 $driverPort = $null
 $driverBaseUrl = $null
+$skipDiagnosticsForE2E = $true
 $sessionId = $null
 $driverProc = $null
 $httpListener = $null
@@ -1262,81 +1263,95 @@ try {
   Open-PageWithRetry
   Log-Step "page open" "done"
 
-  Log-Step "webdriver curl file execute probe" "start"
-  $chromeCount = (Get-Process chrome -ErrorAction SilentlyContinue | Measure-Object).Count
-  Write-Host "[stability-test] chrome-process-count=$chromeCount"
-  Invoke-ExecuteSyncViaCurlFile $script:sessionId "return 1;" | Out-Null
-  Log-Step "webdriver curl file execute probe" "done"
+  $wdProbe = [ordered]@{ ok = $true; executeLayerDead = $false; results = @() }
+  $minimalSessionCompare = [ordered]@{ executeSyncOk = $true; executeSyncStatus = "skipped"; capabilities = $currentCapabilities }
 
-  Log-Step "webdriver curl execute probe" "start"
-  Invoke-ExecuteSyncViaCurl $script:sessionId "return 1;" | Out-Null
-  Log-Step "webdriver curl execute probe" "done"
-
-  Log-Step "webdriver execute probe" "start"
-  $wdProbe = Test-WebDriverExecutionLayer
-  Log-Step "webdriver execute probe" "done"
-  Log-Step "minimal session compare" "start"
-  $minimalSessionCompare = Test-MinimalSessionExecute
-  Log-Step "minimal session compare" "done"
-  Log-Step "capability bisect" "start"
-  $capabilityBisect = Test-CapabilityBisect
-  Log-Step "capability bisect" "done"
-  Log-Step "pageLoadStrategy compare" "start"
-  $pageLoadStrategyCompare = Test-PageLoadStrategyCompare
-  Log-Step "pageLoadStrategy compare" "done"
-  Log-Step "chrome args subtract compare" "start"
-  $chromeArgsSubtractCompare = Test-ChromeArgsSubtractCompare
-  Log-Step "chrome args subtract compare" "done"
-  $currentFirst = if ($wdProbe.results.Count -gt 0) { $wdProbe.results[0] } else { $null }
-  $currentExecuteOk = [bool]($currentFirst -and $currentFirst.ok)
-  $compareSnapshot = [ordered]@{
-    currentExecuteOk = $currentExecuteOk
-    currentExecuteError = if ($currentFirst) { $currentFirst.error } else { "" }
-    minimalSessionCompare = $minimalSessionCompare
-    capabilityCompare = [ordered]@{
-      minimal = $minimalSessionCompare.capabilities
-      current = $currentCapabilities
+  if ($skipDiagnosticsForE2E) {
+    Write-Host "[stability-test] e2e-only mode: skip diagnostics and use minimal session"
+    try { Remove-Session } catch {}
+    $minimalForE2E = New-WebDriverSessionMinimal
+    $script:sessionId = $minimalForE2E.sessionId
+    Log-SessionCapabilitiesSummary $minimalForE2E.response "minimal-e2e-only"
+    Wait-BrowserReady 700
+    if (-not (Open-PageViaCurl $script:sessionId 25)) {
+      throw "Minimal session page-open failed in e2e-only mode."
     }
-    capabilityBisect = $capabilityBisect
-    pageLoadStrategyCompare = $pageLoadStrategyCompare
-    chromeArgsSubtractCompare = $chromeArgsSubtractCompare
-  }
-  [IO.File]::WriteAllText($outputPath, ($compareSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
-  Write-Host "セッション作成レスポンスから capabilities を取得しました"
-  Write-Host "テスト結果を保存しました: $outputPath"
-  $currentReadyStateProbe = $wdProbe.results | Where-Object { $_.label -eq "ready-state" } | Select-Object -First 1
-  $currentReadyState = if ($currentReadyStateProbe -and $currentReadyStateProbe.ok) { [string]$currentReadyStateProbe.value } else { "unknown" }
-  $minimalExecuteSummary = if ($minimalSessionCompare.executeSyncOk) { "OK" } else { "NG" }
-  $currentExecuteSummary = if ($currentExecuteOk) { "OK" } else { "NG" }
-  $bisectCount = @($capabilityBisect.results).Count
-  $firstTimeoutSummary = if ($capabilityBisect.firstTimeout) { $capabilityBisect.firstTimeout } else { "NONE" }
-  $firstErrorSummary = if ($capabilityBisect.firstError) { $capabilityBisect.firstError } else { "NONE" }
-  $rootCauseSummary = if ($capabilityBisect.rootCauseCandidate) { $capabilityBisect.rootCauseCandidate } else { "NONE" }
-  $resultSummary = "No reproduction in current bisect targets; other capability combinations may be involved."
-  if ($firstTimeoutSummary -ne "NONE") {
-    $resultSummary = "Likely execute timeout cause: $firstTimeoutSummary"
-  } elseif ($firstErrorSummary -ne "NONE") {
-    $resultSummary = "Likely execute failure cause: $firstErrorSummary"
-  }
-  Write-Host "----- 診断結果まとめ -----"
-  Write-Host "Minimal session execute: $minimalExecuteSummary"
-  Write-Host "Current session readyState: $currentReadyState"
-  Write-Host "pageLoadStrategy 比較結果:"
-  Write-Host "none: $($pageLoadStrategyCompare.summary.noneResult)"
-  Write-Host "eager: $($pageLoadStrategyCompare.summary.eagerResult)"
-  Write-Host "Chrome args 比較結果:"
-  Write-Host "base: $($chromeArgsSubtractCompare.summary.baseResult)"
-  Write-Host "without --headless: $(if ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --headless' -and $_.errorType -eq 'SKIP' }) { 'SKIP' } elseif ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --headless' -and $_.executeOk }) { 'OK' } else { 'NG' })"
-  Write-Host "without --no-sandbox: $(if ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --no-sandbox' -and $_.errorType -eq 'SKIP' }) { 'SKIP' } elseif ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --no-sandbox' -and $_.executeOk }) { 'OK' } else { 'NG' })"
-  Write-Host "最有力原因候補: $rootCauseSummary"
-  Write-Host "結論: $resultSummary"
-  Write-Host "--------------------------------"
-  if ((-not $currentExecuteOk) -and $minimalSessionCompare.executeSyncOk) {
-    Write-Host "[stability-test] compare-result current=timeout-or-error minimal=success verdict=current-session-capabilities-likely"
-  } elseif ((-not $currentExecuteOk) -and (-not $minimalSessionCompare.executeSyncOk)) {
-    Write-Host "[stability-test] compare-result current=timeout-or-error minimal=timeout-or-error verdict=chromedriver-or-browser-behavior-likely"
+    Wait-BrowserReady 500
   } else {
-    Write-Host "[stability-test] compare-result current=success minimal=$($minimalSessionCompare.executeSyncStatus)"
+    Log-Step "webdriver curl file execute probe" "start"
+    $chromeCount = (Get-Process chrome -ErrorAction SilentlyContinue | Measure-Object).Count
+    Write-Host "[stability-test] chrome-process-count=$chromeCount"
+    Invoke-ExecuteSyncViaCurlFile $script:sessionId "return 1;" | Out-Null
+    Log-Step "webdriver curl file execute probe" "done"
+
+    Log-Step "webdriver curl execute probe" "start"
+    Invoke-ExecuteSyncViaCurl $script:sessionId "return 1;" | Out-Null
+    Log-Step "webdriver curl execute probe" "done"
+
+    Log-Step "webdriver execute probe" "start"
+    $wdProbe = Test-WebDriverExecutionLayer
+    Log-Step "webdriver execute probe" "done"
+    Log-Step "minimal session compare" "start"
+    $minimalSessionCompare = Test-MinimalSessionExecute
+    Log-Step "minimal session compare" "done"
+    Log-Step "capability bisect" "start"
+    $capabilityBisect = Test-CapabilityBisect
+    Log-Step "capability bisect" "done"
+    Log-Step "pageLoadStrategy compare" "start"
+    $pageLoadStrategyCompare = Test-PageLoadStrategyCompare
+    Log-Step "pageLoadStrategy compare" "done"
+    Log-Step "chrome args subtract compare" "start"
+    $chromeArgsSubtractCompare = Test-ChromeArgsSubtractCompare
+    Log-Step "chrome args subtract compare" "done"
+    $currentFirst = if ($wdProbe.results.Count -gt 0) { $wdProbe.results[0] } else { $null }
+    $currentExecuteOk = [bool]($currentFirst -and $currentFirst.ok)
+    $compareSnapshot = [ordered]@{
+      currentExecuteOk = $currentExecuteOk
+      currentExecuteError = if ($currentFirst) { $currentFirst.error } else { "" }
+      minimalSessionCompare = $minimalSessionCompare
+      capabilityCompare = [ordered]@{
+        minimal = $minimalSessionCompare.capabilities
+        current = $currentCapabilities
+      }
+      capabilityBisect = $capabilityBisect
+      pageLoadStrategyCompare = $pageLoadStrategyCompare
+      chromeArgsSubtractCompare = $chromeArgsSubtractCompare
+    }
+    [IO.File]::WriteAllText($outputPath, ($compareSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    Write-Host "セッション作成レスポンスから capabilities を取得しました"
+    Write-Host "テスト結果を保存しました: $outputPath"
+    $currentReadyStateProbe = $wdProbe.results | Where-Object { $_.label -eq "ready-state" } | Select-Object -First 1
+    $currentReadyState = if ($currentReadyStateProbe -and $currentReadyStateProbe.ok) { [string]$currentReadyStateProbe.value } else { "unknown" }
+    $minimalExecuteSummary = if ($minimalSessionCompare.executeSyncOk) { "OK" } else { "NG" }
+    $firstTimeoutSummary = if ($capabilityBisect.firstTimeout) { $capabilityBisect.firstTimeout } else { "NONE" }
+    $firstErrorSummary = if ($capabilityBisect.firstError) { $capabilityBisect.firstError } else { "NONE" }
+    $rootCauseSummary = if ($capabilityBisect.rootCauseCandidate) { $capabilityBisect.rootCauseCandidate } else { "NONE" }
+    $resultSummary = "No reproduction in current bisect targets; other capability combinations may be involved."
+    if ($firstTimeoutSummary -ne "NONE") {
+      $resultSummary = "Likely execute timeout cause: $firstTimeoutSummary"
+    } elseif ($firstErrorSummary -ne "NONE") {
+      $resultSummary = "Likely execute failure cause: $firstErrorSummary"
+    }
+    Write-Host "----- 診断結果まとめ -----"
+    Write-Host "Minimal session execute: $minimalExecuteSummary"
+    Write-Host "Current session readyState: $currentReadyState"
+    Write-Host "pageLoadStrategy 比較結果:"
+    Write-Host "none: $($pageLoadStrategyCompare.summary.noneResult)"
+    Write-Host "eager: $($pageLoadStrategyCompare.summary.eagerResult)"
+    Write-Host "Chrome args 比較結果:"
+    Write-Host "base: $($chromeArgsSubtractCompare.summary.baseResult)"
+    Write-Host "without --headless: $(if ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --headless' -and $_.errorType -eq 'SKIP' }) { 'SKIP' } elseif ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --headless' -and $_.executeOk }) { 'OK' } else { 'NG' })"
+    Write-Host "without --no-sandbox: $(if ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --no-sandbox' -and $_.errorType -eq 'SKIP' }) { 'SKIP' } elseif ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --no-sandbox' -and $_.executeOk }) { 'OK' } else { 'NG' })"
+    Write-Host "最有力原因候補: $rootCauseSummary"
+    Write-Host "結論: $resultSummary"
+    Write-Host "--------------------------------"
+    if ((-not $currentExecuteOk) -and $minimalSessionCompare.executeSyncOk) {
+      Write-Host "[stability-test] compare-result current=timeout-or-error minimal=success verdict=current-session-capabilities-likely"
+    } elseif ((-not $currentExecuteOk) -and (-not $minimalSessionCompare.executeSyncOk)) {
+      Write-Host "[stability-test] compare-result current=timeout-or-error minimal=timeout-or-error verdict=chromedriver-or-browser-behavior-likely"
+    } else {
+      Write-Host "[stability-test] compare-result current=success minimal=$($minimalSessionCompare.executeSyncStatus)"
+    }
   }
   if (-not $wdProbe.ok) {
     $firstFail = $wdProbe.results | Where-Object { -not $_.ok } | Select-Object -First 1
