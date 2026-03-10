@@ -1250,6 +1250,8 @@ function toWireLengthSegments(wirePaths) {
   return segments;
 }
 
+// 表示仕様: #wire-length-result は wirePaths が空でも 0.0 m を表示する
+// 詳細仕様は handoff.md を参照
 function renderWireLength(wirePaths) {
   const panel = document.getElementById("wire-length-result");
   if (!panel) return;
