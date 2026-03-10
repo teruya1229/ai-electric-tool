@@ -1415,8 +1415,11 @@ try {
     $navigateTargetUrl = "$($script:baseUrl)/wiring-diagram.html"
     $navigateSucceeded = $false
     $navigateErrorMessage = ""
+    $navigateErrorClass = $null
     $navigateErrorType = ""
     $navigateStatusCode = $null
+    $navigateResponseReceived = $false
+    $navigateResponseStatusCode = $null
     $navigateResponseBody = ""
     $curlNavigateAttempted = $false
     $curlNavigateSucceeded = $false
@@ -1455,6 +1458,12 @@ try {
     $currentUrlValue = $null
     $currentUrlErrorClass = $null
     $currentUrlErrorMessage = $null
+    $postNavigateUrlCheckAttempted = $false
+    $postNavigateUrlFound = $false
+    $postNavigateUrlValue = $null
+    $postNavigateUrlErrorClass = $null
+    $postNavigateUrlErrorMessage = $null
+    $currentUrlMatchesTarget = $null
     $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
     $windowCheckStdout = [string]$windowCheck.windowCheckStdout
     $windowCheckStderr = [string]$windowCheck.windowCheckStderr
@@ -1523,15 +1532,37 @@ try {
     $sessionIdFoundInExtractedIds = (-not [string]::IsNullOrWhiteSpace($checkedSessionId)) -and (@($sessionsExtractedIds) -contains $checkedSessionId)
     try {
       $directNavBody = @{ url = $navigateTargetUrl } | ConvertTo-Json -Compress
-      Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $directNavBody -TimeoutSec 20 | Out-Null
+      $navigateResponse = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $directNavBody -TimeoutSec 20
+      $navigateResponseReceived = $true
+      $navigateResponseStatusCode = 0
       $navigateSucceeded = $true
     } catch {
       $navigateErrorMessage = $_.Exception.Message
+      $navigateErrorLower = ""
+      try { $navigateErrorLower = $navigateErrorMessage.ToLowerInvariant() } catch { $navigateErrorLower = "" }
+      $timeoutJa = Make-Japanese @(12479,12452,12512,12450,12454,12488)
+      if (($navigateErrorLower -match "timeout") -or $navigateErrorMessage.Contains($timeoutJa)) {
+        $navigateErrorClass = "timeout"
+      } elseif (($navigateErrorLower -match "no such window") -or ($navigateErrorLower -match "404")) {
+        $navigateErrorClass = "no-such-window-or-404"
+      } else {
+        $navigateErrorClass = "webdriver-error"
+      }
       $navigateErrorType = $_.Exception.GetType().FullName
       try { $navigateStatusCode = [int]$_.Exception.Response.StatusCode.value__ } catch { $navigateStatusCode = $null }
+      if ($null -ne $navigateStatusCode) { $navigateResponseStatusCode = $navigateStatusCode }
       try { $navigateResponseBody = [string]$_.ErrorDetails.Message } catch { $navigateResponseBody = "" }
       if ($navigateResponseBody.Length -gt 500) { $navigateResponseBody = $navigateResponseBody.Substring(0, 500) }
       Write-Host "[stability-test] direct webdriver navigate error=$($_.Exception.Message)"
+    }
+    $postNavigateUrlCheck = Invoke-CurrentUrlCheck $script:sessionId
+    $postNavigateUrlCheckAttempted = [bool]$postNavigateUrlCheck.currentUrlCheckAttempted
+    $postNavigateUrlFound = [bool]$postNavigateUrlCheck.currentUrlFound
+    $postNavigateUrlValue = if ($null -ne $postNavigateUrlCheck.currentUrlValue) { [string]$postNavigateUrlCheck.currentUrlValue } else { $null }
+    $postNavigateUrlErrorClass = if ($null -ne $postNavigateUrlCheck.currentUrlErrorClass) { [string]$postNavigateUrlCheck.currentUrlErrorClass } else { $null }
+    $postNavigateUrlErrorMessage = if ($null -ne $postNavigateUrlCheck.currentUrlErrorMessage) { [string]$postNavigateUrlCheck.currentUrlErrorMessage } else { $null }
+    if (($null -ne $navigateTargetUrl) -and ($null -ne $postNavigateUrlValue)) {
+      $currentUrlMatchesTarget = [bool]([string]$navigateTargetUrl -eq [string]$postNavigateUrlValue)
     }
     Wait-BrowserReady 350
     $hrefAfterDirectNavigate = ""
@@ -1588,11 +1619,20 @@ try {
       phase = "direct-webdriver-navigate"
       navigateTargetUrl = $navigateTargetUrl
       navigateAttempted = $true
+      navigateResponseReceived = $navigateResponseReceived
+      navigateResponseStatusCode = $navigateResponseStatusCode
       navigateSucceeded = $navigateSucceeded
+      navigateErrorClass = $navigateErrorClass
       navigateErrorMessage = $navigateErrorMessage
       navigateErrorType = $navigateErrorType
       navigateStatusCode = $navigateStatusCode
       navigateResponseBody = $navigateResponseBody
+      postNavigateUrlCheckAttempted = $postNavigateUrlCheckAttempted
+      postNavigateUrlFound = $postNavigateUrlFound
+      postNavigateUrlValue = $postNavigateUrlValue
+      postNavigateUrlErrorClass = $postNavigateUrlErrorClass
+      postNavigateUrlErrorMessage = $postNavigateUrlErrorMessage
+      currentUrlMatchesTarget = $currentUrlMatchesTarget
       hrefAfterDirectNavigate = $hrefAfterDirectNavigate
       curlNavigateAttempted = $curlNavigateAttempted
       curlNavigateSucceeded = $curlNavigateSucceeded
@@ -1676,11 +1716,20 @@ try {
             hasParseResultPre = [bool]$preDiag.hasParseResultPre
             navigateTargetUrl = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateTargetUrl } else { "" }
             navigateAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateAttempted } else { $false }
+            navigateResponseReceived = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateResponseReceived } else { $false }
+            navigateResponseStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateResponseStatusCode } else { $null }
             navigateSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateSucceeded } else { $false }
+            navigateErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.navigateErrorClass) { [string]$directNavigateDiagnostic.navigateErrorClass } else { $null }
             navigateErrorMessage = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorMessage } else { "" }
             navigateErrorType = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorType } else { "" }
             navigateStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateStatusCode } else { $null }
             navigateResponseBody = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateResponseBody } else { "" }
+            postNavigateUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlCheckAttempted } else { $false }
+            postNavigateUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlFound } else { $false }
+            postNavigateUrlValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.postNavigateUrlValue) { [string]$directNavigateDiagnostic.postNavigateUrlValue } else { $null }
+            postNavigateUrlErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.postNavigateUrlErrorClass) { [string]$directNavigateDiagnostic.postNavigateUrlErrorClass } else { $null }
+            postNavigateUrlErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.postNavigateUrlErrorMessage) { [string]$directNavigateDiagnostic.postNavigateUrlErrorMessage } else { $null }
+            currentUrlMatchesTarget = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.currentUrlMatchesTarget) { [bool]$directNavigateDiagnostic.currentUrlMatchesTarget } else { $null }
             hrefAfterDirectNavigate = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.hrefAfterDirectNavigate } else { "" }
             curlNavigateAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.curlNavigateAttempted } else { $false }
             curlNavigateSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.curlNavigateSucceeded } else { $false }
@@ -1888,11 +1937,20 @@ try {
         hasParseResultPre = [bool]$preDiag.hasParseResultPre
         navigateTargetUrl = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateTargetUrl } else { "" }
         navigateAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateAttempted } else { $false }
+        navigateResponseReceived = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateResponseReceived } else { $false }
+        navigateResponseStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateResponseStatusCode } else { $null }
         navigateSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateSucceeded } else { $false }
+        navigateErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.navigateErrorClass) { [string]$directNavigateDiagnostic.navigateErrorClass } else { $null }
         navigateErrorMessage = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorMessage } else { "" }
         navigateErrorType = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorType } else { "" }
         navigateStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateStatusCode } else { $null }
         navigateResponseBody = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateResponseBody } else { "" }
+        postNavigateUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlCheckAttempted } else { $false }
+        postNavigateUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlFound } else { $false }
+        postNavigateUrlValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.postNavigateUrlValue) { [string]$directNavigateDiagnostic.postNavigateUrlValue } else { $null }
+        postNavigateUrlErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.postNavigateUrlErrorClass) { [string]$directNavigateDiagnostic.postNavigateUrlErrorClass } else { $null }
+        postNavigateUrlErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.postNavigateUrlErrorMessage) { [string]$directNavigateDiagnostic.postNavigateUrlErrorMessage } else { $null }
+        currentUrlMatchesTarget = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.currentUrlMatchesTarget) { [bool]$directNavigateDiagnostic.currentUrlMatchesTarget } else { $null }
         hrefAfterDirectNavigate = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.hrefAfterDirectNavigate } else { "" }
         curlNavigateAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.curlNavigateAttempted } else { $false }
         curlNavigateSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.curlNavigateSucceeded } else { $false }
