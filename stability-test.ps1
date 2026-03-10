@@ -553,31 +553,40 @@ function Test-CapabilityBisect() {
     }
   )
   $results = @()
-  $rootCauseCandidate = ""
+  $firstTimeout = ""
+  $firstError = ""
   foreach ($test in $tests) {
     Write-Host "[BISECT] Testing: $($test.name)"
     $sessionId = $null
-    $status = "OK"
-    $error = ""
+    $sessionCreated = $false
+    $navigationOk = $false
+    $executeOk = $false
+    $executeValue = $null
+    $errorType = ""
+    $errorMessage = ""
     try {
       $caps = @{ capabilities = @{ alwaysMatch = $test.alwaysMatch } } | ConvertTo-Json -Depth 8
       $createResp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session" -ContentType "application/json" -Body $caps -TimeoutSec 30
       $sessionId = if ($createResp.value.sessionId) { $createResp.value.sessionId } else { $createResp.sessionId }
       if (-not $sessionId) { throw "Cannot create bisect session." }
+      $sessionCreated = $true
 
       $navBody = @{ url = "$baseUrl/wiring-diagram.html" } | ConvertTo-Json -Depth 8
-      Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$sessionId/url" -ContentType "application/json" -Body $navBody -TimeoutSec 20 | Out-Null
+      Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$sessionId/url" -ContentType "application/json" -Body $navBody -TimeoutSec 10 | Out-Null
+      $navigationOk = $true
 
       $execBody = @{ script = "return 1;"; args = @() } | ConvertTo-Json -Depth 8
-      Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$sessionId/execute/sync" -ContentType "application/json" -Body $execBody -TimeoutSec 20 | Out-Null
+      $execResp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$sessionId/execute/sync" -ContentType "application/json" -Body $execBody -TimeoutSec 10
+      $executeOk = $true
+      $executeValue = $execResp.value
       Write-Host "[BISECT] result OK"
     } catch {
-      $error = $_.Exception.Message
-      if ($error -match "(?i)timeout") {
-        $status = "TIMEOUT"
+      $errorMessage = $_.Exception.Message
+      if ($errorMessage -match "(?i)timeout") {
+        $errorType = "TIMEOUT"
         Write-Host "[BISECT] TIMEOUT"
       } else {
-        $status = "ERROR"
+        $errorType = "ERROR"
         Write-Host "[BISECT] result ERROR"
       }
     } finally {
@@ -585,21 +594,39 @@ function Test-CapabilityBisect() {
         try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$sessionId" -TimeoutSec 10 | Out-Null } catch {}
       }
     }
-    if (-not $rootCauseCandidate -and $status -eq "TIMEOUT") {
-      $rootCauseCandidate = $test.name
-      Write-Host "[BISECT] ROOT CAUSE CANDIDATE: $rootCauseCandidate"
+    if (-not $firstTimeout -and $errorType -eq "TIMEOUT") {
+      $firstTimeout = $test.name
+    }
+    if (-not $firstError -and $errorType -eq "ERROR") {
+      $firstError = $test.name
     }
     $results += [ordered]@{
-      capability = $test.name
-      status = $status
-      error = $error
+      label = $test.name
+      sessionCreated = [bool]$sessionCreated
+      navigationOk = [bool]$navigationOk
+      executeOk = [bool]$executeOk
+      executeValue = $executeValue
+      errorType = $errorType
+      errorMessage = $errorMessage
     }
+    $partialBisect = [ordered]@{
+      rootCauseCandidate = if ($firstTimeout) { $firstTimeout } elseif ($firstError) { $firstError } else { "NONE" }
+      firstTimeout = if ($firstTimeout) { $firstTimeout } else { "NONE" }
+      firstError = if ($firstError) { $firstError } else { "NONE" }
+      results = $results
+    }
+    [IO.File]::WriteAllText($outputPath, (@{ capabilityBisect = $partialBisect } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
   }
-  if (-not $rootCauseCandidate) {
-    Write-Host "[BISECT] ROOT CAUSE CANDIDATE: <none>"
+  $rootCauseCandidate = if ($firstTimeout) { $firstTimeout } elseif ($firstError) { $firstError } else { "NONE" }
+  if ($rootCauseCandidate -ne "NONE") {
+    Write-Host "[BISECT] ROOT CAUSE CANDIDATE: $rootCauseCandidate"
+  } else {
+    Write-Host "[BISECT] ROOT CAUSE CANDIDATE: NONE"
   }
   [ordered]@{
     rootCauseCandidate = $rootCauseCandidate
+    firstTimeout = if ($firstTimeout) { $firstTimeout } else { "NONE" }
+    firstError = if ($firstError) { $firstError } else { "NONE" }
     results = $results
   }
 }
@@ -949,6 +976,32 @@ try {
   [IO.File]::WriteAllText($outputPath, ($compareSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
   Write-Host "Capabilities captured from session response"
   Write-Host "Saved test results to $outputPath"
+  $currentReadyStateProbe = $wdProbe.results | Where-Object { $_.label -eq "ready-state" } | Select-Object -First 1
+  $currentReadyState = if ($currentReadyStateProbe -and $currentReadyStateProbe.ok) { [string]$currentReadyStateProbe.value } else { "unknown" }
+  $minimalExecuteSummary = if ($minimalSessionCompare.executeSyncOk) { "OK" } else { "NG" }
+  $currentExecuteSummary = if ($currentExecuteOk) { "OK" } else { "NG" }
+  $bisectCount = @($capabilityBisect.results).Count
+  $firstTimeoutSummary = if ($capabilityBisect.firstTimeout) { $capabilityBisect.firstTimeout } else { "NONE" }
+  $firstErrorSummary = if ($capabilityBisect.firstError) { $capabilityBisect.firstError } else { "NONE" }
+  $rootCauseSummary = if ($capabilityBisect.rootCauseCandidate) { $capabilityBisect.rootCauseCandidate } else { "NONE" }
+  $resultSummary =
+    if ($firstTimeoutSummary -ne "NONE") {
+      "$firstTimeoutSummary が execute timeout の最有力原因候補です"
+    } elseif ($firstErrorSummary -ne "NONE") {
+      "$firstErrorSummary が execute failure の最有力原因候補です"
+    } else {
+      "今回の bisect 対象では再現せず、他の capability 組み合わせ要因の可能性があります"
+    }
+  Write-Host "----- Capability Bisect Summary -----"
+  Write-Host "Most likely cause: $rootCauseSummary"
+  Write-Host "Minimal session execute: $minimalExecuteSummary"
+  Write-Host "Current session readyState: $currentReadyState"
+  Write-Host "Current session execute: $currentExecuteSummary"
+  Write-Host "Bisect tested: $bisectCount"
+  Write-Host "First timeout: $firstTimeoutSummary"
+  Write-Host "First error: $firstErrorSummary"
+  Write-Host "Result: $resultSummary"
+  Write-Host "------------------------------------"
   if ((-not $currentExecuteOk) -and $minimalSessionCompare.executeSyncOk) {
     Write-Host "[stability-test] compare-result current=timeout-or-error minimal=success verdict=current-session-capabilities-likely"
   } elseif ((-not $currentExecuteOk) -and (-not $minimalSessionCompare.executeSyncOk)) {
