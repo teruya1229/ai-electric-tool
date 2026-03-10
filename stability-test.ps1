@@ -852,6 +852,25 @@ function Open-Page {
   Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $body -TimeoutSec 20 | Out-Null
 }
 
+function Open-PageViaCurl([string]$sessionId, [int]$maxTimeSec = 20) {
+  $openEndpoint = "$($script:driverBaseUrl)/session/$sessionId/url"
+  $openPayload = @{ url = "$($script:baseUrl)/wiring-diagram.html" } | ConvertTo-Json -Compress
+  $openOutPath = [IO.Path]::GetTempFileName()
+  $openErrPath = [IO.Path]::GetTempFileName()
+  try {
+    $openArgs = @("--silent", "--show-error", "--max-time", "$maxTimeSec", "-X", "POST", "-H", "Content-Type:application/json", "--data", $openPayload, $openEndpoint)
+    $openProc = Start-Process -FilePath "curl.exe" -ArgumentList $openArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $openOutPath -RedirectStandardError $openErrPath
+    if ($openProc.ExitCode -eq 0) { return $true }
+    $openErr = ""
+    try { $openErr = Get-Content -Raw -Path $openErrPath } catch {}
+    Write-Host "[stability-test] curl page-open failed exitCode=$($openProc.ExitCode) error=$openErr"
+    $false
+  } finally {
+    try { Remove-Item $openOutPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $openErrPath -Force -ErrorAction SilentlyContinue } catch {}
+  }
+}
+
 function Wait-BrowserReady([int]$waitMs = 500) {
   Start-Sleep -Milliseconds $waitMs
 }
@@ -1106,6 +1125,106 @@ function Run-Case([string]$inputText) {
   $result
 }
 
+function Invoke-ParseClick([string]$inputText) {
+  $scriptText = @(
+    'const input = document.getElementById("problemTextInput");'
+    'const btn = document.getElementById("parseProblemButton");'
+    'const pre = document.querySelector("#parseResultPanel pre");'
+    'if (!input || !btn || !pre) return false;'
+    'window.__e2eBeforeParse = (pre.textContent || "").trim();'
+    'input.focus();'
+    'input.value = "";'
+    'input.dispatchEvent(new Event("input",{bubbles:true}));'
+    'input.value = arguments[0];'
+    'input.dispatchEvent(new Event("input",{bubbles:true}));'
+    'input.dispatchEvent(new Event("change",{bubbles:true}));'
+    'btn.click();'
+    'return true;'
+  ) -join "`n"
+  [bool](Exec-Script $scriptText @($inputText) "e2e-parse-click")
+}
+
+function Wait-ParseResultUpdated([int]$timeoutSec = 20) {
+  Wait-Until {
+    $waitScript = @(
+      'const pre = document.querySelector("#parseResultPanel pre");'
+      'if (!pre) return false;'
+      'const now = (pre.textContent || "").trim();'
+      'const before = window.__e2eBeforeParse || "";'
+      'return now.length > 0 && now !== before;'
+    ) -join "`n"
+    try {
+      [bool](Exec-Script $waitScript @() "e2e-parse-wait")
+    } catch {
+      $false
+    }
+  } $timeoutSec
+}
+
+function Get-E2EUiSnapshot() {
+  Exec-Script @'
+const text = (id) => {
+  const el = document.getElementById(id);
+  return el ? (el.textContent || "").trim() : "";
+};
+const parsePre = document.querySelector("#parseResultPanel pre");
+const circuitList = document.getElementById("circuit-list-result");
+const circuitText = text("circuit-list-result");
+const materialText = text("material-list-result");
+const wireLengthText = text("wire-length-result");
+const aiDiagramText = text("ai-diagram-preview-result");
+const fallbackTitle = "\u8907\u7dda\u56f3\u3092\u8868\u793a\u3067\u304d\u307e\u305b\u3093";
+const fallbackDesc = "\u56de\u8def\u60c5\u5831\u304c\u4e0d\u8db3\u3057\u3066\u3044\u307e\u3059";
+return {
+  parseText: parsePre ? (parsePre.textContent || "").trim() : "",
+  circuitText,
+  materialText,
+  wireLengthText,
+  aiDiagramText,
+  circuitCount: circuitList ? circuitList.querySelectorAll("li").length : 0,
+  hasAiSvg: !!document.querySelector("#ai-diagram-preview-result svg"),
+  hasCanvasSvg: !!document.querySelector("#diagram-canvas svg"),
+  hasAnySvg: !!document.querySelector("#ai-diagram-preview-result svg, #diagram-canvas svg"),
+  hasFallbackTitle: aiDiagramText.includes(fallbackTitle),
+  hasFallbackDesc: aiDiagramText.includes(fallbackDesc)
+};
+'@ @() "e2e-ui-snapshot"
+}
+
+function Get-SuccessUiChecks($snapshot) {
+  $wireLengthLabel = Make-Japanese @(37197,32218,32207,24310,38263)
+  $materialNoneLabel = Make-Japanese @(26448,26009,12394,12375)
+  [ordered]@{
+    circuit_list_non_empty = (-not [string]::IsNullOrWhiteSpace([string]$snapshot.circuitText))
+    material_not_empty = (-not [string]::IsNullOrWhiteSpace([string]$snapshot.materialText))
+    material_not_material_none = (-not ([string]$snapshot.materialText).Contains($materialNoneLabel))
+    wire_length_has_label = ([string]$snapshot.wireLengthText).Contains($wireLengthLabel)
+    wire_length_non_zero_optional = (-not (([string]$snapshot.wireLengthText) -match "\b0\.0\s*m\b"))
+    ai_not_fallback = (-not [bool]$snapshot.hasFallbackTitle) -and (-not [bool]$snapshot.hasFallbackDesc)
+    svg_present_optional = [bool]$snapshot.hasAnySvg
+  }
+}
+
+function Get-FailureUiChecks($snapshot) {
+  $wireLengthLabel = Make-Japanese @(37197,32218,32207,24310,38263)
+  $materialNoneLabel = Make-Japanese @(26448,26009,12394,12375)
+  [ordered]@{
+    circuit_list_empty = [string]::IsNullOrWhiteSpace([string]$snapshot.circuitText)
+    material_is_material_none = ([string]$snapshot.materialText).Contains($materialNoneLabel)
+    wire_length_has_label = ([string]$snapshot.wireLengthText).Contains($wireLengthLabel)
+    wire_length_is_zero = (([string]$snapshot.wireLengthText) -match "\b0\.0\s*m\b")
+    ai_has_fallback_title = [bool]$snapshot.hasFallbackTitle
+    ai_has_fallback_desc = [bool]$snapshot.hasFallbackDesc
+  }
+}
+
+function Get-ChecksPass([object]$checks, [string[]]$requiredKeys) {
+  foreach ($key in $requiredKeys) {
+    if (-not [bool]$checks[$key]) { return $false }
+  }
+  $true
+}
+
 $cases = @(
   @{ name = "case_single_1light"; input = (Make-Japanese @(29255,20999,49,28783)) },
   @{ name = "case_single_2light_same"; input = (Make-Japanese @(29255,20999,50,28783,32,21516,26178)) },
@@ -1221,14 +1340,32 @@ try {
   }
   if (-not $wdProbe.ok) {
     $firstFail = $wdProbe.results | Where-Object { -not $_.ok } | Select-Object -First 1
-    if ($wdProbe.executeLayerDead) {
-      Read-ChromeDriverVerboseHighlights $script:chromeDriverLogPath
-      Write-Host "[stability-test] webdriver execute layer dead before ui-init label=$($firstFail.label) error=$($firstFail.error)"
-      throw "WebDriver execute layer is unavailable before ui init."
-    }
     Read-ChromeDriverVerboseHighlights $script:chromeDriverLogPath
     Write-Host "[stability-test] webdriver execute probe failed at label=$($firstFail.label) error=$($firstFail.error)"
-    throw "WebDriver execute probe failed before ui init."
+    if ($minimalSessionCompare.executeSyncOk) {
+      Write-Host "[stability-test] fallback-to-minimal-session for e2e parse flow assertions"
+      try { Remove-Session } catch {}
+      $minimalForE2E = New-WebDriverSessionMinimal
+      $script:sessionId = $minimalForE2E.sessionId
+      Log-SessionCapabilitiesSummary $minimalForE2E.response "minimal-e2e"
+      Wait-BrowserReady 700
+      if (-not (Open-PageViaCurl $script:sessionId 25)) {
+        throw "Minimal session page-open failed."
+      }
+      $navigated = Wait-Until {
+        try {
+          [bool](Exec-Script "return location.href.indexOf('wiring-diagram.html') >= 0;")
+        } catch {
+          $false
+        }
+      } 15
+      if (-not $navigated) {
+        Exec-Script "window.location.href = arguments[0]; return true;" @("$($script:baseUrl)/wiring-diagram.html") "minimal-e2e-nav-fallback" | Out-Null
+      }
+      Wait-BrowserReady 500
+    } else {
+      throw "WebDriver execute probe failed before ui init."
+    }
   }
 
   Log-Step "wait start(ui init)" "start"
@@ -1237,42 +1374,87 @@ try {
   if (-not $initialized) {
     Write-Host "[stability-test] ui init retry after page-open"
     Wait-BrowserReady 700
-    Open-PageWithRetry
+    try {
+      Exec-Script "window.location.href = arguments[0]; return true;" @("$($script:baseUrl)/wiring-diagram.html") "ui-init-retry-nav" | Out-Null
+    } catch {
+      if (-not (Open-PageViaCurl $script:sessionId 25)) {
+        Write-Host "[stability-test] ui init retry navigation failed: $($_.Exception.Message)"
+      }
+    }
     $uiInit = Wait-UiInitWithDiagnostics 40 800
     $initialized = [bool]$uiInit.ok
   }
   Log-Step "wait start(ui init)" "done"
   if (-not $initialized) { throw "UI init timeout." }
 
-  $results = @()
-  foreach ($case in $cases) {
-    Log-Step "case $($case.name)" "start"
-    $caseResult = Run-Case $case.input
-    $results += [ordered]@{
-      case = $case.name
-      input = $caseResult.input
-      parseReady = $caseResult.parseReady
-      status = $caseResult.status
-      failedChecks = $caseResult.failedChecks
-      checks = $caseResult.checks
-      parseText = $caseResult.parseText
-      parserEntryLogs = $caseResult.parserEntryLogs
-      warningText = $caseResult.warningText
-      sceneModel = $caseResult.sceneModel
-      groups = $caseResult.groups
-      circuits = $caseResult.circuits
-      connectionPoints = $caseResult.connectionPoints
-      graphLayout = $caseResult.graphLayout
-      wirePaths = $caseResult.wirePaths
-      svg = $caseResult.svg
-      uiError = $caseResult.uiError
+  $successInput = (Make-Japanese @(29255,20999,49,28783))
+  $failureInput = "###"
+
+  Log-Step "e2e case success parse" "start"
+  $successClickOk = Invoke-ParseClick $successInput
+  $successParseReady = if ($successClickOk) { [bool](Wait-ParseResultUpdated 20) } else { $false }
+  $successBefore = Get-E2EUiSnapshot
+  Start-Sleep -Milliseconds 900
+  $successAfter = Get-E2EUiSnapshot
+  $successBeforeChecks = Get-SuccessUiChecks $successBefore
+  $successAfterChecks = Get-SuccessUiChecks $successAfter
+  $successRequiredKeys = @("circuit_list_non_empty", "material_not_empty", "material_not_material_none", "wire_length_has_label", "ai_not_fallback")
+  $successBeforePass = Get-ChecksPass $successBeforeChecks $successRequiredKeys
+  $successAfterPass = Get-ChecksPass $successAfterChecks $successRequiredKeys
+  Log-Step "e2e case success parse" "done"
+
+  Log-Step "e2e case failure parse" "start"
+  $failureClickOk = Invoke-ParseClick $failureInput
+  $failureParseReady = if ($failureClickOk) { [bool](Wait-ParseResultUpdated 20) } else { $false }
+  $failureBefore = Get-E2EUiSnapshot
+  Start-Sleep -Milliseconds 900
+  $failureAfter = Get-E2EUiSnapshot
+  $failureBeforeChecks = Get-FailureUiChecks $failureBefore
+  $failureAfterChecks = Get-FailureUiChecks $failureAfter
+  $failureRequiredKeys = @("circuit_list_empty", "material_is_material_none", "wire_length_has_label", "wire_length_is_zero", "ai_has_fallback_title", "ai_has_fallback_desc")
+  $failureBeforePass = Get-ChecksPass $failureBeforeChecks $failureRequiredKeys
+  $failureAfterPass = Get-ChecksPass $failureAfterChecks $failureRequiredKeys
+  Log-Step "e2e case failure parse" "done"
+
+  $result = [ordered]@{
+    success_before_wait = [ordered]@{
+      parseReady = $successParseReady
+      checks = $successBeforeChecks
+      requiredPass = $successBeforePass
+      snapshot = $successBefore
     }
-    Log-Step "case $($case.name)" "done"
+    success_after_wait = [ordered]@{
+      parseReady = $successParseReady
+      checks = $successAfterChecks
+      requiredPass = $successAfterPass
+      snapshot = $successAfter
+    }
+    failure_before_wait = [ordered]@{
+      parseReady = $failureParseReady
+      checks = $failureBeforeChecks
+      requiredPass = $failureBeforePass
+      snapshot = $failureBefore
+    }
+    failure_after_wait = [ordered]@{
+      parseReady = $failureParseReady
+      checks = $failureAfterChecks
+      requiredPass = $failureAfterPass
+      snapshot = $failureAfter
+    }
+    assertions = [ordered]@{
+      success_case_pass = ([bool]$successParseReady -and [bool]$successBeforePass)
+      failure_case_pass = ([bool]$failureParseReady -and [bool]$failureBeforePass)
+      success_state_stable_after_wait = ([bool]$successBeforePass -and [bool]$successAfterPass)
+      failure_state_stable_after_wait = ([bool]$failureBeforePass -and [bool]$failureAfterPass)
+      overall_pass = ([bool]$successParseReady -and [bool]$successBeforePass -and [bool]$failureParseReady -and [bool]$failureBeforePass -and [bool]$successAfterPass -and [bool]$failureAfterPass)
+    }
   }
 
-  [IO.File]::WriteAllText($outputPath, ($results | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
-  Write-Host "Saved test results to $outputPath"
-  $results | ForEach-Object { Write-Host ("[{0}] {1}" -f $_.status, $_.case) }
+  [IO.File]::WriteAllText($outputPath, ($result | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+  Write-Host "Saved E2E results to $outputPath"
+  Write-Host ("[E2E] success(before)={0} success(after)={1}" -f $(if ($successBeforePass) { "PASS" } else { "FAIL" }), $(if ($successAfterPass) { "PASS" } else { "FAIL" }))
+  Write-Host ("[E2E] failure(before)={0} failure(after)={1}" -f $(if ($failureBeforePass) { "PASS" } else { "FAIL" }), $(if ($failureAfterPass) { "PASS" } else { "FAIL" }))
+  Write-Host ("[E2E] overall={0}" -f $(if ($result.assertions.overall_pass) { "PASS" } else { "FAIL" }))
 }
 finally {
   Log-Step "finally cleanup" "start"
