@@ -567,3 +567,60 @@ ChromeDriver 145 系の挙動かを切り分ける
 ### 次にやるべき1手
 
 - `stability-test.ps1` の e2e-only 分岐で minimal session 作成直後に `GET /session/{sessionId}/window` を1回追加し、`windowHandleFound / windowHandleValue` を `preUiInitDiagnostic` に保存する
+
+---
+
+## 2026-03-10 E2E UI init timeout diagnostics
+
+現在フェーズ  
+複線図エンジン安定化 → E2E検証
+
+診断結果
+
+ChromeDriver  
+/status → ready:true
+
+session  
+/sessions に checkedSessionId 存在
+
+window  
+windowHandleFound = true
+
+current URL  
+currentUrlFound = true  
+currentUrlValue = data:,
+
+navigate  
+navigateAttempted = true  
+navigateResponseReceived = false  
+navigateErrorClass = timeout
+
+post navigate URL  
+postNavigateUrlFound = false  
+postNavigateUrlErrorClass = timeout
+
+結論
+
+window は生成されているが  
+navigate がタイムアウトしている。
+
+次の診断
+
+GET /session/{sessionId}/window/handles  
+を minimal session 作成直後に1回追加して  
+window handles の存在を確認する。
+
+【2026-03-10 作業終了時点】
+
+本日やったこと  
+window handle 診断追加  
+current URL 診断追加  
+navigate 応答診断追加
+
+現在の状態  
+window生成成功  
+URL = data:,  
+navigate timeout
+
+次回やること  
+window handles 診断追加
