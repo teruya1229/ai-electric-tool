@@ -984,11 +984,11 @@ try {
   $firstTimeoutSummary = if ($capabilityBisect.firstTimeout) { $capabilityBisect.firstTimeout } else { "NONE" }
   $firstErrorSummary = if ($capabilityBisect.firstError) { $capabilityBisect.firstError } else { "NONE" }
   $rootCauseSummary = if ($capabilityBisect.rootCauseCandidate) { $capabilityBisect.rootCauseCandidate } else { "NONE" }
-  $resultSummary = "bisect`u5BFE`u8C61`u3067`u518D`u73FE`u306A`u3057`u3002`u4ED6`u8981`u56E0`u306E`u53EF`u80FD`u6027`u3042`u308A"
+  $resultSummary = "今回の bisect 対象では再現せず、他の capability 組み合わせ要因の可能性があります"
   if ($firstTimeoutSummary -ne "NONE") {
-    $resultSummary = "$firstTimeoutSummary `u304C execute timeout `u306E `u6700`u6709`u529B`u539F`u56E0`u5019`u88DC`u3067`u3059"
+    $resultSummary = "$firstTimeoutSummary が execute timeout の最有力原因候補です"
   } elseif ($firstErrorSummary -ne "NONE") {
-    $resultSummary = "$firstErrorSummary `u304C execute failure `u306E `u6700`u6709`u529B`u539F`u56E0`u5019`u88DC`u3067`u3059"
+    $resultSummary = "$firstErrorSummary が execute failure の最有力原因候補です"
   }
   Write-Host "----- Capability Bisect Summary -----"
   Write-Host "Most likely cause: $rootCauseSummary"
