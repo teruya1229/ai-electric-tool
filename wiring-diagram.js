@@ -3546,31 +3546,45 @@ function renderConnectionPointRoute(sceneModel) {
   renderJunctionBoxMaterialSummary(routeModel);
 }
 
+// parse完了後のUI更新入口
+// 成功時は最新sceneModelを反映し、失敗時は安全表示へ切り替える
+function updateUiFromParseResult(sceneModel) {
+  const hasValidSceneModel = !!sceneModel && typeof sceneModel === "object" && Array.isArray(sceneModel.groups);
+  if (hasValidSceneModel) {
+    renderCircuitList(sceneModel);
+    renderCircuitMaterialListFromScene(sceneModel);
+    renderWireLengthFromScene(sceneModel);
+    renderAiDiagramByMode(sceneModel);
+    return;
+  }
+
+  const circuitPanel = document.getElementById("circuit-list-result");
+  if (circuitPanel) circuitPanel.innerHTML = "";
+  const safeModel = { groups: [] };
+  renderCircuitMaterialListFromScene(safeModel);
+  renderWireLengthFromScene(safeModel);
+  renderAiDiagramByMode(safeModel);
+}
+
 function setupCircuitListAutoRender() {
   const target = document.getElementById("group-list");
-  renderCircuitList();
-  renderCircuitMaterialListFromScene();
-  renderWireLengthFromScene();
+  updateUiFromParseResult();
   renderSleeveJudgeList();
   renderParseDebugResult();
   renderLayoutDebug();
   renderWirePathDebug();
   ensureAiDiagramModeSwitcher();
-  renderAiDiagramByMode();
   renderConnectionPointsEditor();
   renderConnectionPointRoute();
   renderCableLengthSummary();
   if (!target) return;
   const observer = new MutationObserver(() => {
-    renderCircuitList();
-    renderCircuitMaterialListFromScene();
-    renderWireLengthFromScene();
+    updateUiFromParseResult();
     renderSleeveJudgeList();
     renderParseDebugResult();
     renderLayoutDebug();
     renderWirePathDebug();
     ensureAiDiagramModeSwitcher();
-    renderAiDiagramByMode();
     renderConnectionPointsEditor();
     renderConnectionPointRoute();
     renderCableLengthSummary();
