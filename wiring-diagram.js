@@ -25,6 +25,9 @@ window.groupDevicesByControl = groupDevicesByControl;
 window.judgeSleeve = judgeSleeve;
 window.renderDiagram = renderDiagram;
 
+// 表示仕様: AI複線図の初期モードは preview
+// 再描画時は現在選択中のモードを維持する
+// 詳細仕様は handoff.md を参照
 let aiDiagramPreviewMode = "preview";
 let aiDiagramDeveloperMode = false;
 let aiDiagramRenderState = {
