@@ -227,31 +227,43 @@ function renderMaterialListFromScene(sceneModel) {
   renderMaterialList(materials);
 }
 
-function renderCircuitMaterialList(circuits) {
+function renderCircuitMaterialList(sceneModel) {
   const panel = document.getElementById("material-list-result");
   if (!panel) return;
   panel.innerHTML = "";
-  if (!Array.isArray(circuits) || !circuits.length) {
-    panel.textContent = "回路なし";
+
+  let groups = [];
+  if (sceneModel && Array.isArray(sceneModel.groups)) {
+    groups = sceneModel.groups;
+  } else {
+    const parsed = parseGroupsFromDom();
+    groups = parsed.groups;
+  }
+  if (!groups.length) {
+    panel.textContent = "材料なし";
+    return;
+  }
+
+  const circuits = createCircuitsFromGroups(groups);
+  if (!circuits.length) {
+    panel.textContent = "材料なし";
     return;
   }
 
   circuits.forEach((circuit) => {
-    const card = document.createElement("article");
-    card.className = "circuit-material-item";
-
-    const title = document.createElement("div");
-    title.className = "circuit-item-title";
+    const title = document.createElement("h4");
     title.textContent = `回路: ${getCircuitControlIdLabel(circuit)}`;
-    card.appendChild(title);
+    panel.appendChild(title);
 
     const materials = createMaterialsForCircuit(circuit);
     if (!materials.length) {
-      const empty = document.createElement("div");
-      empty.className = "circuit-material-empty";
-      empty.textContent = "材料なし";
-      card.appendChild(empty);
-      panel.appendChild(card);
+      const emptyList = document.createElement("ul");
+      emptyList.className = "material-list";
+      const emptyRow = document.createElement("li");
+      emptyRow.className = "material-item";
+      emptyRow.textContent = "材料なし";
+      emptyList.appendChild(emptyRow);
+      panel.appendChild(emptyList);
       return;
     }
 
@@ -263,21 +275,12 @@ function renderCircuitMaterialList(circuits) {
       row.textContent = getMaterialSummaryLabel(material);
       list.appendChild(row);
     });
-    card.appendChild(list);
-    panel.appendChild(card);
+    panel.appendChild(list);
   });
 }
 
 function renderCircuitMaterialListFromScene(sceneModel) {
-  let groups = [];
-  if (sceneModel && Array.isArray(sceneModel.groups)) {
-    groups = sceneModel.groups;
-  } else {
-    const parsed = parseGroupsFromDom();
-    groups = parsed.groups;
-  }
-  const circuits = createCircuitsFromGroups(groups);
-  renderCircuitMaterialList(circuits);
+  renderCircuitMaterialList(sceneModel);
 }
 
 function renderSleeveJudgeList(sceneModel) {
