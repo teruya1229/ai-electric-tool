@@ -2334,6 +2334,10 @@ function ensureAiDiagramModeSwitcher() {
   switcher.appendChild(helper);
 }
 
+// 表示仕様:
+// #ai-diagram-preview-result は groups / circuits / layouts が不足している場合
+// フォールバック文言「複線図を表示できません / 回路情報が不足しています」を表示する
+// 詳細仕様は handoff.md を参照
 function renderAiDiagramByMode(sceneModel) {
   const panel = document.getElementById("ai-diagram-preview-result");
   if (!panel) return;
