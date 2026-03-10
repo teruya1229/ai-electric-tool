@@ -1297,10 +1297,14 @@ try {
     $chromeDriverStatusExitCode = $null
     $sessionsCheckAttempted = $false
     $sessionsCheckStdout = ""
+    $sessionsCheckStdoutRaw = ""
     $sessionsCheckStderr = ""
     $sessionsCheckExitCode = $null
     $checkedSessionId = [string]$script:sessionId
     $sessionIdFoundInSessions = $false
+    $sessionsExtractedIds = @()
+    $sessionsExtractedCount = 0
+    $sessionIdFoundInExtractedIds = $false
     Write-Host "[stability-test] check chromedriver status"
     $chromeStatusOutPath = [IO.Path]::GetTempFileName()
     $chromeStatusErrPath = [IO.Path]::GetTempFileName()
@@ -1326,6 +1330,7 @@ try {
       $sessionProc = Start-Process -FilePath "curl.exe" -ArgumentList $sessionArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $sessionStatusOutPath -RedirectStandardError $sessionStatusErrPath
       $sessionsCheckExitCode = $sessionProc.ExitCode
       try { $sessionsCheckStdout = [string](Get-Content -Raw -Path $sessionStatusOutPath) } catch { $sessionsCheckStdout = "" }
+      $sessionsCheckStdoutRaw = $sessionsCheckStdout
       try { $sessionsCheckStderr = [string](Get-Content -Raw -Path $sessionStatusErrPath) } catch { $sessionsCheckStderr = "" }
     } finally {
       try { Remove-Item $sessionStatusOutPath -Force -ErrorAction SilentlyContinue } catch {}
@@ -1334,6 +1339,25 @@ try {
     if ($sessionsCheckStdout.Length -gt 500) { $sessionsCheckStdout = $sessionsCheckStdout.Substring(0, 500) }
     if ($sessionsCheckStderr.Length -gt 500) { $sessionsCheckStderr = $sessionsCheckStderr.Substring(0, 500) }
     $sessionIdFoundInSessions = (-not [string]::IsNullOrWhiteSpace($checkedSessionId)) -and $sessionsCheckStdout.Contains($checkedSessionId)
+    Write-Host "[stability-test] extract session ids from /sessions"
+    try {
+      if (-not [string]::IsNullOrWhiteSpace($sessionsCheckStdoutRaw)) {
+        $sessionsJson = $sessionsCheckStdoutRaw | ConvertFrom-Json -ErrorAction Stop
+        $idBag = New-Object System.Collections.Generic.List[string]
+        if ($sessionsJson -and $sessionsJson.value) {
+          $valueList = @($sessionsJson.value)
+          foreach ($entry in $valueList) {
+            if ($entry -and $entry.id) { $idBag.Add([string]$entry.id) }
+            if ($entry -and $entry.sessionId) { $idBag.Add([string]$entry.sessionId) }
+          }
+        }
+        $sessionsExtractedIds = @($idBag | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+      }
+    } catch {
+      $sessionsExtractedIds = @()
+    }
+    $sessionsExtractedCount = @($sessionsExtractedIds).Count
+    $sessionIdFoundInExtractedIds = (-not [string]::IsNullOrWhiteSpace($checkedSessionId)) -and (@($sessionsExtractedIds) -contains $checkedSessionId)
     try {
       $directNavBody = @{ url = $navigateTargetUrl } | ConvertTo-Json -Compress
       Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $directNavBody -TimeoutSec 20 | Out-Null
@@ -1429,6 +1453,9 @@ try {
       sessionsCheckExitCode = $sessionsCheckExitCode
       checkedSessionId = $checkedSessionId
       sessionIdFoundInSessions = $sessionIdFoundInSessions
+      sessionsExtractedIds = $sessionsExtractedIds
+      sessionsExtractedCount = $sessionsExtractedCount
+      sessionIdFoundInExtractedIds = $sessionIdFoundInExtractedIds
       timestamp = (Get-Date).ToString("o")
     }
     [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $directNavigateDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -1492,6 +1519,9 @@ try {
             sessionsCheckExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.sessionsCheckExitCode } else { $null }
             checkedSessionId = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.checkedSessionId } else { "" }
             sessionIdFoundInSessions = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionIdFoundInSessions } else { $false }
+            sessionsExtractedIds = if ($directNavigateDiagnostic) { @($directNavigateDiagnostic.sessionsExtractedIds) } else { @() }
+            sessionsExtractedCount = if ($directNavigateDiagnostic) { [int]$directNavigateDiagnostic.sessionsExtractedCount } else { 0 }
+            sessionIdFoundInExtractedIds = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionIdFoundInExtractedIds } else { $false }
             timestamp = (Get-Date).ToString("o")
           }
           [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -1671,6 +1701,9 @@ try {
         sessionsCheckExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.sessionsCheckExitCode } else { $null }
         checkedSessionId = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.checkedSessionId } else { "" }
         sessionIdFoundInSessions = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionIdFoundInSessions } else { $false }
+        sessionsExtractedIds = if ($directNavigateDiagnostic) { @($directNavigateDiagnostic.sessionsExtractedIds) } else { @() }
+        sessionsExtractedCount = if ($directNavigateDiagnostic) { [int]$directNavigateDiagnostic.sessionsExtractedCount } else { 0 }
+        sessionIdFoundInExtractedIds = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionIdFoundInExtractedIds } else { $false }
         timestamp = (Get-Date).ToString("o")
       }
       [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
