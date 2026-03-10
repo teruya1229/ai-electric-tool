@@ -879,7 +879,9 @@ function Invoke-WindowHandleCheck([string]$sessionId) {
     windowCheckStderr = ""
     windowCheckExitCode = $null
     windowHandleFound = $false
-    windowHandleValue = ""
+    windowHandleValue = $null
+    windowHandleErrorClass = $null
+    windowHandleErrorMessage = $null
   }
   $windowStdoutRaw = ""
   $windowOutPath = [IO.Path]::GetTempFileName()
@@ -898,17 +900,46 @@ function Invoke-WindowHandleCheck([string]$sessionId) {
   }
   if ($result.windowCheckStdout.Length -gt 500) { $result.windowCheckStdout = $result.windowCheckStdout.Substring(0, 500) }
   if ($result.windowCheckStderr.Length -gt 500) { $result.windowCheckStderr = $result.windowCheckStderr.Substring(0, 500) }
+  if ($result.windowCheckExitCode -ne 0) {
+    $errLower = ""
+    try { $errLower = ([string]$result.windowCheckStderr).ToLowerInvariant() } catch { $errLower = "" }
+    if (($result.windowCheckExitCode -eq 28) -or ($errLower -match "timeout")) {
+      $result.windowHandleErrorClass = "timeout"
+    } else {
+      $result.windowHandleErrorClass = "curl-error"
+    }
+    $result.windowHandleErrorMessage = [string]$result.windowCheckStderr
+  }
   try {
     if (-not [string]::IsNullOrWhiteSpace($windowStdoutRaw)) {
       $windowJson = $windowStdoutRaw | ConvertFrom-Json -ErrorAction Stop
       if ($windowJson -and $windowJson.PSObject.Properties.Name -contains "value" -and $windowJson.value -is [string]) {
         $result.windowHandleValue = [string]$windowJson.value
-        $result.windowHandleFound = $result.windowHandleValue.StartsWith("CDwindow-")
+        $result.windowHandleFound = -not [string]::IsNullOrWhiteSpace($result.windowHandleValue)
+        if ($result.windowHandleFound) {
+          $result.windowHandleErrorClass = $null
+          $result.windowHandleErrorMessage = $null
+        }
+      } elseif ($windowJson -and $windowJson.value -and $windowJson.value.error) {
+        $rawError = [string]$windowJson.value.error
+        $rawMessage = if ($windowJson.value.message) { [string]$windowJson.value.message } else { "" }
+        $errorLower = $rawError.ToLowerInvariant()
+        $messageLower = $rawMessage.ToLowerInvariant()
+        if (($errorLower -match "timeout") -or ($messageLower -match "timeout")) {
+          $result.windowHandleErrorClass = "timeout"
+        } elseif (($errorLower -match "no such window") -or ($messageLower -match "no such window") -or ($messageLower -match "404")) {
+          $result.windowHandleErrorClass = "no-such-window-or-404"
+        } else {
+          $result.windowHandleErrorClass = "webdriver-error"
+        }
+        $result.windowHandleErrorMessage = $rawMessage
       }
     }
   } catch {
-    $result.windowHandleValue = ""
+    $result.windowHandleValue = $null
     $result.windowHandleFound = $false
+    if (-not $result.windowHandleErrorClass) { $result.windowHandleErrorClass = "parse-error" }
+    if (-not $result.windowHandleErrorMessage) { $result.windowHandleErrorMessage = $_.Exception.Message }
   }
   $result
 }
@@ -1354,12 +1385,16 @@ try {
     $windowCheckExitCode = $null
     $windowHandleFound = $false
     $windowHandleValue = ""
+    $windowHandleErrorClass = $null
+    $windowHandleErrorMessage = $null
     $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
     $windowCheckStdout = [string]$windowCheck.windowCheckStdout
     $windowCheckStderr = [string]$windowCheck.windowCheckStderr
     $windowCheckExitCode = $windowCheck.windowCheckExitCode
     $windowHandleFound = [bool]$windowCheck.windowHandleFound
-    $windowHandleValue = [string]$windowCheck.windowHandleValue
+    $windowHandleValue = if ($null -ne $windowCheck.windowHandleValue) { [string]$windowCheck.windowHandleValue } else { $null }
+    $windowHandleErrorClass = if ($null -ne $windowCheck.windowHandleErrorClass) { [string]$windowCheck.windowHandleErrorClass } else { $null }
+    $windowHandleErrorMessage = if ($null -ne $windowCheck.windowHandleErrorMessage) { [string]$windowCheck.windowHandleErrorMessage } else { $null }
     Write-Host "[stability-test] check chromedriver status"
     $chromeStatusOutPath = [IO.Path]::GetTempFileName()
     $chromeStatusErrPath = [IO.Path]::GetTempFileName()
@@ -1517,6 +1552,8 @@ try {
       windowCheckExitCode = $windowCheckExitCode
       windowHandleFound = $windowHandleFound
       windowHandleValue = $windowHandleValue
+      windowHandleErrorClass = $windowHandleErrorClass
+      windowHandleErrorMessage = $windowHandleErrorMessage
       timestamp = (Get-Date).ToString("o")
     }
     [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $directNavigateDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -1597,7 +1634,9 @@ try {
             windowCheckStderr = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.windowCheckStderr } else { "" }
             windowCheckExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.windowCheckExitCode } else { $null }
             windowHandleFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.windowHandleFound } else { $false }
-            windowHandleValue = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.windowHandleValue } else { "" }
+            windowHandleValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleValue) { [string]$directNavigateDiagnostic.windowHandleValue } else { $null }
+            windowHandleErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleErrorClass) { [string]$directNavigateDiagnostic.windowHandleErrorClass } else { $null }
+            windowHandleErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleErrorMessage) { [string]$directNavigateDiagnostic.windowHandleErrorMessage } else { $null }
             uiInitCheckMethod = "Get-UiInitDiagnostics"
             executeSyncAttempted = $true
             executeSyncErrorMessage = $executeSyncErrorMessage
@@ -1802,7 +1841,9 @@ try {
         windowCheckStderr = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.windowCheckStderr } else { "" }
         windowCheckExitCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.windowCheckExitCode } else { $null }
         windowHandleFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.windowHandleFound } else { $false }
-        windowHandleValue = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.windowHandleValue } else { "" }
+        windowHandleValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleValue) { [string]$directNavigateDiagnostic.windowHandleValue } else { $null }
+        windowHandleErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleErrorClass) { [string]$directNavigateDiagnostic.windowHandleErrorClass } else { $null }
+        windowHandleErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandleErrorMessage) { [string]$directNavigateDiagnostic.windowHandleErrorMessage } else { $null }
         uiInitCheckMethod = "Get-UiInitDiagnostics"
         executeSyncAttempted = $true
         executeSyncErrorMessage = $executeSyncErrorMessage
