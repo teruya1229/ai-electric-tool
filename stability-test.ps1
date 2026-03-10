@@ -824,7 +824,7 @@ function Test-ChromeArgsSubtractCompare() {
   Write-Host "without --no-sandbox: $withoutNoSandbox"
   Write-Host "without --disable-dev-shm-usage: $withoutDevShm"
   Write-Host "firstImprovedCase: $firstImprovedCase"
-  Write-Host "結論: $(if ($conclusion -like "Likely execute failure cause:*") { "$firstImprovedCase が execute failure の有力原因です" } elseif ($conclusion -like "Likely navigation failure contributor:*") { "$firstImprovedCase が navigation failure の有力原因候補です" } else { "今回の args 減算比較では単独原因を断定できません" })"
+  Write-Host "結論: $conclusion"
   Write-Host "-----------------------------------------"
   [ordered]@{
     results = $results
@@ -1207,10 +1207,10 @@ try {
   Write-Host "eager: $($pageLoadStrategyCompare.summary.eagerResult)"
   Write-Host "Chrome args 比較結果:"
   Write-Host "base: $($chromeArgsSubtractCompare.summary.baseResult)"
-  Write-Host "without --headless: $(if ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq "without --headless" -and $_.errorType -eq "SKIP" }) { "SKIP" } elseif ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq "without --headless" -and $_.executeOk }) { "OK" } else { "NG" })"
-  Write-Host "without --no-sandbox: $(if ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq "without --no-sandbox" -and $_.errorType -eq "SKIP" }) { "SKIP" } elseif ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq "without --no-sandbox" -and $_.executeOk }) { "OK" } else { "NG" })"
+  Write-Host "without --headless: $(if ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --headless' -and $_.errorType -eq 'SKIP' }) { 'SKIP' } elseif ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --headless' -and $_.executeOk }) { 'OK' } else { 'NG' })"
+  Write-Host "without --no-sandbox: $(if ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --no-sandbox' -and $_.errorType -eq 'SKIP' }) { 'SKIP' } elseif ($chromeArgsSubtractCompare.results | Where-Object { $_.label -eq 'without --no-sandbox' -and $_.executeOk }) { 'OK' } else { 'NG' })"
   Write-Host "最有力原因候補: $rootCauseSummary"
-  Write-Host "結論: $(if ($firstTimeoutSummary -ne "NONE") { "$firstTimeoutSummary が execute timeout の最有力原因候補です" } elseif ($firstErrorSummary -ne "NONE") { "$firstErrorSummary が execute failure の最有力原因候補です" } else { "今回の bisect 対象では再現せず、他の capability 組み合わせ要因の可能性があります" })"
+  Write-Host "結論: $resultSummary"
   Write-Host "--------------------------------"
   if ((-not $currentExecuteOk) -and $minimalSessionCompare.executeSyncOk) {
     Write-Host "[stability-test] compare-result current=timeout-or-error minimal=success verdict=current-session-capabilities-likely"
