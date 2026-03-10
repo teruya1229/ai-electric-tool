@@ -425,6 +425,7 @@ function Test-MinimalSessionExecute() {
     sessionCreated = $false
     pageOpenOk = $false
     pageOpenError = ""
+    capabilities = $null
     readyState = ""
     readyStateError = ""
     executeSyncOk = $false
@@ -437,6 +438,10 @@ function Test-MinimalSessionExecute() {
     $minimal = New-WebDriverSessionMinimal
     $minimalSessionId = $minimal.sessionId
     $result.sessionCreated = $true
+    try {
+      $minimalSessionInfo = Invoke-RestMethod -Method Get -Uri "$($script:driverBaseUrl)/session/$minimalSessionId" -TimeoutSec 20
+      $result.capabilities = $minimalSessionInfo.value.capabilities
+    } catch {}
     Log-SessionCapabilitiesSummary $minimal.response "minimal"
     Log-Step "minimal session create" "done"
 
@@ -808,6 +813,11 @@ try {
   Log-Step "browser launch(session)" "start"
   $currentSessionResponse = New-Session
   Log-SessionCapabilitiesSummary $currentSessionResponse "current"
+  $currentCapabilities = $null
+  try {
+    $currentSessionInfo = Invoke-RestMethod -Method Get -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)" -TimeoutSec 20
+    $currentCapabilities = $currentSessionInfo.value.capabilities
+  } catch {}
   Log-Step "browser launch(session)" "done"
   Wait-BrowserReady
   Log-Step "page open" "start"
@@ -836,8 +846,13 @@ try {
     currentExecuteOk = $currentExecuteOk
     currentExecuteError = if ($currentFirst) { $currentFirst.error } else { "" }
     minimalSessionCompare = $minimalSessionCompare
+    capabilityCompare = [ordered]@{
+      minimal = $minimalSessionCompare.capabilities
+      current = $currentCapabilities
+    }
   }
   [IO.File]::WriteAllText($outputPath, ($compareSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+  Write-Host "Capabilities captured"
   Write-Host "Saved test results to $outputPath"
   if ((-not $currentExecuteOk) -and $minimalSessionCompare.executeSyncOk) {
     Write-Host "[stability-test] compare-result current=timeout-or-error minimal=success verdict=current-session-capabilities-likely"
