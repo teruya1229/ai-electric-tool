@@ -1522,6 +1522,13 @@ try {
             sessionsExtractedIds = if ($directNavigateDiagnostic) { @($directNavigateDiagnostic.sessionsExtractedIds) } else { @() }
             sessionsExtractedCount = if ($directNavigateDiagnostic) { [int]$directNavigateDiagnostic.sessionsExtractedCount } else { 0 }
             sessionIdFoundInExtractedIds = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionIdFoundInExtractedIds } else { $false }
+            uiInitCheckMethod = "Get-UiInitDiagnostics"
+            executeSyncAttempted = $true
+            executeSyncErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
+            executeSyncErrorType = if ($preDiag.error) { "ExecScriptError" } else { "" }
+            hrefBeforeUiInit = [string]$preDiag.href
+            elementCheckSucceeded = (-not [string]::Equals([string]$preDiag.readyState, "exec-error", [StringComparison]::OrdinalIgnoreCase))
+            elementCheckErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
             timestamp = (Get-Date).ToString("o")
           }
           [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -1662,7 +1669,7 @@ try {
   Log-Step "wait start(ui init)" "done"
   if (-not $initialized) {
     if ($skipDiagnosticsForE2E) {
-      $preDiag = Get-UiInitDiagnostics
+      $preDiag = if ($uiInit -and $uiInit.last) { $uiInit.last } else { Get-UiInitDiagnostics }
       $preUiInitDiagnostic = [ordered]@{
         phase = "pre-ui-init-diagnostic"
         href = [string]$preDiag.href
@@ -1704,6 +1711,13 @@ try {
         sessionsExtractedIds = if ($directNavigateDiagnostic) { @($directNavigateDiagnostic.sessionsExtractedIds) } else { @() }
         sessionsExtractedCount = if ($directNavigateDiagnostic) { [int]$directNavigateDiagnostic.sessionsExtractedCount } else { 0 }
         sessionIdFoundInExtractedIds = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.sessionIdFoundInExtractedIds } else { $false }
+        uiInitCheckMethod = "Get-UiInitDiagnostics"
+        executeSyncAttempted = $true
+        executeSyncErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
+        executeSyncErrorType = if ($preDiag.error) { "ExecScriptError" } else { "" }
+        hrefBeforeUiInit = [string]$preDiag.href
+        elementCheckSucceeded = (-not [string]::Equals([string]$preDiag.readyState, "exec-error", [StringComparison]::OrdinalIgnoreCase))
+        elementCheckErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
         timestamp = (Get-Date).ToString("o")
       }
       [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
