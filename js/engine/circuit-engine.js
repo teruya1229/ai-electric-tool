@@ -312,7 +312,16 @@ export function createCircuitGraphFromCircuit(circuit) {
 
   const circuitId = graph.circuitId;
   const powerNodeId = `power-${circuitId || "x"}`;
-  graph.nodes.push({
+  const internalNodes = [];
+  const internalEdges = [];
+  const pushInternalNode = (node) => {
+    internalNodes.push(node);
+  };
+  const pushInternalEdge = (from, to, role) => {
+    internalEdges.push({ from, to, role });
+  };
+  const makeJunctionId = (groupIndex, lineType, branchLabel) => `j-${circuitId || "x"}-${groupIndex + 1}-${lineType}-${branchLabel}`;
+  pushInternalNode({
     id: powerNodeId,
     type: "source",
     circuitId,
@@ -321,8 +330,11 @@ export function createCircuitGraphFromCircuit(circuit) {
   circuit.groups.forEach((group, groupIndex) => {
     const switchType = group?.switchType === "threeway" ? "threeway" : "single";
     const switchNodeId = `switch-${circuitId || "x"}-${groupIndex + 1}`;
+    const lineJunctionId = makeJunctionId(groupIndex, "L", "line");
+    const neutralJunctionId = makeJunctionId(groupIndex, "N", "neutral");
+    const returnJunctionId = makeJunctionId(groupIndex, "L", "return");
 
-    graph.nodes.push({
+    pushInternalNode({
       id: switchNodeId,
       type: "device",
       deviceType: "switch",
@@ -331,15 +343,36 @@ export function createCircuitGraphFromCircuit(circuit) {
       controlId: group?.controlId || null,
       circuitId,
     });
-    graph.edges.push({
-      from: powerNodeId,
-      to: switchNodeId,
-      role: "line",
+    pushInternalNode({
+      id: lineJunctionId,
+      type: "junction",
+      lineType: "L",
+      branchCount: 0,
+      sourceKind: "virtual",
+      belongsToCircuit: circuitId,
     });
+    pushInternalNode({
+      id: neutralJunctionId,
+      type: "junction",
+      lineType: "N",
+      branchCount: 0,
+      sourceKind: "virtual",
+      belongsToCircuit: circuitId,
+    });
+    pushInternalNode({
+      id: returnJunctionId,
+      type: "junction",
+      lineType: "L",
+      branchCount: 0,
+      sourceKind: "virtual",
+      belongsToCircuit: circuitId,
+    });
+    pushInternalEdge(powerNodeId, lineJunctionId, "line");
+    pushInternalEdge(lineJunctionId, switchNodeId, "line");
 
     if (switchType === "threeway") {
       const subSwitchNodeId = `switch-${circuitId || "x"}-${groupIndex + 1}-sub`;
-      graph.nodes.push({
+      pushInternalNode({
         id: subSwitchNodeId,
         type: "device",
         deviceType: "switch",
@@ -348,22 +381,14 @@ export function createCircuitGraphFromCircuit(circuit) {
         controlId: group?.controlId || null,
         circuitId,
       });
-      graph.edges.push({
-        from: switchNodeId,
-        to: subSwitchNodeId,
-        role: "traveler_1",
-      });
-      graph.edges.push({
-        from: switchNodeId,
-        to: subSwitchNodeId,
-        role: "traveler_2",
-      });
+      pushInternalEdge(switchNodeId, subSwitchNodeId, "traveler_1");
+      pushInternalEdge(switchNodeId, subSwitchNodeId, "traveler_2");
     }
 
     const lightCount = getGroupQuantity(group, "light");
     for (let i = 0; i < lightCount; i += 1) {
       const lightNodeId = `light-${circuitId || "x"}-${groupIndex + 1}-${i + 1}`;
-      graph.nodes.push({
+      pushInternalNode({
         id: lightNodeId,
         type: "device",
         deviceType: "light",
@@ -371,22 +396,16 @@ export function createCircuitGraphFromCircuit(circuit) {
         controlId: group?.controlId || null,
         circuitId,
       });
-      graph.edges.push({
-        from: switchNodeId,
-        to: lightNodeId,
-        role: "switch_return",
-      });
-      graph.edges.push({
-        from: powerNodeId,
-        to: lightNodeId,
-        role: "neutral",
-      });
+      pushInternalEdge(switchNodeId, returnJunctionId, "switch_return");
+      pushInternalEdge(returnJunctionId, lightNodeId, "switch_return");
+      pushInternalEdge(powerNodeId, neutralJunctionId, "neutral");
+      pushInternalEdge(neutralJunctionId, lightNodeId, "neutral");
     }
 
     const outletCount = getGroupQuantity(group, "outlet");
     for (let i = 0; i < outletCount; i += 1) {
       const outletNodeId = `outlet-${circuitId || "x"}-${groupIndex + 1}-${i + 1}`;
-      graph.nodes.push({
+      pushInternalNode({
         id: outletNodeId,
         type: "device",
         deviceType: circuit?.type === "ac" || group?.purpose === "ac_outlet" ? "ac_outlet" : "outlet",
@@ -394,19 +413,51 @@ export function createCircuitGraphFromCircuit(circuit) {
         controlId: group?.controlId || null,
         circuitId,
       });
-      graph.edges.push({
-        from: powerNodeId,
-        to: outletNodeId,
-        role: "line_load",
-      });
-      graph.edges.push({
-        from: powerNodeId,
-        to: outletNodeId,
-        role: "neutral",
-      });
+      pushInternalEdge(powerNodeId, lineJunctionId, "line_load");
+      pushInternalEdge(lineJunctionId, outletNodeId, "line_load");
+      pushInternalEdge(powerNodeId, neutralJunctionId, "neutral");
+      pushInternalEdge(neutralJunctionId, outletNodeId, "neutral");
     }
   });
 
+  // Internal junction graph is normalized for branch readability.
+  // Return legacy-compatible source/device graph by contracting junction-only hops.
+  const publicNodes = internalNodes.filter((node) => node?.type !== "junction");
+  const publicNodeIdSet = new Set(publicNodes.map((node) => node.id));
+  const outgoing = new Map();
+  internalEdges.forEach((edge) => {
+    const list = outgoing.get(edge.from) || [];
+    list.push(edge);
+    outgoing.set(edge.from, list);
+  });
+  const edgeKeySet = new Set();
+  publicNodes.forEach((startNode) => {
+    const queue = [{ nodeId: startNode.id, roles: [] }];
+    const visitedJunctions = new Set();
+    while (queue.length) {
+      const current = queue.shift();
+      const nextEdges = outgoing.get(current.nodeId) || [];
+      nextEdges.forEach((edge) => {
+        const nextId = edge.to;
+        const nextRoles = [...current.roles, edge.role || "unknown"];
+        if (publicNodeIdSet.has(nextId) && nextId !== startNode.id) {
+          const sameRole = nextRoles.every((role) => role === nextRoles[0]);
+          const role = sameRole ? nextRoles[0] : nextRoles[nextRoles.length - 1];
+          const key = `${startNode.id}=>${nextId}=>${role}`;
+          if (!edgeKeySet.has(key)) {
+            edgeKeySet.add(key);
+            graph.edges.push({ from: startNode.id, to: nextId, role });
+          }
+          return;
+        }
+        if (!publicNodeIdSet.has(nextId) && !visitedJunctions.has(nextId)) {
+          visitedJunctions.add(nextId);
+          queue.push({ nodeId: nextId, roles: nextRoles });
+        }
+      });
+    }
+  });
+  graph.nodes = publicNodes;
   return graph;
 }
 
