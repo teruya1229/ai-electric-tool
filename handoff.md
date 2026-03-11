@@ -624,3 +624,57 @@ navigate timeout
 
 次回やること  
 window handles 診断追加
+
+---
+
+## 2026-03-11 internal junction normalization verification
+
+対象  
+js/engine/circuit-engine.js  
+createCircuitGraphFromCircuit()
+
+結論  
+現段階の実装は維持OK。  
+internal junction を内部利用しつつ、返却 public graph は従来互換の意味を維持している。
+
+検証ケース
+- 片切1灯
+- 片切+コンセント
+- 3路1灯
+
+確認結果
+- 片切1灯
+  - role set = line, neutral, switch_return
+  - edge数 = 3
+- 片切+コンセント
+  - role set = line, line_load, neutral, switch_return
+  - edge数 = 5
+- 3路1灯
+  - role set = line, neutral, switch_return, traveler_1, traveler_2
+  - edge数 = 5
+
+確認できたこと
+- source/device 中心の public graph 形を維持
+- role 名と接続意味は代表ケースで従来互換
+- createDiagramLayoutsFromGraphs()
+- createWirePathsFromLayouts()
+の前提は破壊していない
+
+将来の注意点
+- 縮約処理の visitedJunctions は、複雑分岐で同一junctionへの異role経路を厳密保持したい場合に再点検が必要
+- branchCount は現状 0 固定で、将来の分岐表現拡張時に見直し候補
+- 現時点では互換性優先の内部正規化として採用
+
+次の推奨
+- 現実装は維持
+- 次は E2E / 表示確認か、複雑分岐ケース追加検証へ進む
+
+【2026-03-11 作業終了時点】
+本日やったこと：
+- internal junction 正規化後の public graph 意味検証を実施
+- 代表3ケースで role set / edge数 / public graph 互換を確認
+現在の状態：
+- 実装は維持OK
+- 将来は縮約ロジックと branchCount の扱いを再点検予定
+次回やること：
+- E2E / 表示確認または複雑分岐ケースの追加検証
