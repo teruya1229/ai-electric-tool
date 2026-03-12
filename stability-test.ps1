@@ -2162,6 +2162,15 @@ try {
         expectedEdgeCount = 5
         requireTraveler = $true
       }
+    },
+    [ordered]@{
+      name = "threeway_2light"
+      input = (Make-Japanese @(51,36335,50,28783))
+      expected = [ordered]@{
+        requiredRoles = @("line", "neutral", "switch_return", "traveler_1", "traveler_2")
+        expectedEdgeCount = 7
+        requireTraveler = $true
+      }
     }
   )
   $downstreamChecks = @()
