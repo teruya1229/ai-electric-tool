@@ -1695,6 +1695,16 @@ try {
     $recoveryLastOpenedUrl = ""
     $recoveryLastReadyState = ""
     $recoveryOpenReachedTarget = $false
+    $urlBeforeRetry1 = $null
+    $urlAfterRetry1 = $null
+    $urlBeforeRetry2 = $null
+    $urlAfterRetry2 = $null
+    $windowBeforeRetry1 = $null
+    $windowAfterRetry1 = $null
+    $windowBeforeRetry2 = $null
+    $windowAfterRetry2 = $null
+    $retryInvokeSucceeded1 = $null
+    $retryInvokeSucceeded2 = $null
     $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
     $windowCheckStdout = [string]$windowCheck.windowCheckStdout
     $windowCheckStderr = [string]$windowCheck.windowCheckStderr
@@ -1829,16 +1839,43 @@ try {
       Write-Host "[stability-test] session recovery done currentUrl=$currentUrlValue windowHandleFound=$windowHandleFound"
       for ($openRetry = 1; $openRetry -le 2; $openRetry++) {
         $recoveryOpenRetryCount = $openRetry
+        $beforeUrlState = Invoke-CurrentUrlCheck $script:sessionId
+        $beforeWindowState = Invoke-WindowHandleCheck $script:sessionId
+        $beforeUrlValue = if ($beforeUrlState.currentUrlFound -and $beforeUrlState.currentUrlValue) { [string]$beforeUrlState.currentUrlValue } else { $null }
+        $beforeWindowValue = if ($beforeWindowState.windowHandleFound -and $beforeWindowState.windowHandleValue) { [string]$beforeWindowState.windowHandleValue } else { "missing:$([string]$beforeWindowState.windowHandleErrorClass)" }
+        if ($openRetry -eq 1) {
+          $urlBeforeRetry1 = $beforeUrlValue
+          $windowBeforeRetry1 = $beforeWindowValue
+        } else {
+          $urlBeforeRetry2 = $beforeUrlValue
+          $windowBeforeRetry2 = $beforeWindowValue
+        }
         Write-Host "[stability-test] recovered session page-open retry=$openRetry"
+        $retryInvokeSucceeded = $false
         try {
           Open-PageWithRetry 1 300
+          $retryInvokeSucceeded = $true
         } catch {
           Write-Host "[stability-test] recovered session Open-PageWithRetry failed retry=$openRetry message=$($_.Exception.Message)"
         }
+        if ($openRetry -eq 1) {
+          $retryInvokeSucceeded1 = $retryInvokeSucceeded
+        } else {
+          $retryInvokeSucceeded2 = $retryInvokeSucceeded
+        }
         Wait-BrowserReady 350
         $urlAfterOpen = Invoke-CurrentUrlCheck $script:sessionId
+        $windowAfterOpen = Invoke-WindowHandleCheck $script:sessionId
         $uiAfterOpen = Get-UiInitDiagnostics
         $recoveryLastOpenedUrl = if ($urlAfterOpen.currentUrlFound -and $urlAfterOpen.currentUrlValue) { [string]$urlAfterOpen.currentUrlValue } else { [string]$uiAfterOpen.href }
+        $afterWindowValue = if ($windowAfterOpen.windowHandleFound -and $windowAfterOpen.windowHandleValue) { [string]$windowAfterOpen.windowHandleValue } else { "missing:$([string]$windowAfterOpen.windowHandleErrorClass)" }
+        if ($openRetry -eq 1) {
+          $urlAfterRetry1 = $recoveryLastOpenedUrl
+          $windowAfterRetry1 = $afterWindowValue
+        } else {
+          $urlAfterRetry2 = $recoveryLastOpenedUrl
+          $windowAfterRetry2 = $afterWindowValue
+        }
         $recoveryLastReadyState = [string]$uiAfterOpen.readyState
         $recoveryOpenReachedTarget =
           ($recoveryLastOpenedUrl.Contains("wiring-diagram.html")) -and
@@ -1967,6 +2004,16 @@ try {
       lastOpenedUrl = $recoveryLastOpenedUrl
       lastReadyState = $recoveryLastReadyState
       recoveryOpenReachedTarget = $recoveryOpenReachedTarget
+      urlBeforeRetry1 = $urlBeforeRetry1
+      urlAfterRetry1 = $urlAfterRetry1
+      urlBeforeRetry2 = $urlBeforeRetry2
+      urlAfterRetry2 = $urlAfterRetry2
+      windowBeforeRetry1 = $windowBeforeRetry1
+      windowAfterRetry1 = $windowAfterRetry1
+      windowBeforeRetry2 = $windowBeforeRetry2
+      windowAfterRetry2 = $windowAfterRetry2
+      retryInvokeSucceeded1 = $retryInvokeSucceeded1
+      retryInvokeSucceeded2 = $retryInvokeSucceeded2
       timestamp = (Get-Date).ToString("o")
     }
     Write-OutputJson @{ preUiInitDiagnostic = $directNavigateDiagnostic } 8
@@ -2082,6 +2129,16 @@ try {
             hrefBeforeUiInit = [string]$preDiag.href
             elementCheckSucceeded = (-not [string]::Equals([string]$preDiag.readyState, "exec-error", [StringComparison]::OrdinalIgnoreCase))
             elementCheckErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
+            urlBeforeRetry1 = $urlBeforeRetry1
+            urlAfterRetry1 = $urlAfterRetry1
+            urlBeforeRetry2 = $urlBeforeRetry2
+            urlAfterRetry2 = $urlAfterRetry2
+            windowBeforeRetry1 = $windowBeforeRetry1
+            windowAfterRetry1 = $windowAfterRetry1
+            windowBeforeRetry2 = $windowBeforeRetry2
+            windowAfterRetry2 = $windowAfterRetry2
+            retryInvokeSucceeded1 = $retryInvokeSucceeded1
+            retryInvokeSucceeded2 = $retryInvokeSucceeded2
             timestamp = (Get-Date).ToString("o")
           }
           Write-OutputJson @{ preUiInitDiagnostic = $preUiInitDiagnostic } 8
@@ -2305,6 +2362,16 @@ try {
         hrefBeforeUiInit = [string]$preDiag.href
         elementCheckSucceeded = (-not [string]::Equals([string]$preDiag.readyState, "exec-error", [StringComparison]::OrdinalIgnoreCase))
         elementCheckErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
+        urlBeforeRetry1 = $urlBeforeRetry1
+        urlAfterRetry1 = $urlAfterRetry1
+        urlBeforeRetry2 = $urlBeforeRetry2
+        urlAfterRetry2 = $urlAfterRetry2
+        windowBeforeRetry1 = $windowBeforeRetry1
+        windowAfterRetry1 = $windowAfterRetry1
+        windowBeforeRetry2 = $windowBeforeRetry2
+        windowAfterRetry2 = $windowAfterRetry2
+        retryInvokeSucceeded1 = $retryInvokeSucceeded1
+        retryInvokeSucceeded2 = $retryInvokeSucceeded2
         timestamp = (Get-Date).ToString("o")
       }
       Write-OutputJson @{ preUiInitDiagnostic = $preUiInitDiagnostic } 8
