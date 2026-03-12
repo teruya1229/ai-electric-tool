@@ -720,5 +720,6 @@ visitedJunctions 再検討トリガー
 - 「直近3回」は、最新結果から連続した3実行（欠番なし）を指す。
 - 欠番がある場合は当該3回集計を無効とし、連続3実行が揃うまで集計をやり直す。
 - 欠番判定の単位は `.tmp_case_results.json` の実行記録をタイムスタンプ順で確認して判断する。
+- タイムスタンプが同一の場合は、`.tmp_case_results.json` のファイル更新時刻が新しい方を後順位（後勝ち）として扱う。
 - `missingRoles` または `junction_not_exposed_in_layout` の失敗が1回でも出た場合は、優先度高で即時調査する。
 - まず確認するログ項目: `failedChecks` / `expected` / `observed`
