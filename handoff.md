@@ -683,6 +683,8 @@ internal junction を内部利用しつつ、返却 public graph は従来互換
 
 ## 2026-03-12 downstream_contract_pass gate 運用
 
+適用対象: `stability-test.ps1` が出力する `.tmp_case_results.json`。
+
 目的  
 internal junction 正規化の回帰を、固定ケース群で毎回検知する。
 
