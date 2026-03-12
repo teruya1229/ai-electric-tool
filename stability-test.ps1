@@ -2171,6 +2171,15 @@ try {
         expectedEdgeCount = 7
         requireTraveler = $true
       }
+    },
+    [ordered]@{
+      name = "threeway_2light_plus_outlet"
+      input = (Make-Japanese @(51,36335,50,28783,32,12467,12531,12475,12531,12488,49,20491))
+      expected = [ordered]@{
+        requiredRoles = @("line", "line_load", "neutral", "switch_return", "traveler_1", "traveler_2")
+        expectedEdgeCount = 9
+        requireTraveler = $true
+      }
     }
   )
   $downstreamChecks = @()
