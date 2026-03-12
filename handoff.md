@@ -723,5 +723,7 @@ visitedJunctions 再検討トリガー
 - タイムスタンプが同一の場合は、`.tmp_case_results.json` のファイル更新時刻が新しい方を後順位（後勝ち）として扱う。
 - run metadata を使った抽出手順: `runFinishedAt` を基準に新しい順へ整列し、同時刻は上記の後勝ち規則で順序確定する。
 - その順序で欠番のない連続3実行を抽出して、`edge_count_match` 継続発生判定に用いる。
+- 正式参照キー: `selectedRuns` / `edgeCountFailuresInSelectedRuns` / `shouldReviewVisitedJunctions` / `reason`
+- 補助参照キー: `runHistory`（最大20件、抽出根拠の確認用）
 - `missingRoles` または `junction_not_exposed_in_layout` の失敗が1回でも出た場合は、優先度高で即時調査する。
 - まず確認するログ項目: `failedChecks` / `expected` / `observed`
