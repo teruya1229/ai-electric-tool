@@ -973,8 +973,12 @@ function Exec-Script([string]$js, [object[]]$args = @(), [string]$scriptLabel = 
 }
 
 function Open-Page {
-  $body = @{ url = "$baseUrl/wiring-diagram.html" } | ConvertTo-Json
-  Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $body -TimeoutSec 20 | Out-Null
+  $navigateResult = Invoke-SessionNavigateViaCurl $script:sessionId "$($script:baseUrl)/wiring-diagram.html" 20
+  $script:lastNavigateAttempt = $navigateResult
+  if (-not $navigateResult.ok) {
+    $statusText = if ($null -ne $navigateResult.httpStatus) { [string]$navigateResult.httpStatus } else { "null" }
+    throw "Open-Page navigate failed: class=$([string]$navigateResult.errorClass) status=$statusText stderr=$([string]$navigateResult.stderrSummary)"
+  }
 }
 
 function Open-PageViaCurl([string]$sessionId, [int]$maxTimeSec = 20) {
@@ -994,6 +998,99 @@ function Open-PageViaCurl([string]$sessionId, [int]$maxTimeSec = 20) {
     try { Remove-Item $openOutPath -Force -ErrorAction SilentlyContinue } catch {}
     try { Remove-Item $openErrPath -Force -ErrorAction SilentlyContinue } catch {}
   }
+}
+
+function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [int]$maxTimeSec = 20) {
+  $result = [ordered]@{
+    ok = $false
+    transportUsed = "curl"
+    httpStatus = $null
+    responseBody = ""
+    stderrSummary = ""
+    errorClass = "unknown"
+    errorMessage = ""
+    exitCode = $null
+  }
+  $endpoint = "$($script:driverBaseUrl)/session/$sessionId/url"
+  $payload = @{ url = $targetUrl } | ConvertTo-Json -Compress
+  $bodyPath = [IO.Path]::GetTempFileName()
+  $errPath = [IO.Path]::GetTempFileName()
+  $statusPath = [IO.Path]::GetTempFileName()
+  $payloadPath = [IO.Path]::GetTempFileName()
+  try {
+    [IO.File]::WriteAllText($payloadPath, $payload, [Text.UTF8Encoding]::new($false))
+    $args = @("--silent", "--show-error", "--max-time", "$maxTimeSec", "-o", $bodyPath, "-w", "%{http_code}", "-X", "POST", "-H", "Content-Type:application/json", "--data-binary", "@$payloadPath", $endpoint)
+    $proc = Start-Process -FilePath "curl.exe" -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput $statusPath -RedirectStandardError $errPath
+    $result.exitCode = $proc.ExitCode
+    $statusRaw = ""
+    try { $statusRaw = [string](Get-Content -Raw -Path $statusPath) } catch { $statusRaw = "" }
+    $statusRaw = $statusRaw.Trim()
+    if ($statusRaw -match '^\d+$') {
+      try { $result.httpStatus = [int]$statusRaw } catch { $result.httpStatus = $null }
+    }
+    try { $result.responseBody = [string](Get-Content -Raw -Path $bodyPath) } catch { $result.responseBody = "" }
+    try { $result.stderrSummary = [string](Get-Content -Raw -Path $errPath) } catch { $result.stderrSummary = "" }
+  } finally {
+    try { Remove-Item $payloadPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $bodyPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $errPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $statusPath -Force -ErrorAction SilentlyContinue } catch {}
+  }
+  if ($result.responseBody.Length -gt 800) { $result.responseBody = $result.responseBody.Substring(0, 800) }
+  if ($result.stderrSummary.Length -gt 500) { $result.stderrSummary = $result.stderrSummary.Substring(0, 500) }
+  $stderrLower = ""
+  try { $stderrLower = $result.stderrSummary.ToLowerInvariant() } catch { $stderrLower = "" }
+  if (($result.exitCode -eq 28) -or ($stderrLower -match "timeout")) {
+    $result.errorClass = "timeout"
+    $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl timeout" }
+    return $result
+  }
+  if ($result.exitCode -ne 0) {
+    $result.errorClass = "curl-error"
+    $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl exitCode=$($result.exitCode)" }
+    return $result
+  }
+  $wdError = $null
+  $wdMessage = ""
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($result.responseBody)) {
+      $json = $result.responseBody | ConvertFrom-Json -ErrorAction Stop
+      if ($json -and $json.value -and $json.value.error) {
+        $wdError = [string]$json.value.error
+        if ($json.value.message) { $wdMessage = [string]$json.value.message }
+      }
+    }
+  } catch {}
+  if ($wdError) {
+    $wdErrorLower = $wdError.ToLowerInvariant()
+    $wdMessageLower = $wdMessage.ToLowerInvariant()
+    if (($wdErrorLower -match "timeout") -or ($wdMessageLower -match "timeout")) {
+      $result.errorClass = "timeout"
+    } elseif (($wdErrorLower -match "no such window") -or ($wdMessageLower -match "no such window")) {
+      $result.errorClass = "no-such-window"
+    } elseif (($wdErrorLower -match "invalid session id") -or ($wdMessageLower -match "invalid session id")) {
+      $result.errorClass = "invalid-session-id"
+    } elseif (($wdErrorLower -match "unknown command") -or ($wdMessageLower -match "unknown command")) {
+      $result.errorClass = "unknown-command"
+    } else {
+      $result.errorClass = "webdriver-error"
+    }
+    $result.errorMessage = if ($wdMessage) { $wdMessage } else { $wdError }
+    return $result
+  }
+  if (($null -ne $result.httpStatus) -and (($result.httpStatus -lt 200) -or ($result.httpStatus -ge 300))) {
+    if ($result.httpStatus -eq 404) {
+      $result.errorClass = "http-404"
+    } else {
+      $result.errorClass = "http-error"
+    }
+    $result.errorMessage = "http status=$($result.httpStatus)"
+    return $result
+  }
+  $result.ok = $true
+  $result.errorClass = $null
+  $result.errorMessage = ""
+  $result
 }
 
 function Invoke-WindowHandleCheck([string]$sessionId) {
@@ -1200,7 +1297,7 @@ function Wait-BrowserReady([int]$waitMs = 500) {
 }
 
 function Open-PageWithRetry([int]$maxAttempts = 2, [int]$retryWaitMs = 700) {
-  $targetUrl = "$baseUrl/wiring-diagram.html"
+  $targetUrl = "$($script:baseUrl)/wiring-diagram.html"
   for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
     Write-Host "[stability-test] page-open sessionIdPresent=$([bool]$script:sessionId) target=$targetUrl attempt=$attempt/$maxAttempts"
     try {
@@ -1710,7 +1807,10 @@ try {
     $navigateStatusCode = $null
     $navigateResponseReceived = $false
     $navigateResponseStatusCode = $null
+    $navigateHttpStatus = $null
     $navigateResponseBody = ""
+    $navigateStderrSummary = ""
+    $navigateTransportUsed = "curl"
     $curlNavigateAttempted = $false
     $curlNavigateSucceeded = $false
     $curlNavigateExitCode = $null
@@ -1781,6 +1881,12 @@ try {
     $retryInvokeSucceeded2 = $null
     $retryInvokeError1 = $null
     $retryInvokeError2 = $null
+    $navigateHttpStatus1 = $null
+    $navigateResponseBody1 = $null
+    $navigateStderrSummary1 = $null
+    $navigateHttpStatus2 = $null
+    $navigateResponseBody2 = $null
+    $navigateStderrSummary2 = $null
     $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
     $windowCheckStdout = [string]$windowCheck.windowCheckStdout
     $windowCheckStderr = [string]$windowCheck.windowCheckStderr
@@ -1847,30 +1953,25 @@ try {
     }
     $sessionsExtractedCount = @($sessionsExtractedIds).Count
     $sessionIdFoundInExtractedIds = (-not [string]::IsNullOrWhiteSpace($checkedSessionId)) -and (@($sessionsExtractedIds) -contains $checkedSessionId)
-    try {
-      $directNavBody = @{ url = $navigateTargetUrl } | ConvertTo-Json -Compress
-      $navigateResponse = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)/url" -ContentType "application/json" -Body $directNavBody -TimeoutSec 20
-      $navigateResponseReceived = $true
-      $navigateResponseStatusCode = 0
+    $directNavBody = @{ url = $navigateTargetUrl } | ConvertTo-Json -Compress
+    $directNavigateResult = Invoke-SessionNavigateViaCurl $script:sessionId $navigateTargetUrl 20
+    $script:lastNavigateAttempt = $directNavigateResult
+    $navigateTransportUsed = [string]$directNavigateResult.transportUsed
+    $navigateHttpStatus = $directNavigateResult.httpStatus
+    $navigateResponseBody = if ($null -ne $directNavigateResult.responseBody) { [string]$directNavigateResult.responseBody } else { "" }
+    $navigateStderrSummary = if ($null -ne $directNavigateResult.stderrSummary) { [string]$directNavigateResult.stderrSummary } else { "" }
+    $navigateResponseReceived = ($directNavigateResult.exitCode -eq 0)
+    if ($null -ne $navigateHttpStatus) {
+      $navigateResponseStatusCode = [int]$navigateHttpStatus
+      $navigateStatusCode = [int]$navigateHttpStatus
+    }
+    if ($directNavigateResult.ok) {
       $navigateSucceeded = $true
-    } catch {
-      $navigateErrorMessage = $_.Exception.Message
-      $navigateErrorLower = ""
-      try { $navigateErrorLower = $navigateErrorMessage.ToLowerInvariant() } catch { $navigateErrorLower = "" }
-      $timeoutJa = Make-Japanese @(12479,12452,12512,12450,12454,12488)
-      if (($navigateErrorLower -match "timeout") -or $navigateErrorMessage.Contains($timeoutJa)) {
-        $navigateErrorClass = "timeout"
-      } elseif (($navigateErrorLower -match "no such window") -or ($navigateErrorLower -match "404")) {
-        $navigateErrorClass = "no-such-window-or-404"
-      } else {
-        $navigateErrorClass = "webdriver-error"
-      }
-      $navigateErrorType = $_.Exception.GetType().FullName
-      try { $navigateStatusCode = [int]$_.Exception.Response.StatusCode.value__ } catch { $navigateStatusCode = $null }
-      if ($null -ne $navigateStatusCode) { $navigateResponseStatusCode = $navigateStatusCode }
-      try { $navigateResponseBody = [string]$_.ErrorDetails.Message } catch { $navigateResponseBody = "" }
-      if ($navigateResponseBody.Length -gt 500) { $navigateResponseBody = $navigateResponseBody.Substring(0, 500) }
-      Write-Host "[stability-test] direct webdriver navigate error=$($_.Exception.Message)"
+    } else {
+      $navigateErrorClass = if ($directNavigateResult.errorClass) { [string]$directNavigateResult.errorClass } else { "webdriver-error" }
+      $navigateErrorMessage = if ($directNavigateResult.errorMessage) { [string]$directNavigateResult.errorMessage } else { "navigate failed" }
+      $navigateErrorType = "CurlNavigateError"
+      Write-Host "[stability-test] direct webdriver navigate error=$navigateErrorMessage"
     }
     $postNavigateUrlCheck = Invoke-CurrentUrlCheck $script:sessionId
     $postNavigateUrlCheckAttempted = [bool]$postNavigateUrlCheck.currentUrlCheckAttempted
@@ -1945,9 +2046,15 @@ try {
         if ($openRetry -eq 1) {
           $retryInvokeSucceeded1 = $retryInvokeSucceeded
           $retryInvokeError1 = $retryInvokeError
+          $navigateHttpStatus1 = if ($script:lastNavigateAttempt) { $script:lastNavigateAttempt.httpStatus } else { $null }
+          $navigateResponseBody1 = if ($script:lastNavigateAttempt -and $null -ne $script:lastNavigateAttempt.responseBody) { [string]$script:lastNavigateAttempt.responseBody } else { $null }
+          $navigateStderrSummary1 = if ($script:lastNavigateAttempt -and $null -ne $script:lastNavigateAttempt.stderrSummary) { [string]$script:lastNavigateAttempt.stderrSummary } else { $null }
         } else {
           $retryInvokeSucceeded2 = $retryInvokeSucceeded
           $retryInvokeError2 = $retryInvokeError
+          $navigateHttpStatus2 = if ($script:lastNavigateAttempt) { $script:lastNavigateAttempt.httpStatus } else { $null }
+          $navigateResponseBody2 = if ($script:lastNavigateAttempt -and $null -ne $script:lastNavigateAttempt.responseBody) { [string]$script:lastNavigateAttempt.responseBody } else { $null }
+          $navigateStderrSummary2 = if ($script:lastNavigateAttempt -and $null -ne $script:lastNavigateAttempt.stderrSummary) { [string]$script:lastNavigateAttempt.stderrSummary } else { $null }
         }
         Wait-BrowserReady 350
         $handlesAfterOpen = Invoke-WindowHandlesCountCheck $script:sessionId
@@ -2034,12 +2141,15 @@ try {
       navigateAttempted = $true
       navigateResponseReceived = $navigateResponseReceived
       navigateResponseStatusCode = $navigateResponseStatusCode
+      navigateHttpStatus = $navigateHttpStatus
       navigateSucceeded = $navigateSucceeded
       navigateErrorClass = $navigateErrorClass
       navigateErrorMessage = $navigateErrorMessage
       navigateErrorType = $navigateErrorType
       navigateStatusCode = $navigateStatusCode
       navigateResponseBody = $navigateResponseBody
+      navigateStderrSummary = $navigateStderrSummary
+      navigateTransportUsed = $navigateTransportUsed
       postNavigateUrlCheckAttempted = $postNavigateUrlCheckAttempted
       postNavigateUrlFound = $postNavigateUrlFound
       postNavigateUrlValue = $postNavigateUrlValue
@@ -2116,6 +2226,12 @@ try {
       retryInvokeSucceeded2 = $retryInvokeSucceeded2
       retryInvokeError1 = $retryInvokeError1
       retryInvokeError2 = $retryInvokeError2
+      navigateHttpStatus1 = $navigateHttpStatus1
+      navigateResponseBody1 = $navigateResponseBody1
+      navigateStderrSummary1 = $navigateStderrSummary1
+      navigateHttpStatus2 = $navigateHttpStatus2
+      navigateResponseBody2 = $navigateResponseBody2
+      navigateStderrSummary2 = $navigateStderrSummary2
       timestamp = (Get-Date).ToString("o")
     }
     Write-OutputJson @{ preUiInitDiagnostic = $directNavigateDiagnostic } 8
@@ -2172,12 +2288,15 @@ try {
             navigateAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateAttempted } else { $false }
             navigateResponseReceived = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateResponseReceived } else { $false }
             navigateResponseStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateResponseStatusCode } else { $null }
+            navigateHttpStatus = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateHttpStatus } else { $null }
             navigateSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateSucceeded } else { $false }
             navigateErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.navigateErrorClass) { [string]$directNavigateDiagnostic.navigateErrorClass } else { $null }
             navigateErrorMessage = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorMessage } else { "" }
             navigateErrorType = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorType } else { "" }
             navigateStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateStatusCode } else { $null }
             navigateResponseBody = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateResponseBody } else { "" }
+            navigateStderrSummary = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateStderrSummary } else { "" }
+            navigateTransportUsed = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateTransportUsed } else { "" }
             postNavigateUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlCheckAttempted } else { $false }
             postNavigateUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlFound } else { $false }
             postNavigateUrlValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.postNavigateUrlValue) { [string]$directNavigateDiagnostic.postNavigateUrlValue } else { $null }
@@ -2251,6 +2370,12 @@ try {
             retryInvokeSucceeded2 = $retryInvokeSucceeded2
             retryInvokeError1 = $retryInvokeError1
             retryInvokeError2 = $retryInvokeError2
+            navigateHttpStatus1 = $navigateHttpStatus1
+            navigateResponseBody1 = $navigateResponseBody1
+            navigateStderrSummary1 = $navigateStderrSummary1
+            navigateHttpStatus2 = $navigateHttpStatus2
+            navigateResponseBody2 = $navigateResponseBody2
+            navigateStderrSummary2 = $navigateStderrSummary2
             timestamp = (Get-Date).ToString("o")
           }
           Write-OutputJson @{ preUiInitDiagnostic = $preUiInitDiagnostic } 8
@@ -2415,12 +2540,15 @@ try {
         navigateAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateAttempted } else { $false }
         navigateResponseReceived = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateResponseReceived } else { $false }
         navigateResponseStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateResponseStatusCode } else { $null }
+        navigateHttpStatus = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateHttpStatus } else { $null }
         navigateSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.navigateSucceeded } else { $false }
         navigateErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.navigateErrorClass) { [string]$directNavigateDiagnostic.navigateErrorClass } else { $null }
         navigateErrorMessage = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorMessage } else { "" }
         navigateErrorType = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateErrorType } else { "" }
         navigateStatusCode = if ($directNavigateDiagnostic) { $directNavigateDiagnostic.navigateStatusCode } else { $null }
         navigateResponseBody = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateResponseBody } else { "" }
+        navigateStderrSummary = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateStderrSummary } else { "" }
+        navigateTransportUsed = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateTransportUsed } else { "" }
         postNavigateUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlCheckAttempted } else { $false }
         postNavigateUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlFound } else { $false }
         postNavigateUrlValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.postNavigateUrlValue) { [string]$directNavigateDiagnostic.postNavigateUrlValue } else { $null }
@@ -2494,6 +2622,12 @@ try {
         retryInvokeSucceeded2 = $retryInvokeSucceeded2
         retryInvokeError1 = $retryInvokeError1
         retryInvokeError2 = $retryInvokeError2
+        navigateHttpStatus1 = $navigateHttpStatus1
+        navigateResponseBody1 = $navigateResponseBody1
+        navigateStderrSummary1 = $navigateStderrSummary1
+        navigateHttpStatus2 = $navigateHttpStatus2
+        navigateResponseBody2 = $navigateResponseBody2
+        navigateStderrSummary2 = $navigateStderrSummary2
         timestamp = (Get-Date).ToString("o")
       }
       Write-OutputJson @{ preUiInitDiagnostic = $preUiInitDiagnostic } 8
