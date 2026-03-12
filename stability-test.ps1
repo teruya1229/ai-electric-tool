@@ -1359,6 +1359,105 @@ function Get-ChecksPass([object]$checks, [string[]]$requiredKeys) {
   $true
 }
 
+function Get-DownstreamContractSnapshot() {
+  Exec-Script @'
+const txt = (id) => {
+  const el = document.getElementById(id);
+  return el ? (el.textContent || "").trim() : "";
+};
+const layoutText = txt("layout-debug-result");
+const wirePathText = txt("wire-path-debug-result");
+const lines = layoutText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+const edgeLines = lines.filter((line) => line.includes("->"));
+const nodeLines = [];
+let readingNodes = false;
+for (const line of lines) {
+  if (line === "ノード") {
+    readingNodes = true;
+    continue;
+  }
+  if (line === "接続線") {
+    readingNodes = false;
+    continue;
+  }
+  if (readingNodes) nodeLines.push(line);
+}
+const roleSet = Array.from(new Set(
+  edgeLines
+    .map((line) => {
+      const m = line.match(/\(([^()]+)\)\s*$/);
+      return m ? m[1].trim() : "";
+    })
+    .filter(Boolean)
+)).sort();
+const hasJunctionNodeLeak = nodeLines.some((line) => /^j-/.test(line));
+const wireSvg = document.querySelector("#wire-path-debug-result svg");
+const aiSvg = document.querySelector("#ai-diagram-preview-result svg");
+return {
+  layoutText,
+  wirePathText,
+  roleSet,
+  edgeCount: edgeLines.length,
+  nodeCount: nodeLines.length,
+  hasJunctionNodeLeak,
+  hasWirePathSvg: !!wireSvg,
+  wirePathPolylineCount: wireSvg ? wireSvg.querySelectorAll("polyline").length : 0,
+  hasAiSvg: !!aiSvg,
+  aiPolylineCount: aiSvg ? aiSvg.querySelectorAll("polyline").length : 0
+};
+'@ @() "e2e-downstream-snapshot"
+}
+
+function Test-DownstreamContractCase([string]$name, [string]$inputText, [object]$expect) {
+  Log-Step "downstream case $name parse" "start"
+  $clickOk = Invoke-ParseClick $inputText
+  $parseReady = if ($clickOk) { [bool](Wait-ParseResultUpdated 20) } else { $false }
+  Start-Sleep -Milliseconds 700
+  $snapshot = Get-DownstreamContractSnapshot
+  Log-Step "downstream case $name parse" "done"
+
+  $requiredRoles = @($expect.requiredRoles)
+  $expectedEdgeCount = [int]$expect.expectedEdgeCount
+  $missingRoles = @($requiredRoles | Where-Object { -not (@($snapshot.roleSet) -contains $_) })
+  $checkMap = [ordered]@{
+    parse_ready = [bool]$parseReady
+    role_set_match = ($missingRoles.Count -eq 0)
+    edge_count_match = ([int]$snapshot.edgeCount -eq $expectedEdgeCount)
+    junction_not_exposed_in_layout = (-not [bool]$snapshot.hasJunctionNodeLeak)
+    wirepaths_present = (([bool]$snapshot.hasWirePathSvg) -and ([int]$snapshot.wirePathPolylineCount -gt 0))
+    svg_present = (([bool]$snapshot.hasAiSvg) -and ([int]$snapshot.aiPolylineCount -gt 0))
+  }
+  if ([bool]$expect.requireTraveler) {
+    $checkMap.traveler_roles_present = ((@($snapshot.roleSet) -contains "traveler_1") -and (@($snapshot.roleSet) -contains "traveler_2"))
+  }
+  $failed = @($checkMap.Keys | Where-Object { -not [bool]$checkMap[$_] })
+
+  [ordered]@{
+    name = $name
+    input = $inputText
+    status = if ($failed.Count -eq 0) { "OK" } else { "要修正" }
+    failedChecks = $failed
+    checks = $checkMap
+    expected = [ordered]@{
+      requiredRoles = $requiredRoles
+      expectedEdgeCount = $expectedEdgeCount
+      requireTraveler = [bool]$expect.requireTraveler
+    }
+    observed = [ordered]@{
+      roleSet = @($snapshot.roleSet)
+      edgeCount = [int]$snapshot.edgeCount
+      hasJunctionNodeLeak = [bool]$snapshot.hasJunctionNodeLeak
+      hasWirePathSvg = [bool]$snapshot.hasWirePathSvg
+      wirePathPolylineCount = [int]$snapshot.wirePathPolylineCount
+      hasAiSvg = [bool]$snapshot.hasAiSvg
+      aiPolylineCount = [int]$snapshot.aiPolylineCount
+      layoutText = [string]$snapshot.layoutText
+      wirePathText = [string]$snapshot.wirePathText
+      missingRoles = $missingRoles
+    }
+  }
+}
+
 $cases = @(
   @{ name = "case_single_1light"; input = (Make-Japanese @(29255,20999,49,28783)) },
   @{ name = "case_single_2light_same"; input = (Make-Japanese @(29255,20999,50,28783,32,21516,26178)) },
@@ -2035,6 +2134,43 @@ try {
   $failureAfterPass = Get-ChecksPass $failureAfterChecks $failureRequiredKeys
   Log-Step "e2e case failure parse" "done"
 
+  Log-Step "downstream contract cases" "start"
+  $downstreamCaseMatrix = @(
+    [ordered]@{
+      name = "single_1light"
+      input = (Make-Japanese @(29255,20999,49,28783))
+      expected = [ordered]@{
+        requiredRoles = @("line", "neutral", "switch_return")
+        expectedEdgeCount = 3
+        requireTraveler = $false
+      }
+    },
+    [ordered]@{
+      name = "light_plus_outlet"
+      input = (Make-Japanese @(29255,20999,49,28783,32,12467,12531,12475,12531,12488,49,20491))
+      expected = [ordered]@{
+        requiredRoles = @("line", "line_load", "neutral", "switch_return")
+        expectedEdgeCount = 5
+        requireTraveler = $false
+      }
+    },
+    [ordered]@{
+      name = "threeway_1light"
+      input = (Make-Japanese @(51,36335,49,28783))
+      expected = [ordered]@{
+        requiredRoles = @("line", "neutral", "switch_return", "traveler_1", "traveler_2")
+        expectedEdgeCount = 5
+        requireTraveler = $true
+      }
+    }
+  )
+  $downstreamChecks = @()
+  foreach ($caseDef in $downstreamCaseMatrix) {
+    $downstreamChecks += Test-DownstreamContractCase $caseDef.name $caseDef.input $caseDef.expected
+  }
+  $downstreamAllPass = (-not (@($downstreamChecks | Where-Object { $_.status -ne "OK" }).Count))
+  Log-Step "downstream contract cases" "done"
+
   $result = [ordered]@{
     success_before_wait = [ordered]@{
       parseReady = $successParseReady
@@ -2060,12 +2196,17 @@ try {
       requiredPass = $failureAfterPass
       snapshot = $failureAfter
     }
+    downstream_contract = [ordered]@{
+      all_pass = [bool]$downstreamAllPass
+      cases = $downstreamChecks
+    }
     assertions = [ordered]@{
       success_case_pass = ([bool]$successParseReady -and [bool]$successBeforePass)
       failure_case_pass = ([bool]$failureParseReady -and [bool]$failureBeforePass)
       success_state_stable_after_wait = ([bool]$successBeforePass -and [bool]$successAfterPass)
       failure_state_stable_after_wait = ([bool]$failureBeforePass -and [bool]$failureAfterPass)
-      overall_pass = ([bool]$successParseReady -and [bool]$successBeforePass -and [bool]$failureParseReady -and [bool]$failureBeforePass -and [bool]$successAfterPass -and [bool]$failureAfterPass)
+      downstream_contract_pass = [bool]$downstreamAllPass
+      overall_pass = ([bool]$successParseReady -and [bool]$successBeforePass -and [bool]$failureParseReady -and [bool]$failureBeforePass -and [bool]$successAfterPass -and [bool]$failureAfterPass -and [bool]$downstreamAllPass)
     }
   }
 
@@ -2073,6 +2214,7 @@ try {
   Write-Host "Saved E2E results to $outputPath"
   Write-Host ("[E2E] success(before)={0} success(after)={1}" -f $(if ($successBeforePass) { "PASS" } else { "FAIL" }), $(if ($successAfterPass) { "PASS" } else { "FAIL" }))
   Write-Host ("[E2E] failure(before)={0} failure(after)={1}" -f $(if ($failureBeforePass) { "PASS" } else { "FAIL" }), $(if ($failureAfterPass) { "PASS" } else { "FAIL" }))
+  Write-Host ("[E2E] downstream-contract={0}" -f $(if ($downstreamAllPass) { "PASS" } else { "FAIL" }))
   Write-Host ("[E2E] overall={0}" -f $(if ($result.assertions.overall_pass) { "PASS" } else { "FAIL" }))
 }
 finally {
