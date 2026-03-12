@@ -1068,6 +1068,72 @@ function Invoke-WindowHandleCheck([string]$sessionId) {
   $result
 }
 
+function Invoke-WindowHandlesCountCheck([string]$sessionId) {
+  $result = [ordered]@{
+    handlesCheckAttempted = $false
+    handlesCheckStdout = ""
+    handlesCheckStderr = ""
+    handlesCheckExitCode = $null
+    handlesCount = $null
+    handlesErrorClass = $null
+    handlesErrorMessage = $null
+  }
+  $stdoutRaw = ""
+  $outPath = [IO.Path]::GetTempFileName()
+  $errPath = [IO.Path]::GetTempFileName()
+  try {
+    $result.handlesCheckAttempted = $true
+    $args = @("--silent", "--show-error", "--max-time", "5", "$($script:driverBaseUrl)/session/$sessionId/window/handles")
+    $proc = Start-Process -FilePath "curl.exe" -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput $outPath -RedirectStandardError $errPath
+    $result.handlesCheckExitCode = $proc.ExitCode
+    try { $result.handlesCheckStdout = [string](Get-Content -Raw -Path $outPath) } catch { $result.handlesCheckStdout = "" }
+    $stdoutRaw = $result.handlesCheckStdout
+    try { $result.handlesCheckStderr = [string](Get-Content -Raw -Path $errPath) } catch { $result.handlesCheckStderr = "" }
+  } finally {
+    try { Remove-Item $outPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $errPath -Force -ErrorAction SilentlyContinue } catch {}
+  }
+  if ($result.handlesCheckStdout.Length -gt 500) { $result.handlesCheckStdout = $result.handlesCheckStdout.Substring(0, 500) }
+  if ($result.handlesCheckStderr.Length -gt 500) { $result.handlesCheckStderr = $result.handlesCheckStderr.Substring(0, 500) }
+  if ($result.handlesCheckExitCode -ne 0) {
+    $errLower = ""
+    try { $errLower = ([string]$result.handlesCheckStderr).ToLowerInvariant() } catch { $errLower = "" }
+    if (($result.handlesCheckExitCode -eq 28) -or ($errLower -match "timeout")) {
+      $result.handlesErrorClass = "timeout"
+    } else {
+      $result.handlesErrorClass = "curl-error"
+    }
+    $result.handlesErrorMessage = [string]$result.handlesCheckStderr
+  }
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($stdoutRaw)) {
+      $json = $stdoutRaw | ConvertFrom-Json -ErrorAction Stop
+      if ($json -and $json.PSObject.Properties.Name -contains "value" -and $json.value -is [array]) {
+        $result.handlesCount = @($json.value).Count
+        $result.handlesErrorClass = $null
+        $result.handlesErrorMessage = $null
+      } elseif ($json -and $json.value -and $json.value.error) {
+        $rawError = [string]$json.value.error
+        $rawMessage = if ($json.value.message) { [string]$json.value.message } else { "" }
+        $errorLower = $rawError.ToLowerInvariant()
+        $messageLower = $rawMessage.ToLowerInvariant()
+        if (($errorLower -match "timeout") -or ($messageLower -match "timeout")) {
+          $result.handlesErrorClass = "timeout"
+        } elseif (($errorLower -match "no such window") -or ($messageLower -match "no such window") -or ($messageLower -match "404")) {
+          $result.handlesErrorClass = "no-such-window-or-404"
+        } else {
+          $result.handlesErrorClass = "webdriver-error"
+        }
+        $result.handlesErrorMessage = $rawMessage
+      }
+    }
+  } catch {
+    if (-not $result.handlesErrorClass) { $result.handlesErrorClass = "parse-error" }
+    if (-not $result.handlesErrorMessage) { $result.handlesErrorMessage = $_.Exception.Message }
+  }
+  $result
+}
+
 function Invoke-CurrentUrlCheck([string]$sessionId) {
   $result = [ordered]@{
     currentUrlCheckAttempted = $false
@@ -1703,8 +1769,18 @@ try {
     $windowAfterRetry1 = $null
     $windowBeforeRetry2 = $null
     $windowAfterRetry2 = $null
+    $handlesCountBeforeRetry1 = $null
+    $handlesCountAfterRetry1 = $null
+    $currentHandleBeforeRetry1 = $null
+    $currentHandleAfterRetry1 = $null
+    $handlesCountBeforeRetry2 = $null
+    $handlesCountAfterRetry2 = $null
+    $currentHandleBeforeRetry2 = $null
+    $currentHandleAfterRetry2 = $null
     $retryInvokeSucceeded1 = $null
     $retryInvokeSucceeded2 = $null
+    $retryInvokeError1 = $null
+    $retryInvokeError2 = $null
     $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
     $windowCheckStdout = [string]$windowCheck.windowCheckStdout
     $windowCheckStderr = [string]$windowCheck.windowCheckStderr
@@ -1839,42 +1915,58 @@ try {
       Write-Host "[stability-test] session recovery done currentUrl=$currentUrlValue windowHandleFound=$windowHandleFound"
       for ($openRetry = 1; $openRetry -le 2; $openRetry++) {
         $recoveryOpenRetryCount = $openRetry
+        $beforeHandlesState = Invoke-WindowHandlesCountCheck $script:sessionId
         $beforeUrlState = Invoke-CurrentUrlCheck $script:sessionId
         $beforeWindowState = Invoke-WindowHandleCheck $script:sessionId
         $beforeUrlValue = if ($beforeUrlState.currentUrlFound -and $beforeUrlState.currentUrlValue) { [string]$beforeUrlState.currentUrlValue } else { $null }
         $beforeWindowValue = if ($beforeWindowState.windowHandleFound -and $beforeWindowState.windowHandleValue) { [string]$beforeWindowState.windowHandleValue } else { "missing:$([string]$beforeWindowState.windowHandleErrorClass)" }
+        $beforeHandlesCount = if ($null -ne $beforeHandlesState.handlesCount) { [int]$beforeHandlesState.handlesCount } else { $null }
         if ($openRetry -eq 1) {
           $urlBeforeRetry1 = $beforeUrlValue
           $windowBeforeRetry1 = $beforeWindowValue
+          $handlesCountBeforeRetry1 = $beforeHandlesCount
+          $currentHandleBeforeRetry1 = if ($beforeWindowState.windowHandleFound -and $beforeWindowState.windowHandleValue) { [string]$beforeWindowState.windowHandleValue } else { $null }
         } else {
           $urlBeforeRetry2 = $beforeUrlValue
           $windowBeforeRetry2 = $beforeWindowValue
+          $handlesCountBeforeRetry2 = $beforeHandlesCount
+          $currentHandleBeforeRetry2 = if ($beforeWindowState.windowHandleFound -and $beforeWindowState.windowHandleValue) { [string]$beforeWindowState.windowHandleValue } else { $null }
         }
         Write-Host "[stability-test] recovered session page-open retry=$openRetry"
         $retryInvokeSucceeded = $false
+        $retryInvokeError = $null
         try {
           Open-PageWithRetry 1 300
           $retryInvokeSucceeded = $true
         } catch {
+          $retryInvokeError = [string]$_.Exception.Message
           Write-Host "[stability-test] recovered session Open-PageWithRetry failed retry=$openRetry message=$($_.Exception.Message)"
         }
         if ($openRetry -eq 1) {
           $retryInvokeSucceeded1 = $retryInvokeSucceeded
+          $retryInvokeError1 = $retryInvokeError
         } else {
           $retryInvokeSucceeded2 = $retryInvokeSucceeded
+          $retryInvokeError2 = $retryInvokeError
         }
         Wait-BrowserReady 350
+        $handlesAfterOpen = Invoke-WindowHandlesCountCheck $script:sessionId
         $urlAfterOpen = Invoke-CurrentUrlCheck $script:sessionId
         $windowAfterOpen = Invoke-WindowHandleCheck $script:sessionId
         $uiAfterOpen = Get-UiInitDiagnostics
         $recoveryLastOpenedUrl = if ($urlAfterOpen.currentUrlFound -and $urlAfterOpen.currentUrlValue) { [string]$urlAfterOpen.currentUrlValue } else { [string]$uiAfterOpen.href }
         $afterWindowValue = if ($windowAfterOpen.windowHandleFound -and $windowAfterOpen.windowHandleValue) { [string]$windowAfterOpen.windowHandleValue } else { "missing:$([string]$windowAfterOpen.windowHandleErrorClass)" }
+        $afterHandlesCount = if ($null -ne $handlesAfterOpen.handlesCount) { [int]$handlesAfterOpen.handlesCount } else { $null }
         if ($openRetry -eq 1) {
           $urlAfterRetry1 = $recoveryLastOpenedUrl
           $windowAfterRetry1 = $afterWindowValue
+          $handlesCountAfterRetry1 = $afterHandlesCount
+          $currentHandleAfterRetry1 = if ($windowAfterOpen.windowHandleFound -and $windowAfterOpen.windowHandleValue) { [string]$windowAfterOpen.windowHandleValue } else { $null }
         } else {
           $urlAfterRetry2 = $recoveryLastOpenedUrl
           $windowAfterRetry2 = $afterWindowValue
+          $handlesCountAfterRetry2 = $afterHandlesCount
+          $currentHandleAfterRetry2 = if ($windowAfterOpen.windowHandleFound -and $windowAfterOpen.windowHandleValue) { [string]$windowAfterOpen.windowHandleValue } else { $null }
         }
         $recoveryLastReadyState = [string]$uiAfterOpen.readyState
         $recoveryOpenReachedTarget =
@@ -2012,8 +2104,18 @@ try {
       windowAfterRetry1 = $windowAfterRetry1
       windowBeforeRetry2 = $windowBeforeRetry2
       windowAfterRetry2 = $windowAfterRetry2
+      handlesCountBeforeRetry1 = $handlesCountBeforeRetry1
+      handlesCountAfterRetry1 = $handlesCountAfterRetry1
+      currentHandleBeforeRetry1 = $currentHandleBeforeRetry1
+      currentHandleAfterRetry1 = $currentHandleAfterRetry1
+      handlesCountBeforeRetry2 = $handlesCountBeforeRetry2
+      handlesCountAfterRetry2 = $handlesCountAfterRetry2
+      currentHandleBeforeRetry2 = $currentHandleBeforeRetry2
+      currentHandleAfterRetry2 = $currentHandleAfterRetry2
       retryInvokeSucceeded1 = $retryInvokeSucceeded1
       retryInvokeSucceeded2 = $retryInvokeSucceeded2
+      retryInvokeError1 = $retryInvokeError1
+      retryInvokeError2 = $retryInvokeError2
       timestamp = (Get-Date).ToString("o")
     }
     Write-OutputJson @{ preUiInitDiagnostic = $directNavigateDiagnostic } 8
@@ -2137,8 +2239,18 @@ try {
             windowAfterRetry1 = $windowAfterRetry1
             windowBeforeRetry2 = $windowBeforeRetry2
             windowAfterRetry2 = $windowAfterRetry2
+            handlesCountBeforeRetry1 = $handlesCountBeforeRetry1
+            handlesCountAfterRetry1 = $handlesCountAfterRetry1
+            currentHandleBeforeRetry1 = $currentHandleBeforeRetry1
+            currentHandleAfterRetry1 = $currentHandleAfterRetry1
+            handlesCountBeforeRetry2 = $handlesCountBeforeRetry2
+            handlesCountAfterRetry2 = $handlesCountAfterRetry2
+            currentHandleBeforeRetry2 = $currentHandleBeforeRetry2
+            currentHandleAfterRetry2 = $currentHandleAfterRetry2
             retryInvokeSucceeded1 = $retryInvokeSucceeded1
             retryInvokeSucceeded2 = $retryInvokeSucceeded2
+            retryInvokeError1 = $retryInvokeError1
+            retryInvokeError2 = $retryInvokeError2
             timestamp = (Get-Date).ToString("o")
           }
           Write-OutputJson @{ preUiInitDiagnostic = $preUiInitDiagnostic } 8
@@ -2370,8 +2482,18 @@ try {
         windowAfterRetry1 = $windowAfterRetry1
         windowBeforeRetry2 = $windowBeforeRetry2
         windowAfterRetry2 = $windowAfterRetry2
+        handlesCountBeforeRetry1 = $handlesCountBeforeRetry1
+        handlesCountAfterRetry1 = $handlesCountAfterRetry1
+        currentHandleBeforeRetry1 = $currentHandleBeforeRetry1
+        currentHandleAfterRetry1 = $currentHandleAfterRetry1
+        handlesCountBeforeRetry2 = $handlesCountBeforeRetry2
+        handlesCountAfterRetry2 = $handlesCountAfterRetry2
+        currentHandleBeforeRetry2 = $currentHandleBeforeRetry2
+        currentHandleAfterRetry2 = $currentHandleAfterRetry2
         retryInvokeSucceeded1 = $retryInvokeSucceeded1
         retryInvokeSucceeded2 = $retryInvokeSucceeded2
+        retryInvokeError1 = $retryInvokeError1
+        retryInvokeError2 = $retryInvokeError2
         timestamp = (Get-Date).ToString("o")
       }
       Write-OutputJson @{ preUiInitDiagnostic = $preUiInitDiagnostic } 8
