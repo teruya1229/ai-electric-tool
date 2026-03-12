@@ -678,3 +678,36 @@ internal junction を内部利用しつつ、返却 public graph は従来互換
 - 将来は縮約ロジックと branchCount の扱いを再点検予定
 次回やること：
 - E2E / 表示確認または複雑分岐ケースの追加検証
+
+---
+
+## 2026-03-12 downstream_contract_pass gate 運用
+
+目的  
+internal junction 正規化の回帰を、3ケース固定で毎回検知する。
+
+前提  
+CI workflow は未導入。  
+そのため当面はローカル必須ゲートとして運用する。
+
+必須手順（変更ごとに毎回実行）
+1. `powershell -ExecutionPolicy Bypass -File .\stability-test.ps1`
+2. `.tmp_case_results.json` を確認し、以下をすべて満たすこと
+   - `downstream_contract.all_pass = true`
+   - `assertions.downstream_contract_pass = true`
+   - `assertions.overall_pass = true`
+
+判定基準（3ケース固定）
+- 片切1灯
+- 片切+コンセント
+- 3路1灯
+
+各ケースで確認される項目
+- role set
+- edge数
+- layout.nodes の junction leak なし
+- wirePaths / SVG 描画あり
+
+失敗時
+- `.tmp_case_results.json` の `downstream_contract.cases[].failedChecks` を一次原因として確認
+- `expected` と `observed` の差分を優先して修正箇所を切り分ける
