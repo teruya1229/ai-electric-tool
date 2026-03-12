@@ -1691,6 +1691,10 @@ try {
     $currentUrlBeforeNavigate = $currentUrlValue
     $sessionRecovered = $false
     $sessionRecoveryReason = ""
+    $recoveryOpenRetryCount = 0
+    $recoveryLastOpenedUrl = ""
+    $recoveryLastReadyState = ""
+    $recoveryOpenReachedTarget = $false
     $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
     $windowCheckStdout = [string]$windowCheck.windowCheckStdout
     $windowCheckStderr = [string]$windowCheck.windowCheckStderr
@@ -1823,6 +1827,25 @@ try {
       $currentUrlErrorMessage = if ($null -ne $currentUrlCheck.currentUrlErrorMessage) { [string]$currentUrlCheck.currentUrlErrorMessage } else { $null }
       $sessionRecovered = $true
       Write-Host "[stability-test] session recovery done currentUrl=$currentUrlValue windowHandleFound=$windowHandleFound"
+      for ($openRetry = 1; $openRetry -le 2; $openRetry++) {
+        $recoveryOpenRetryCount = $openRetry
+        Write-Host "[stability-test] recovered session page-open retry=$openRetry"
+        try {
+          Open-PageWithRetry 1 300
+        } catch {
+          Write-Host "[stability-test] recovered session Open-PageWithRetry failed retry=$openRetry message=$($_.Exception.Message)"
+        }
+        Wait-BrowserReady 350
+        $urlAfterOpen = Invoke-CurrentUrlCheck $script:sessionId
+        $uiAfterOpen = Get-UiInitDiagnostics
+        $recoveryLastOpenedUrl = if ($urlAfterOpen.currentUrlFound -and $urlAfterOpen.currentUrlValue) { [string]$urlAfterOpen.currentUrlValue } else { [string]$uiAfterOpen.href }
+        $recoveryLastReadyState = [string]$uiAfterOpen.readyState
+        $recoveryOpenReachedTarget =
+          ($recoveryLastOpenedUrl.Contains("wiring-diagram.html")) -and
+          (($recoveryLastReadyState -eq "interactive") -or ($recoveryLastReadyState -eq "complete"))
+        Write-Host "[stability-test] recovered session open-state retry=$openRetry url=$recoveryLastOpenedUrl readyState=$recoveryLastReadyState reachedTarget=$recoveryOpenReachedTarget"
+        if ($recoveryOpenReachedTarget) { break }
+      }
     }
     Wait-BrowserReady 350
     $hrefAfterDirectNavigate = ""
@@ -1940,17 +1963,21 @@ try {
       preUiBodyPreview = [string]$preUiState.bodyPreview
       sessionRecovered = $sessionRecovered
       sessionRecoveryReason = $sessionRecoveryReason
+      retryCount = $recoveryOpenRetryCount
+      lastOpenedUrl = $recoveryLastOpenedUrl
+      lastReadyState = $recoveryLastReadyState
+      recoveryOpenReachedTarget = $recoveryOpenReachedTarget
       timestamp = (Get-Date).ToString("o")
     }
     Write-OutputJson @{ preUiInitDiagnostic = $directNavigateDiagnostic } 8
-    if (-not (Open-PageViaCurl $script:sessionId 25)) {
+    if ((-not $recoveryOpenReachedTarget) -and (-not (Open-PageViaCurl $script:sessionId 25))) {
       Write-Host "[stability-test] minimal curl page-open failed; retry with recovered minimal session"
       try { Remove-Session } catch {}
       $minimalRecovered = New-WebDriverSessionMinimal
       $script:sessionId = $minimalRecovered.sessionId
       Log-SessionCapabilitiesSummary $minimalRecovered.response "minimal-e2e-recovered-open-page"
       Wait-BrowserReady 500
-      if (-not (Open-PageViaCurl $script:sessionId 25)) {
+      if ((-not $recoveryOpenReachedTarget) -and (-not (Open-PageViaCurl $script:sessionId 25))) {
         throw "Minimal session page-open failed in e2e-only mode."
       }
     }
