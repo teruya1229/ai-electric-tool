@@ -717,5 +717,6 @@ CI workflow は未導入。
 visitedJunctions 再検討トリガー
 - 複数分岐ケース（3路2灯+コンセント など）で `edge_count_match` の失敗が継続発生した場合、visitedJunctions 再設計を検討する。
 - 継続発生の定義: 直近3回の実行で、複数分岐ケースの `edge_count_match` が2回以上失敗。
+- 「直近3回」は、最新結果から連続した3実行（欠番なし）を指す。
 - `missingRoles` または `junction_not_exposed_in_layout` の失敗が1回でも出た場合は、優先度高で即時調査する。
 - まず確認するログ項目: `failedChecks` / `expected` / `observed`
