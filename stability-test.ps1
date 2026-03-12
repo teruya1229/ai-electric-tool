@@ -34,10 +34,56 @@ function Get-SourceCommitShort() {
   }
 }
 
+function Get-DateOrMin([object]$value) {
+  try {
+    if ($null -eq $value) { return [DateTime]::MinValue }
+    return [DateTime]::Parse([string]$value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind)
+  } catch {
+    return [DateTime]::MinValue
+  }
+}
+
+function Get-ExistingRunHistory() {
+  if (-not (Test-Path $outputPath -PathType Leaf)) { return @() }
+  try {
+    $raw = Get-Content -Raw -Path $outputPath
+    if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
+    $json = $raw | ConvertFrom-Json -Depth 20
+    $history = @()
+    if ($json.runHistory) {
+      $history = @($json.runHistory)
+    } elseif ($json.runFinishedAt) {
+      $history = @([ordered]@{
+        runStartedAt = $json.runStartedAt
+        runFinishedAt = $json.runFinishedAt
+        sourceCommit = $json.sourceCommit
+        outputWrittenAt = (Get-Date).ToString("o")
+        multiBranchEdgeCountMatch = $null
+      })
+    }
+    return @($history)
+  } catch {
+    return @()
+  }
+}
+
+function Get-MultiBranchEdgeCountMatch([object]$payload) {
+  try {
+    $cases = @($payload.downstream_contract.cases)
+    if (-not $cases.Count) { return $null }
+    $target = $cases | Where-Object { [string]$_.name -eq "threeway_2light_plus_outlet" } | Select-Object -First 1
+    if (-not $target) { return $null }
+    return [bool]$target.checks.edge_count_match
+  } catch {
+    return $null
+  }
+}
+
 function Write-OutputJson([object]$payload, [int]$depth = 8, [bool]$markFinished = $false) {
+  $finishedAt = if ($markFinished) { (Get-Date).ToString("o") } else { $null }
   $root = [ordered]@{
     runStartedAt = $script:runStartedAt
-    runFinishedAt = if ($markFinished) { (Get-Date).ToString("o") } else { $null }
+    runFinishedAt = $finishedAt
     sourceCommit = if ([string]::IsNullOrWhiteSpace($script:sourceCommit)) { $null } else { $script:sourceCommit }
   }
 
@@ -54,6 +100,47 @@ function Write-OutputJson([object]$payload, [int]$depth = 8, [bool]$markFinished
     } else {
       $root["result"] = $payload
     }
+  }
+
+  if ($markFinished) {
+    $history = Get-ExistingRunHistory
+    $currentEntry = [ordered]@{
+      runStartedAt = $script:runStartedAt
+      runFinishedAt = $finishedAt
+      sourceCommit = if ([string]::IsNullOrWhiteSpace($script:sourceCommit)) { $null } else { $script:sourceCommit }
+      outputWrittenAt = (Get-Date).ToString("o")
+      multiBranchEdgeCountMatch = Get-MultiBranchEdgeCountMatch $payload
+    }
+    $history = @($history + @($currentEntry))
+    $history = @(
+      $history |
+        Sort-Object `
+          @{ Expression = { Get-DateOrMin $_.runFinishedAt }; Descending = $true }, `
+          @{ Expression = { Get-DateOrMin $_.outputWrittenAt }; Descending = $true }
+    )
+    if ($history.Count -gt 20) { $history = @($history[0..19]) }
+
+    $selected = @($history | Select-Object -First 3)
+    $selectedRuns = @(
+      $selected | ForEach-Object {
+        [ordered]@{
+          runFinishedAt = $_.runFinishedAt
+          sourceCommit = $_.sourceCommit
+        }
+      }
+    )
+    $hasCompleteWindow = ($selected.Count -eq 3)
+    $edgeFailures = if ($hasCompleteWindow) {
+      @($selected | Where-Object { $_.multiBranchEdgeCountMatch -eq $false }).Count
+    } else {
+      0
+    }
+
+    $root["runHistory"] = $history
+    $root["selectedRuns"] = $selectedRuns
+    $root["edgeCountFailuresInSelectedRuns"] = [int]$edgeFailures
+    $root["shouldReviewVisitedJunctions"] = [bool]($hasCompleteWindow -and $edgeFailures -ge 2)
+    $root["reason"] = if (-not $hasCompleteWindow) { "missing run window" } else { "$edgeFailures of 3 failed" }
   }
 
   [IO.File]::WriteAllText($outputPath, ($root | ConvertTo-Json -Depth $depth), [Text.UTF8Encoding]::new($false))
