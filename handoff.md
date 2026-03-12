@@ -732,3 +732,20 @@ visitedJunctions 再検討トリガー
 - 補助参照キー: `runHistory`（最大20件、抽出根拠の確認用）
 - `missingRoles` または `junction_not_exposed_in_layout` の失敗が1回でも出た場合は、優先度高で即時調査する。
 - まず確認するログ項目: `failedChecks` / `expected` / `observed`
+
+## 2026-03-12 次にやるべき1手（E2E切り分け継続）
+- `stability-test.ps1` のみを最小差分で更新し、`Invoke-SessionNavigateViaCurl()` の結果から webdriver の `value.error` を明示キーとして保存する。
+- `preUiInitDiagnostic` に `webdriverError / webdriverError1 / webdriverError2` を追加し、timeout run と value.error run を機械的に分岐できるようにする。
+- 再実行して、純粋 timeout run か webdriverError 混在 run かを確定する。
+
+判断基準
+- `navigateHttpStatus=0` かつ `navigateStderrSummary` が curl timeout なら timeout run と扱う。
+- JSON 内に `value.error` が存在する場合は webdriverError run として扱う。
+- `downstream_contract.cases` に未到達の間は、`threeway_2light_plus_2outlets` の `expectedEdgeCount=11` を固定しない。
+- `shouldReviewVisitedJunctions` の監視運用は維持するが、現段階では engine 改修判断より E2E 到達回復を優先する。
+
+注意点
+- `generateDiagram()` / `groupDevicesByControl()` / `judgeSleeve()` は変更しない。
+- graph / layout / wirePaths の外部契約は変更しない。
+- エンジン本体は変更せず、当面は `stability-test.ps1` のみで切り分ける。
+- `threeway_2light_plus_2outlets` の運用基準固定は observed 実測取得後に行う。

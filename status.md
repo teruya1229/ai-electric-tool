@@ -2,6 +2,23 @@
 
 ## AI電気施工アシスタント（更新: 108107e）
 
+## 2026-03-12 E2E切り分け更新（commit: 5bea800）
+
+### 今日やったこと
+- `stability-test.ps1` のみを継続更新し、E2E の UI init timeout / `data:,` 固着の切り分けを進めた
+- `Open-PageWithRetry` 前後で `url / window / handles` を採取できるようにした
+- navigate 呼び出しを curl ベースで固定採取し、`HTTP status / response body / stderr summary` を取得できるようにした
+- 実行結果として、`POST /session/{id}/url` の実応答主因が timeout 系であることを確認した
+- commit: `5bea800` まで反映済み
+
+### 現在の状態
+- 複線図エンジン安定化フェーズは完了
+- 現在は複雑分岐拡張フェーズに入る前の E2E 起動不良切り分け中
+- engine 本体ではなく `stability-test.ps1` 側の browser / navigate 起動不良が主対象
+- 最有力は「navigate 前は window 整合あり、`POST /session/{id}/url` の timeout 後に window が失効していく」パターン
+- `downstream_contract.cases` までは未到達
+- `threeway_2light_plus_2outlets` の observed edgeCount / roleSet は未取得のため、`expectedEdgeCount=11` は未固定
+
 ### 本日やったこと
 - wiring-diagram.js: 動的表示の日本語化（LABEL_JA追加）
 - ui-panel.js: 上UI → hidden UI 同期処理の3路選択強化
