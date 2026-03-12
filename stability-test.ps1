@@ -17,9 +17,46 @@ $listenerTask = $null
 $curlProbeBodyPath = $null
 $curlProbeTracePath = $null
 $chromeDriverLogPath = $null
+$script:runStartedAt = (Get-Date).ToString("o")
+$script:sourceCommit = $null
 
 function Log-Step([string]$step, [string]$phase = "start") {
   Write-Host "[stability-test] step=$step phase=$phase"
+}
+
+function Get-SourceCommitShort() {
+  try {
+    $value = (& git -C $script:projectRoot rev-parse --short HEAD 2>$null | Select-Object -First 1)
+    if ([string]::IsNullOrWhiteSpace($value)) { return $null }
+    return [string]$value.Trim()
+  } catch {
+    return $null
+  }
+}
+
+function Write-OutputJson([object]$payload, [int]$depth = 8, [bool]$markFinished = $false) {
+  $root = [ordered]@{
+    runStartedAt = $script:runStartedAt
+    runFinishedAt = if ($markFinished) { (Get-Date).ToString("o") } else { $null }
+    sourceCommit = if ([string]::IsNullOrWhiteSpace($script:sourceCommit)) { $null } else { $script:sourceCommit }
+  }
+
+  if ($payload -is [System.Collections.IDictionary]) {
+    foreach ($key in $payload.Keys) {
+      $root[$key] = $payload[$key]
+    }
+  } elseif ($null -ne $payload) {
+    $props = @($payload.PSObject.Properties)
+    if ($props.Count -gt 0) {
+      foreach ($prop in $props) {
+        $root[$prop.Name] = $prop.Value
+      }
+    } else {
+      $root["result"] = $payload
+    }
+  }
+
+  [IO.File]::WriteAllText($outputPath, ($root | ConvertTo-Json -Depth $depth), [Text.UTF8Encoding]::new($false))
 }
 
 function Get-ChromeDriverVersion() {
@@ -486,7 +523,7 @@ function Test-MinimalSessionExecute() {
       readyState = $result.readyState
       readyStateError = $result.readyStateError
     }
-    [IO.File]::WriteAllText($outputPath, ($readyStateSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    Write-OutputJson $readyStateSnapshot 8
 
     Log-Step "minimal execute probe" "start"
     $exec = Invoke-WebDriverExecuteWithFallback "minimal-const-1" "return 1;" @() 1 0
@@ -620,7 +657,7 @@ function Test-CapabilityBisect() {
       firstError = if ($firstError) { $firstError } else { "NONE" }
       results = $results
     }
-    [IO.File]::WriteAllText($outputPath, (@{ capabilityBisect = $partialBisect } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    Write-OutputJson @{ capabilityBisect = $partialBisect } 8
   }
   $rootCauseCandidate = if ($firstTimeout) { $firstTimeout } elseif ($firstError) { $firstError } else { "NONE" }
   if ($rootCauseCandidate -ne "NONE") {
@@ -681,7 +718,7 @@ function Test-PageLoadStrategyCompare() {
       errorType = $errorType
       errorMessage = $errorMessage
     }
-    [IO.File]::WriteAllText($outputPath, (@{ pageLoadStrategyCompare = @{ results = $results } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    Write-OutputJson @{ pageLoadStrategyCompare = @{ results = $results } } 8
   }
   $noneCase = $results | Where-Object { $_.label -eq "none" } | Select-Object -First 1
   $eagerCase = $results | Where-Object { $_.label -eq "eager" } | Select-Object -First 1
@@ -783,7 +820,7 @@ function Test-ChromeArgsSubtractCompare() {
       errorType = $errorType
       errorMessage = $errorMessage
     }
-    [IO.File]::WriteAllText($outputPath, (@{ chromeArgsSubtractCompare = @{ results = $results } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    Write-OutputJson @{ chromeArgsSubtractCompare = @{ results = $results } } 8
   }
   $baseCase = $results | Where-Object { $_.label -eq "base" } | Select-Object -First 1
   $baseResult = if ($baseCase.executeOk) { "OK" } else { "NG" }
@@ -1468,6 +1505,7 @@ $cases = @(
 )
 
 try {
+  $script:sourceCommit = Get-SourceCommitShort
   Get-ChromeDriverVersion | Out-Null
   Get-ChromeVersion | Out-Null
   Log-Step "port detect" "start"
@@ -1773,7 +1811,7 @@ try {
       currentUrlErrorMessage = $currentUrlErrorMessage
       timestamp = (Get-Date).ToString("o")
     }
-    [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $directNavigateDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    Write-OutputJson @{ preUiInitDiagnostic = $directNavigateDiagnostic } 8
     if (-not (Open-PageViaCurl $script:sessionId 25)) {
       throw "Minimal session page-open failed in e2e-only mode."
     }
@@ -1878,7 +1916,7 @@ try {
             elementCheckErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
             timestamp = (Get-Date).ToString("o")
           }
-          [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+          Write-OutputJson @{ preUiInitDiagnostic = $preUiInitDiagnostic } 8
           Write-Host "[stability-test] save pre-ui-init diagnostic to json"
           throw
         }
@@ -1931,7 +1969,7 @@ try {
       pageLoadStrategyCompare = $pageLoadStrategyCompare
       chromeArgsSubtractCompare = $chromeArgsSubtractCompare
     }
-    [IO.File]::WriteAllText($outputPath, ($compareSnapshot | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    Write-OutputJson $compareSnapshot 8
     Write-Host "セッション作成レスポンスから capabilities を取得しました"
     Write-Host "テスト結果を保存しました: $outputPath"
     $currentReadyStateProbe = $wdProbe.results | Where-Object { $_.label -eq "ready-state" } | Select-Object -First 1
@@ -2099,7 +2137,7 @@ try {
         elementCheckErrorMessage = if ($preDiag.error) { [string]$preDiag.error } else { "" }
         timestamp = (Get-Date).ToString("o")
       }
-      [IO.File]::WriteAllText($outputPath, (@{ preUiInitDiagnostic = $preUiInitDiagnostic } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+      Write-OutputJson @{ preUiInitDiagnostic = $preUiInitDiagnostic } 8
       Write-Host "[stability-test] save pre-ui-init diagnostic to json"
     }
     throw "UI init timeout."
@@ -2228,7 +2266,7 @@ try {
     }
   }
 
-  [IO.File]::WriteAllText($outputPath, ($result | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+  Write-OutputJson $result 10 $true
   Write-Host "Saved E2E results to $outputPath"
   Write-Host ("[E2E] success(before)={0} success(after)={1}" -f $(if ($successBeforePass) { "PASS" } else { "FAIL" }), $(if ($successAfterPass) { "PASS" } else { "FAIL" }))
   Write-Host ("[E2E] failure(before)={0} failure(after)={1}" -f $(if ($failureBeforePass) { "PASS" } else { "FAIL" }), $(if ($failureAfterPass) { "PASS" } else { "FAIL" }))
