@@ -725,6 +725,7 @@ visitedJunctions 再検討トリガー
 - その順序で欠番のない連続3実行を抽出して、`edge_count_match` 継続発生判定に用いる。
 - 正式参照キー: `selectedRuns` / `edgeCountFailuresInSelectedRuns` / `shouldReviewVisitedJunctions` / `reason`
 - 判定時は `shouldReviewVisitedJunctions=true` を最優先アラートとして扱う。
+- `shouldReviewVisitedJunctions=true` の場合は新規変更を止め、`failedChecks` / `expected` / `observed` / `runHistory` を先に確認する。
 - 補助参照キー: `runHistory`（最大20件、抽出根拠の確認用）
 - `missingRoles` または `junction_not_exposed_in_layout` の失敗が1回でも出た場合は、優先度高で即時調査する。
 - まず確認するログ項目: `failedChecks` / `expected` / `observed`
