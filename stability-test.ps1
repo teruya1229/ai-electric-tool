@@ -1688,6 +1688,9 @@ try {
     $postNavigateUrlErrorClass = $null
     $postNavigateUrlErrorMessage = $null
     $currentUrlMatchesTarget = $null
+    $currentUrlBeforeNavigate = $currentUrlValue
+    $sessionRecovered = $false
+    $sessionRecoveryReason = ""
     $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
     $windowCheckStdout = [string]$windowCheck.windowCheckStdout
     $windowCheckStderr = [string]$windowCheck.windowCheckStderr
@@ -1788,6 +1791,39 @@ try {
     if (($null -ne $navigateTargetUrl) -and ($null -ne $postNavigateUrlValue)) {
       $currentUrlMatchesTarget = [bool]([string]$navigateTargetUrl -eq [string]$postNavigateUrlValue)
     }
+    $urlIsDataBlank = (-not [string]::IsNullOrWhiteSpace([string]$currentUrlValue)) -and ([string]$currentUrlValue).StartsWith("data:")
+    $needsSessionRecovery =
+      ($navigateErrorClass -eq "no-such-window-or-404") -or
+      ($currentUrlErrorClass -eq "no-such-window-or-404") -or
+      ((($navigateErrorClass -eq "timeout") -or ($postNavigateUrlErrorClass -eq "timeout")) -and $urlIsDataBlank) -or
+      (-not $windowHandleFound)
+    if ($needsSessionRecovery) {
+      $sessionRecoveryReason = if ($urlIsDataBlank) { "navigate timeout on data url before UI init" } else { "session invalidated before UI init" }
+      Write-Host "[stability-test] session recovery start reason=$sessionRecoveryReason"
+      try { Remove-Session } catch {}
+      $minimalRecovered = New-WebDriverSessionMinimal
+      $script:sessionId = $minimalRecovered.sessionId
+      Log-SessionCapabilitiesSummary $minimalRecovered.response "minimal-e2e-recovered"
+      $checkedSessionId = [string]$script:sessionId
+      Wait-BrowserReady 500
+      $windowCheck = Invoke-WindowHandleCheck $script:sessionId
+      $currentUrlCheck = Invoke-CurrentUrlCheck $script:sessionId
+      $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
+      $windowCheckStdout = [string]$windowCheck.windowCheckStdout
+      $windowCheckStderr = [string]$windowCheck.windowCheckStderr
+      $windowCheckExitCode = $windowCheck.windowCheckExitCode
+      $windowHandleFound = [bool]$windowCheck.windowHandleFound
+      $windowHandleValue = if ($null -ne $windowCheck.windowHandleValue) { [string]$windowCheck.windowHandleValue } else { $null }
+      $windowHandleErrorClass = if ($null -ne $windowCheck.windowHandleErrorClass) { [string]$windowCheck.windowHandleErrorClass } else { $null }
+      $windowHandleErrorMessage = if ($null -ne $windowCheck.windowHandleErrorMessage) { [string]$windowCheck.windowHandleErrorMessage } else { $null }
+      $currentUrlCheckAttempted = [bool]$currentUrlCheck.currentUrlCheckAttempted
+      $currentUrlFound = [bool]$currentUrlCheck.currentUrlFound
+      $currentUrlValue = if ($null -ne $currentUrlCheck.currentUrlValue) { [string]$currentUrlCheck.currentUrlValue } else { $null }
+      $currentUrlErrorClass = if ($null -ne $currentUrlCheck.currentUrlErrorClass) { [string]$currentUrlCheck.currentUrlErrorClass } else { $null }
+      $currentUrlErrorMessage = if ($null -ne $currentUrlCheck.currentUrlErrorMessage) { [string]$currentUrlCheck.currentUrlErrorMessage } else { $null }
+      $sessionRecovered = $true
+      Write-Host "[stability-test] session recovery done currentUrl=$currentUrlValue windowHandleFound=$windowHandleFound"
+    }
     Wait-BrowserReady 350
     $hrefAfterDirectNavigate = ""
     try { $hrefAfterDirectNavigate = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-direct-navigate") } catch { $hrefAfterDirectNavigate = "" }
@@ -1839,6 +1875,7 @@ try {
     Wait-BrowserReady 300
     $hrefAfterCurlFileNavigate = ""
     try { $hrefAfterCurlFileNavigate = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-curl-file-navigate") } catch { $hrefAfterCurlFileNavigate = "" }
+    $preUiState = Get-UiInitDiagnostics
     $directNavigateDiagnostic = [ordered]@{
       phase = "direct-webdriver-navigate"
       navigateTargetUrl = $navigateTargetUrl
@@ -1893,14 +1930,29 @@ try {
       windowHandleErrorMessage = $windowHandleErrorMessage
       currentUrlCheckAttempted = $currentUrlCheckAttempted
       currentUrlFound = $currentUrlFound
+      currentUrlBeforeNavigate = $currentUrlBeforeNavigate
       currentUrlValue = $currentUrlValue
       currentUrlErrorClass = $currentUrlErrorClass
       currentUrlErrorMessage = $currentUrlErrorMessage
+      preUiHref = [string]$preUiState.href
+      preUiReadyState = [string]$preUiState.readyState
+      preUiTitle = [string]$preUiState.title
+      preUiBodyPreview = [string]$preUiState.bodyPreview
+      sessionRecovered = $sessionRecovered
+      sessionRecoveryReason = $sessionRecoveryReason
       timestamp = (Get-Date).ToString("o")
     }
     Write-OutputJson @{ preUiInitDiagnostic = $directNavigateDiagnostic } 8
     if (-not (Open-PageViaCurl $script:sessionId 25)) {
-      throw "Minimal session page-open failed in e2e-only mode."
+      Write-Host "[stability-test] minimal curl page-open failed; retry with recovered minimal session"
+      try { Remove-Session } catch {}
+      $minimalRecovered = New-WebDriverSessionMinimal
+      $script:sessionId = $minimalRecovered.sessionId
+      Log-SessionCapabilitiesSummary $minimalRecovered.response "minimal-e2e-recovered-open-page"
+      Wait-BrowserReady 500
+      if (-not (Open-PageViaCurl $script:sessionId 25)) {
+        throw "Minimal session page-open failed in e2e-only mode."
+      }
     }
     $hrefProbe = ""
     try { $hrefProbe = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-probe") } catch { $hrefProbe = "" }
@@ -1934,6 +1986,8 @@ try {
             phase = "pre-ui-init-diagnostic"
             href = [string]$preDiag.href
             readyState = [string]$preDiag.readyState
+            title = [string]$preDiag.title
+            bodyPreview = [string]$preDiag.bodyPreview
             hasProblemTextInput = [bool]$preDiag.hasProblemTextInput
             hasParseProblemButton = [bool]$preDiag.hasParseProblemButton
             hasParseResultPanel = [bool]$preDiag.hasParseResultPanel
@@ -2155,6 +2209,8 @@ try {
         phase = "pre-ui-init-diagnostic"
         href = [string]$preDiag.href
         readyState = [string]$preDiag.readyState
+        title = [string]$preDiag.title
+        bodyPreview = [string]$preDiag.bodyPreview
         hasProblemTextInput = [bool]$preDiag.hasProblemTextInput
         hasParseProblemButton = [bool]$preDiag.hasParseProblemButton
         hasParseResultPanel = [bool]$preDiag.hasParseResultPanel
