@@ -1,5 +1,7 @@
 # AI電気施工アシスタント Project Start
 
+変更前チェック: downstream_contract運用は `handoff.md` の「downstream_contract_pass gate 運用」を必ず参照する。
+
 このファイルは、新しいGPTチャットを開始するときに、そのまま貼って使う統合引継ぎファイルである。
 
 --------------------------------
