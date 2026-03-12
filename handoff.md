@@ -684,7 +684,7 @@ internal junction を内部利用しつつ、返却 public graph は従来互換
 ## 2026-03-12 downstream_contract_pass gate 運用
 
 目的  
-internal junction 正規化の回帰を、3ケース固定で毎回検知する。
+internal junction 正規化の回帰を、固定ケース群で毎回検知する。
 
 前提  
 CI workflow は未導入。  
@@ -697,10 +697,12 @@ CI workflow は未導入。
    - `assertions.downstream_contract_pass = true`
    - `assertions.overall_pass = true`
 
-判定基準（3ケース固定）
+判定基準（固定ケース）
 - 片切1灯
 - 片切+コンセント
 - 3路1灯
+- 3路2灯
+- 3路2灯+コンセント
 
 各ケースで確認される項目
 - role set
@@ -711,3 +713,8 @@ CI workflow は未導入。
 失敗時
 - `.tmp_case_results.json` の `downstream_contract.cases[].failedChecks` を一次原因として確認
 - `expected` と `observed` の差分を優先して修正箇所を切り分ける
+
+visitedJunctions 再検討トリガー
+- 複数分岐ケース（3路2灯+コンセント など）で `edge_count_match` の失敗が継続発生した場合、visitedJunctions 再設計を検討する。
+- `missingRoles` または `junction_not_exposed_in_layout` の失敗が1回でも出た場合は、優先度高で即時調査する。
+- まず確認するログ項目: `failedChecks` / `expected` / `observed`
