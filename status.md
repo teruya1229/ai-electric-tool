@@ -2,6 +2,27 @@
 
 ## AI電気施工アシスタント（更新: 108107e）
 
+## 2026-03-13 E2E repeat判定検証（commit: 7c978fb）
+
+### 今日やったこと
+- `stability-test.ps1` の既存repeatラッパーを再実行し、`.tmp_case_results_repeat.json` の再生成を確認
+- `mixedWebdriverErrorDetected` / `mixedCount` / `timeoutOnlyCount` / `allTimeoutOnly` を再確認
+- `preUiInitDiagnostic.runType` と `webdriverError*` の対応をrun単位で確認（全runで `timeout_only`）
+- repeat運用を外から調整しやすくするため、`STABILITY_REPEAT_COUNT` 読み取りを最小差分で追加
+
+### 現在の状態
+- 最新repeat結果は `repeatCount=5`
+- `mixedWebdriverErrorDetected=false`
+- `mixedCount=0`
+- `timeoutOnlyCount=5`
+- `allTimeoutOnly=true`
+- 現時点では `mixed_webdriver_error` は未再現で、観測結果は all timeout_only 継続
+- `runType` 判定仕様（webdriverError系が空なら `timeout_only`、非空があれば `mixed_webdriver_error`）は維持済み
+
+### 次にやること
+- `STABILITY_REPEAT_COUNT` を使って追加試行を継続し、`mixedWebdriverErrorDetected=true` run の初回観測を優先する
+- mixed発生時に該当runの `preUiInitDiagnostic.runType=mixed_webdriver_error` を固定確認する
+
 ## 2026-03-12 E2E切り分け更新（commit: 5bea800）
 
 ### 今日やったこと

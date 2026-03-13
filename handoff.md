@@ -749,3 +749,20 @@ visitedJunctions 再検討トリガー
 - graph / layout / wirePaths の外部契約は変更しない。
 - エンジン本体は変更せず、当面は `stability-test.ps1` のみで切り分ける。
 - `threeway_2light_plus_2outlets` の運用基準固定は observed 実測取得後に行う。
+
+---
+
+## 2026-03-13 次にやるべき1手（repeat観測継続）
+- `stability-test.ps1` を既存運用のまま再実行し、`.tmp_case_results_repeat.json` で `mixedWebdriverErrorDetected=true` の初回観測を狙う。
+- 追加した `STABILITY_REPEAT_COUNT` を使って試行回数を外から増減し、`.tmp_case_results.json` の既存構造は変更しない。
+- mixedが出たrunでは `webdriverError / webdriverError1 / webdriverError2` の少なくとも1つが非空で、`preUiInitDiagnostic.runType=mixed_webdriver_error` になっていることを確認する。
+
+判断基準
+- 最新repeat結果が `mixedWebdriverErrorDetected=false` かつ `allTimeoutOnly=true` の場合は「現時点では all timeout_only 継続」と判定する。
+- `mixedWebdriverErrorDetected=true` が1回でも出た場合は、該当runの `webdriverError*` 非空と `runType=mixed_webdriver_error` の一致を確認して運用を固定する。
+- `runType` 判定仕様は変更しない（webdriverError系が全部 null/空なら `timeout_only`、いずれか非空なら `mixed_webdriver_error`）。
+
+注意点
+- 変更は `stability-test.ps1` のみを優先し、エンジン本体（parser / groups / circuits / graph / layout / wirePaths）は変更しない。
+- `generateDiagram()` / `groupDevicesByControl()` / `judgeSleeve()` は変更しない。
+- 追加集計は `.tmp_case_results_repeat.json` 側に閉じ、`.tmp_case_results.json` の外部契約を維持する。

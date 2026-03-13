@@ -23,6 +23,12 @@ $script:repeatSummaryPath = Join-Path $script:projectRoot ".tmp_case_results_rep
 
 if (-not $env:STABILITY_REPEAT_CHILD) {
   $repeatCount = 5
+  if (-not [string]::IsNullOrWhiteSpace($env:STABILITY_REPEAT_COUNT)) {
+    try {
+      $parsedRepeatCount = [int]$env:STABILITY_REPEAT_COUNT
+      if ($parsedRepeatCount -gt 0) { $repeatCount = $parsedRepeatCount }
+    } catch {}
+  }
   $runs = @()
   for ($i = 1; $i -le $repeatCount; $i++) {
     Write-Host "[stability-test] repeat-run start index=$i/$repeatCount"
