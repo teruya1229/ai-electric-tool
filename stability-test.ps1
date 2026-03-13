@@ -2143,6 +2143,13 @@ try {
     $hrefAfterCurlFileNavigate = ""
     try { $hrefAfterCurlFileNavigate = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-curl-file-navigate") } catch { $hrefAfterCurlFileNavigate = "" }
     $preUiState = Get-UiInitDiagnostics
+    $runType = "timeout_only"
+    foreach ($we in @($webdriverError, $webdriverError1, $webdriverError2)) {
+      if (-not [string]::IsNullOrWhiteSpace([string]$we)) {
+        $runType = "mixed_webdriver_error"
+        break
+      }
+    }
     $directNavigateDiagnostic = [ordered]@{
       phase = "direct-webdriver-navigate"
       navigateTargetUrl = $navigateTargetUrl
@@ -2159,6 +2166,7 @@ try {
       navigateStderrSummary = $navigateStderrSummary
       navigateTransportUsed = $navigateTransportUsed
       webdriverError = $webdriverError
+      runType = $runType
       postNavigateUrlCheckAttempted = $postNavigateUrlCheckAttempted
       postNavigateUrlFound = $postNavigateUrlFound
       postNavigateUrlValue = $postNavigateUrlValue
@@ -2309,6 +2317,7 @@ try {
             navigateStderrSummary = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateStderrSummary } else { "" }
             navigateTransportUsed = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateTransportUsed } else { "" }
             webdriverError = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.webdriverError) { [string]$directNavigateDiagnostic.webdriverError } else { $null }
+            runType = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.runType) { [string]$directNavigateDiagnostic.runType } else { "timeout_only" }
             postNavigateUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlCheckAttempted } else { $false }
             postNavigateUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlFound } else { $false }
             postNavigateUrlValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.postNavigateUrlValue) { [string]$directNavigateDiagnostic.postNavigateUrlValue } else { $null }
@@ -2564,6 +2573,7 @@ try {
         navigateStderrSummary = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateStderrSummary } else { "" }
         navigateTransportUsed = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateTransportUsed } else { "" }
         webdriverError = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.webdriverError) { [string]$directNavigateDiagnostic.webdriverError } else { $null }
+        runType = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.runType) { [string]$directNavigateDiagnostic.runType } else { "timeout_only" }
         postNavigateUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlCheckAttempted } else { $false }
         postNavigateUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlFound } else { $false }
         postNavigateUrlValue = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.postNavigateUrlValue) { [string]$directNavigateDiagnostic.postNavigateUrlValue } else { $null }
