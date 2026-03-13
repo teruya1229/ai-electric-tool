@@ -1106,9 +1106,18 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
       if ($json -and $json.value -and $json.value.error) {
         $wdError = [string]$json.value.error
         if ($json.value.message) { $wdMessage = [string]$json.value.message }
+      } elseif ($json -and $json.error) {
+        # Fallback for non-W3C style error payloads.
+        $wdError = [string]$json.error
+        if ($json.message) { $wdMessage = [string]$json.message }
       }
     }
   } catch {}
+  if ([string]::IsNullOrWhiteSpace($wdError) -and (-not [string]::IsNullOrWhiteSpace($result.responseBody))) {
+    if ($result.responseBody -match '"error"\s*:\s*"([^"]+)"') {
+      $wdError = [string]$Matches[1]
+    }
+  }
   $result.webdriverError = $wdError
   if ($wdError) {
     $wdErrorLower = $wdError.ToLowerInvariant()
