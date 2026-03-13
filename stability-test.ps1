@@ -19,6 +19,53 @@ $curlProbeTracePath = $null
 $chromeDriverLogPath = $null
 $script:runStartedAt = (Get-Date).ToString("o")
 $script:sourceCommit = $null
+$script:repeatSummaryPath = Join-Path $script:projectRoot ".tmp_case_results_repeat.json"
+
+if (-not $env:STABILITY_REPEAT_CHILD) {
+  $repeatCount = 5
+  $runs = @()
+  for ($i = 1; $i -le $repeatCount; $i++) {
+    Write-Host "[stability-test] repeat-run start index=$i/$repeatCount"
+    $env:STABILITY_REPEAT_CHILD = "1"
+    try {
+      & powershell -ExecutionPolicy Bypass -File $MyInvocation.MyCommand.Path
+    } catch {}
+    $exitCode = $LASTEXITCODE
+    $diag = $null
+    if (Test-Path $outputPath -PathType Leaf) {
+      try {
+        $json = Get-Content -Raw -Path $outputPath | ConvertFrom-Json -Depth 20
+        $diag = $json.preUiInitDiagnostic
+      } catch { $diag = $null }
+    }
+    $we = if ($diag -and $null -ne $diag.webdriverError) { [string]$diag.webdriverError } else { $null }
+    $we1 = if ($diag -and $null -ne $diag.webdriverError1) { [string]$diag.webdriverError1 } else { $null }
+    $we2 = if ($diag -and $null -ne $diag.webdriverError2) { [string]$diag.webdriverError2 } else { $null }
+    $runType = if ($diag -and $diag.runType) { [string]$diag.runType } else { if (([string]::IsNullOrWhiteSpace($we)) -and ([string]::IsNullOrWhiteSpace($we1)) -and ([string]::IsNullOrWhiteSpace($we2))) { "timeout_only" } else { "mixed_webdriver_error" } }
+    $runs += [ordered]@{
+      runIndex = $i
+      exitCode = $exitCode
+      runType = $runType
+      webdriverError = $we
+      webdriverError1 = $we1
+      webdriverError2 = $we2
+    }
+  }
+  $mixedCount = @($runs | Where-Object { $_.runType -eq "mixed_webdriver_error" }).Count
+  $summary = [ordered]@{
+    repeatCount = $repeatCount
+    mixedWebdriverErrorDetected = ($mixedCount -gt 0)
+    mixedCount = $mixedCount
+    timeoutOnlyCount = @($runs | Where-Object { $_.runType -eq "timeout_only" }).Count
+    allTimeoutOnly = ($mixedCount -eq 0)
+    runs = $runs
+    generatedAt = (Get-Date).ToString("o")
+  }
+  ($summary | ConvertTo-Json -Depth 8) | Set-Content -Path $script:repeatSummaryPath -Encoding UTF8
+  Write-Host "[stability-test] repeat-run summary written path=$script:repeatSummaryPath mixed=$($summary.mixedWebdriverErrorDetected)"
+  Remove-Item Env:STABILITY_REPEAT_CHILD -ErrorAction SilentlyContinue
+  return
+}
 
 function Log-Step([string]$step, [string]$phase = "start") {
   Write-Host "[stability-test] step=$step phase=$phase"
