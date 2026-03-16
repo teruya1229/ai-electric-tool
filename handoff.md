@@ -827,3 +827,18 @@ visitedJunctions 再検討トリガー
 - エンジン本体（parser / groups / circuits / graph / layout / wirePaths）は変更しない。
 - `generateDiagram()` / `groupDevicesByControl()` / `judgeSleeve()` は変更しない。
 - `.tmp_case_results.json` の既存構造は維持し、追加集計は `.tmp_case_results_repeat.json` 側に閉じる。
+
+---
+
+## 2026-03-16 次にやるべき1手（timeout_only前提の次切り分け）
+- 同条件の単純repeat追加ではなく、`timeout_only` 前提で次の切り分け（timeout主因の分解）に進む。
+
+判断基準
+- 現時点では `mixed_webdriver_error` は観測できていない（`repeatCount=10`, `mixedCount=0`）。
+- 同一条件での主因は `timeout_only` 側に寄っている扱いとする。
+- 今後 mixed を追う場合は、同条件の単純repeatではなく、別条件・別観測設計で実施する。
+
+注意点
+- エンジン本体は未変更（parser / groups / circuits / graph / layout / wirePaths）。
+- `.tmp_case_results.json` の既存構造は維持する。
+- 追加集計は `.tmp_case_results_repeat.json` 側に閉じている。

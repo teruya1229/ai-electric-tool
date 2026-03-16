@@ -2,6 +2,24 @@
 
 ## AI電気施工アシスタント（更新: 108107e）
 
+## 2026-03-16 E2E repeat観測固定化（commit: pending）
+
+### 今日やったこと
+- `status.md` / `handoff.md` を再読して前提を確認
+- `.tmp_case_results_repeat.json` の直近結果を参照し、`repeatCount=10` 観測を再確認
+- 追加実行・コード変更は行わず、既存観測結果の固定化のみ実施
+- `repeatCount=10` 完走・`allTimeoutOnly=true`・mixed未発生を次の切り分け前提として整理
+
+### 現在の状態
+- 直近repeat結果は `repeatCount=10`（完走済み）
+- `mixedWebdriverErrorDetected=false`
+- `mixedCount=0`
+- `timeoutOnlyCount=10`
+- `allTimeoutOnly=true`
+- 全runで `runType=timeout_only`（`preUiInitDiagnostic.runType` 相当）
+- `webdriverError / webdriverError1 / webdriverError2` は全runで `null`
+- 同条件の観測では主因は timeout_only 側に寄っている前提で次の切り分けへ進む
+
 ## 2026-03-16 E2E repeat観測更新4（commit: pending）
 
 ### 今日やったこと
