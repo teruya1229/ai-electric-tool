@@ -2,6 +2,24 @@
 
 ## AI電気施工アシスタント（更新: 108107e）
 
+## 2026-03-16 E2E repeat観測更新（commit: pending）
+
+### 今日やったこと
+- `status.md` / `handoff.md` を読み、repeat観測の前提を再確認
+- `stability-test.ps1` の既存repeatラッパー（`STABILITY_REPEAT_COUNT`）をコード変更なしで再実行
+- `STABILITY_REPEAT_COUNT=1 -> 2 -> 3` を段階実行し、各回で `.tmp_case_results_repeat.json` を確認
+- `STABILITY_REPEAT_COUNT=10` は長時間停止傾向のため途中中断（観測優先で完走可能な段階値に切替）
+- 各段階で `mixedWebdriverErrorDetected` / `mixedCount` / `timeoutOnlyCount` / `allTimeoutOnly` を確認
+
+### 現在の状態
+- 最新repeat結果は `repeatCount=3`
+- `mixedWebdriverErrorDetected=false`
+- `mixedCount=0`
+- `timeoutOnlyCount=3`
+- `allTimeoutOnly=true`
+- 全runで `runType=timeout_only`、`webdriverError / webdriverError1 / webdriverError2` はすべて `null`
+- 現時点では `mixed_webdriver_error` の初回観測runは未検出
+
 ## 2026-03-13 E2E repeat判定検証（commit: 7c978fb）
 
 ### 今日やったこと

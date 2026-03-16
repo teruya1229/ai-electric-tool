@@ -766,3 +766,18 @@ visitedJunctions 再検討トリガー
 - 変更は `stability-test.ps1` のみを優先し、エンジン本体（parser / groups / circuits / graph / layout / wirePaths）は変更しない。
 - `generateDiagram()` / `groupDevicesByControl()` / `judgeSleeve()` は変更しない。
 - 追加集計は `.tmp_case_results_repeat.json` 側に閉じ、`.tmp_case_results.json` の外部契約を維持する。
+
+---
+
+## 2026-03-16 次にやるべき1手（repeat観測継続）
+- `stability-test.ps1` の既存repeatラッパーをそのまま使い、`STABILITY_REPEAT_COUNT=5` を次の観測値として実行する（コード変更なし）。
+
+判断基準
+- `.tmp_case_results_repeat.json` の `mixedWebdriverErrorDetected=true` が1回でも出れば、該当runの `runIndex` と `runType`（= `preUiInitDiagnostic.runType`）、`webdriverError*` を記録して初回観測成立とする。
+- `mixedWebdriverErrorDetected=false` かつ `allTimeoutOnly=true` の場合は、all timeout_only 継続として次段階に進む。
+- 既存確認済み（`repeatCount=1/2/3`）はいずれも `mixedCount=0` / `timeoutOnlyCount=repeatCount`。
+
+注意点
+- `STABILITY_REPEAT_COUNT=10` は現環境で長時間停止傾向があるため、まずは完走性の高い段階値（5前後）を優先する。
+- エンジン本体は変更しない。`stability-test.ps1` も今回は未変更のまま運用する。
+- `.tmp_case_results.json` の既存構造は維持し、追加観測は `.tmp_case_results_repeat.json` 側のみで扱う。
