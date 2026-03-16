@@ -2,6 +2,33 @@
 
 ## AI電気施工アシスタント（更新: 108107e）
 
+## 2026-03-16 E2E compare観測（最小executeあり/なし）（commit: pending）
+
+### 今日やったこと
+- `status.md` / `handoff.md` を再読し、timeout_only 前提の次切り分け方針を確認
+- `stability-test.ps1` の compare モードを最小差分で拡張し、比較軸 `最小 execute あり / なし` を追加
+- compare は親実行時かつ明示フラグ（`STABILITY_COMPARE_EXECUTE_MODES=1`）時のみ動作するようにした
+- 既存 `preUiInitDiagnostic` と比較しやすい項目（`runType`, `webdriverError*`, `hrefBeforeUiInit`, `execute*`）を比較JSONへ出力
+- compare を1回実行し、`.tmp_case_results_compare.json` の結果を確認
+
+### 現在の状態
+- compare 出力: `.tmp_case_results_compare.json`
+- `withExecute`:
+  - `runType=timeout_only`
+  - `webdriverError / webdriverError1 / webdriverError2 = null / null / null`
+  - `executeAttempted=true`
+  - `executeSucceeded=true`
+  - `executeResult="1"`
+  - `executeErrorClass=null`
+- `withoutExecute`:
+  - `runType=mixed_webdriver_error`
+  - `webdriverError / webdriverError1 / webdriverError2 = null / null / "no such window"`
+  - `executeAttempted=false`
+  - `executeSucceeded=false`
+  - `executeResult=null`
+  - `executeErrorClass=null`
+- 差分要約は `runTypeChanged=true` と `webdriverError2Changed=true` を確認
+
 ## 2026-03-16 E2E compare観測（navigateあり/なし）（commit: pending）
 
 ### 今日やったこと

@@ -857,3 +857,18 @@ visitedJunctions 再検討トリガー
 - エンジン本体は未変更（parser / groups / circuits / graph / layout / wirePaths）。
 - `stability-test.ps1` の既存 repeat ロジック・既存 runType 判定・`.tmp_case_results.json` 構造は維持する。
 - 追加比較結果は `.tmp_case_results_compare.json` に閉じる。
+
+---
+
+## 2026-03-16 次にやるべき1手（execute compare結果の再現確認）
+- `最小 execute あり / なし` compare（`.tmp_case_results_compare.json`）を同条件で再実行し、`withoutExecute` 側の `webdriverError2=no such window` / `runType=mixed_webdriver_error` が再現するかを確認する。
+
+判断基準
+- 直近 compare では `withExecute` が `runType=timeout_only` かつ `executeSucceeded=true`、`withoutExecute` が `runType=mixed_webdriver_error`（`webdriverError2=no such window`）を示した。
+- 次回も同傾向が再現する場合は、timeout主因の前段として「最小 execute 到達の有無」が寄与している可能性を優先仮説として扱う。
+- 再現しない場合は、単発ノイズの可能性を残し、同一軸で追加1回のみ再確認してから次軸へ進む。
+
+注意点
+- エンジン本体は未変更（parser / groups / circuits / graph / layout / wirePaths）。
+- `stability-test.ps1` の既存 repeat ロジック・既存 runType 判定・`.tmp_case_results.json` 構造は維持する。
+- compare 結果は `.tmp_case_results_compare.json` に閉じ、他JSONの契約は変更しない。

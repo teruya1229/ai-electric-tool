@@ -129,6 +129,102 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_NAV_MODES -e
   return
 }
 
+if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_EXECUTE_MODES -eq "1")) {
+  function Get-ComparePreUiSnapshotForExecute() {
+    if (-not (Test-Path $outputPath -PathType Leaf)) { return $null }
+    try {
+      $raw = Get-Content -Raw -Path $outputPath
+      if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+      $runType = $null
+      $webdriverError = $null
+      $webdriverError1 = $null
+      $webdriverError2 = $null
+      $hrefBeforeUiInit = $null
+      $executeAttempted = $false
+      $executeSucceeded = $false
+      $executeResult = $null
+      $executeErrorClass = $null
+
+      if ($raw -match '"runType"\s*:\s*"([^"]*)"') { $runType = [string]$Matches[1] }
+      if ($raw -match '"webdriverError"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError = [string]$Matches[2] } }
+      if ($raw -match '"webdriverError1"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError1 = [string]$Matches[2] } }
+      if ($raw -match '"webdriverError2"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError2 = [string]$Matches[2] } }
+      if ($raw -match '"hrefBeforeUiInit"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $hrefBeforeUiInit = [string]$Matches[2] } }
+      if ($raw -match '"executeAttempted"\s*:\s*(true|false)') { $executeAttempted = ([string]$Matches[1] -eq "true") }
+      if ($raw -match '"executeSucceeded"\s*:\s*(true|false)') { $executeSucceeded = ([string]$Matches[1] -eq "true") }
+      if ($raw -match '"executeResult"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $executeResult = [string]$Matches[2] } }
+      if ($raw -match '"executeErrorClass"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $executeErrorClass = [string]$Matches[2] } }
+
+      return [ordered]@{
+        runType = $runType
+        webdriverError = $webdriverError
+        webdriverError1 = $webdriverError1
+        webdriverError2 = $webdriverError2
+        hrefBeforeUiInit = $hrefBeforeUiInit
+        executeAttempted = $executeAttempted
+        executeSucceeded = $executeSucceeded
+        executeResult = $executeResult
+        executeErrorClass = $executeErrorClass
+      }
+    } catch {
+      return $null
+    }
+  }
+
+  function Invoke-CompareExecuteChildRun([bool]$withExecute) {
+    if ($withExecute) {
+      $env:STABILITY_COMPARE_WITH_EXECUTE = "1"
+    } else {
+      Remove-Item Env:STABILITY_COMPARE_WITH_EXECUTE -ErrorAction SilentlyContinue
+    }
+    $env:STABILITY_REPEAT_CHILD = "1"
+    $env:STABILITY_COMPARE_CHILD = "1"
+    try {
+      & powershell -ExecutionPolicy Bypass -File $script:selfPath | Out-Null
+    } catch {}
+    $exitCode = $LASTEXITCODE
+    $diag = $null
+    for ($attempt = 1; $attempt -le 10; $attempt++) {
+      $diag = Get-ComparePreUiSnapshotForExecute
+      if ($diag) { break }
+      Start-Sleep -Milliseconds 200
+    }
+    return [ordered]@{
+      withExecute = $withExecute
+      exitCode = $exitCode
+      diagnostic = $diag
+    }
+  }
+
+  Write-Host "[stability-test] compare-run start axis=minimal-execute with/without"
+  $withExecute = Invoke-CompareExecuteChildRun $true
+  $withoutExecute = Invoke-CompareExecuteChildRun $false
+  $withDiag = $withExecute.diagnostic
+  $withoutDiag = $withoutExecute.diagnostic
+  $diffSummary = [ordered]@{
+    runTypeChanged = ([string]$withDiag.runType -ne [string]$withoutDiag.runType)
+    webdriverErrorChanged = ([string]$withDiag.webdriverError -ne [string]$withoutDiag.webdriverError)
+    webdriverError1Changed = ([string]$withDiag.webdriverError1 -ne [string]$withoutDiag.webdriverError1)
+    webdriverError2Changed = ([string]$withDiag.webdriverError2 -ne [string]$withoutDiag.webdriverError2)
+    hrefBeforeUiInitChanged = ([string]$withDiag.hrefBeforeUiInit -ne [string]$withoutDiag.hrefBeforeUiInit)
+    executeErrorClassChanged = ([string]$withDiag.executeErrorClass -ne [string]$withoutDiag.executeErrorClass)
+    withExecuteAttempted = if ($null -ne $withDiag) { [bool]$withDiag.executeAttempted } else { $false }
+    withoutExecuteAttempted = if ($null -ne $withoutDiag) { [bool]$withoutDiag.executeAttempted } else { $false }
+  }
+  $compareSummary = [ordered]@{
+    comparedAt = (Get-Date).ToString("o")
+    withExecute = $withExecute
+    withoutExecute = $withoutExecute
+    diffSummary = $diffSummary
+  }
+  ($compareSummary | ConvertTo-Json -Depth 10) | Set-Content -Path $script:compareSummaryPath -Encoding UTF8
+  Write-Host "[stability-test] compare-run summary written path=$script:compareSummaryPath"
+  Remove-Item Env:STABILITY_REPEAT_CHILD -ErrorAction SilentlyContinue
+  Remove-Item Env:STABILITY_COMPARE_CHILD -ErrorAction SilentlyContinue
+  Remove-Item Env:STABILITY_COMPARE_WITH_EXECUTE -ErrorAction SilentlyContinue
+  return
+}
+
 if (-not $env:STABILITY_REPEAT_CHILD) {
   $repeatCount = 5
   if (-not [string]::IsNullOrWhiteSpace($env:STABILITY_REPEAT_COUNT)) {
@@ -1984,6 +2080,12 @@ try {
     $navigateStderrSummary = ""
     $navigateTransportUsed = "curl"
     $webdriverError = $null
+    $executeAttempted = $false
+    $executeSucceeded = $false
+    $executeResult = $null
+    $executeErrorClass = $null
+    $executeErrorMessage = ""
+    $compareWithExecute = ($env:STABILITY_COMPARE_WITH_EXECUTE -eq "1")
     $navigateAttempted = $false
     $skipDirectNavigateForCompare = ($env:STABILITY_COMPARE_SKIP_NAVIGATE -eq "1")
     $curlNavigateAttempted = $false
@@ -2077,6 +2179,25 @@ try {
     $currentUrlValue = if ($null -ne $currentUrlCheck.currentUrlValue) { [string]$currentUrlCheck.currentUrlValue } else { $null }
     $currentUrlErrorClass = if ($null -ne $currentUrlCheck.currentUrlErrorClass) { [string]$currentUrlCheck.currentUrlErrorClass } else { $null }
     $currentUrlErrorMessage = if ($null -ne $currentUrlCheck.currentUrlErrorMessage) { [string]$currentUrlCheck.currentUrlErrorMessage } else { $null }
+    if ($compareWithExecute) {
+      Write-Host "[stability-test] compare execute probe before direct navigate"
+      $executeAttempted = $true
+      try {
+        $executeRaw = Exec-Script "return 1;" @() "compare-minimal-execute"
+        $executeResult = [string]$executeRaw
+        $executeSucceeded = ($executeResult -eq "1")
+      } catch {
+        $executeErrorMessage = [string]$_.Exception.Message
+        $executeErrorLower = $executeErrorMessage.ToLowerInvariant()
+        if ($executeErrorLower -match "timeout") {
+          $executeErrorClass = "timeout"
+        } elseif (($executeErrorLower -match "no such window") -or ($executeErrorLower -match "404")) {
+          $executeErrorClass = "no-such-window-or-404"
+        } else {
+          $executeErrorClass = "other"
+        }
+      }
+    }
     Write-Host "[stability-test] check chromedriver status"
     $chromeStatusOutPath = [IO.Path]::GetTempFileName()
     $chromeStatusErrPath = [IO.Path]::GetTempFileName()
@@ -2354,6 +2475,11 @@ try {
       navigateStderrSummary = $navigateStderrSummary
       navigateTransportUsed = $navigateTransportUsed
       webdriverError = $webdriverError
+      executeAttempted = $executeAttempted
+      executeSucceeded = $executeSucceeded
+      executeResult = $executeResult
+      executeErrorClass = $executeErrorClass
+      executeErrorMessage = $executeErrorMessage
       runType = $runType
       postNavigateUrlCheckAttempted = $postNavigateUrlCheckAttempted
       postNavigateUrlFound = $postNavigateUrlFound
@@ -2505,6 +2631,11 @@ try {
             navigateStderrSummary = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateStderrSummary } else { "" }
             navigateTransportUsed = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateTransportUsed } else { "" }
             webdriverError = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.webdriverError) { [string]$directNavigateDiagnostic.webdriverError } else { $null }
+            executeAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.executeAttempted } else { $false }
+            executeSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.executeSucceeded } else { $false }
+            executeResult = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeResult) { [string]$directNavigateDiagnostic.executeResult } else { $null }
+            executeErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeErrorClass) { [string]$directNavigateDiagnostic.executeErrorClass } else { $null }
+            executeErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeErrorMessage) { [string]$directNavigateDiagnostic.executeErrorMessage } else { "" }
             runType = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.runType) { [string]$directNavigateDiagnostic.runType } else { "timeout_only" }
             postNavigateUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlCheckAttempted } else { $false }
             postNavigateUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlFound } else { $false }
@@ -2761,6 +2892,11 @@ try {
         navigateStderrSummary = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateStderrSummary } else { "" }
         navigateTransportUsed = if ($directNavigateDiagnostic) { [string]$directNavigateDiagnostic.navigateTransportUsed } else { "" }
         webdriverError = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.webdriverError) { [string]$directNavigateDiagnostic.webdriverError } else { $null }
+        executeAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.executeAttempted } else { $false }
+        executeSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.executeSucceeded } else { $false }
+        executeResult = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeResult) { [string]$directNavigateDiagnostic.executeResult } else { $null }
+        executeErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeErrorClass) { [string]$directNavigateDiagnostic.executeErrorClass } else { $null }
+        executeErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeErrorMessage) { [string]$directNavigateDiagnostic.executeErrorMessage } else { "" }
         runType = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.runType) { [string]$directNavigateDiagnostic.runType } else { "timeout_only" }
         postNavigateUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlCheckAttempted } else { $false }
         postNavigateUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlFound } else { $false }
