@@ -781,3 +781,18 @@ visitedJunctions 再検討トリガー
 - `STABILITY_REPEAT_COUNT=10` は現環境で長時間停止傾向があるため、まずは完走性の高い段階値（5前後）を優先する。
 - エンジン本体は変更しない。`stability-test.ps1` も今回は未変更のまま運用する。
 - `.tmp_case_results.json` の既存構造は維持し、追加観測は `.tmp_case_results_repeat.json` 側のみで扱う。
+
+---
+
+## 2026-03-16 次にやるべき1手（repeat観測継続2）
+- `STABILITY_REPEAT_COUNT=8` をコード変更なしで実行し、`mixedWebdriverErrorDetected=true` の初回観測有無を継続確認する。
+
+判断基準
+- `mixedWebdriverErrorDetected=true` が出たら、該当runの `runIndex` / `runType`（= `preUiInitDiagnostic.runType`）/ `webdriverError*` を固定記録して初回観測成立とする。
+- `mixedWebdriverErrorDetected=false` かつ `allTimeoutOnly=true` の場合は、all timeout_only 継続として次段階へ進む。
+- 本日時点の確定値（`repeatCount=5`）は `mixedCount=0` / `timeoutOnlyCount=5` / `allTimeoutOnly=true`。
+
+注意点
+- エンジン本体（parser / groups / circuits / graph / layout / wirePaths）は変更しない。
+- `generateDiagram()` / `groupDevicesByControl()` / `judgeSleeve()` は変更しない。
+- `.tmp_case_results.json` の既存構造は維持し、追加集計は `.tmp_case_results_repeat.json` 側に閉じる。
