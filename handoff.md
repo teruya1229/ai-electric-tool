@@ -796,3 +796,18 @@ visitedJunctions 再検討トリガー
 - エンジン本体（parser / groups / circuits / graph / layout / wirePaths）は変更しない。
 - `generateDiagram()` / `groupDevicesByControl()` / `judgeSleeve()` は変更しない。
 - `.tmp_case_results.json` の既存構造は維持し、追加集計は `.tmp_case_results_repeat.json` 側に閉じる。
+
+---
+
+## 2026-03-16 次にやるべき1手（repeat観測継続3）
+- `STABILITY_REPEAT_COUNT=10` をコード変更なしで再実行し、`mixedWebdriverErrorDetected=true` の初回観測有無を継続確認する。
+
+判断基準
+- `mixedWebdriverErrorDetected=true` が出た場合は、該当runの `runIndex` / `runType`（= `preUiInitDiagnostic.runType`）/ `webdriverError*` を固定記録して初回観測成立とする。
+- `mixedWebdriverErrorDetected=false` かつ `allTimeoutOnly=true` の場合は、all timeout_only 継続として次段階を検討する。
+- 本日時点の確定値（`repeatCount=8`）は `mixedCount=0` / `timeoutOnlyCount=8` / `allTimeoutOnly=true`。
+
+注意点
+- エンジン本体（parser / groups / circuits / graph / layout / wirePaths）は変更しない。
+- `generateDiagram()` / `groupDevicesByControl()` / `judgeSleeve()` は変更しない。
+- `.tmp_case_results.json` の既存構造は維持し、追加集計は `.tmp_case_results_repeat.json` 側に閉じる。
