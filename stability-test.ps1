@@ -19,7 +19,115 @@ $curlProbeTracePath = $null
 $chromeDriverLogPath = $null
 $script:runStartedAt = (Get-Date).ToString("o")
 $script:sourceCommit = $null
+$script:selfPath = $MyInvocation.MyCommand.Path
 $script:repeatSummaryPath = Join-Path $script:projectRoot ".tmp_case_results_repeat.json"
+$script:compareSummaryPath = Join-Path $script:projectRoot ".tmp_case_results_compare.json"
+
+if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_NAV_MODES -eq "1")) {
+  function Get-ComparePreUiSnapshot() {
+    if (-not (Test-Path $outputPath -PathType Leaf)) { return $null }
+    try {
+      $raw = Get-Content -Raw -Path $outputPath
+      if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+      $runType = $null
+      $webdriverError = $null
+      $webdriverError1 = $null
+      $webdriverError2 = $null
+      $hrefBeforeUiInit = $null
+      $navigateAttempted = $false
+      $navigateHttpStatus = $null
+      $navigateErrorClass = $null
+
+      if ($raw -match '"runType"\s*:\s*"([^"]*)"') { $runType = [string]$Matches[1] }
+
+      if ($raw -match '"webdriverError"\s*:\s*(null|"([^"]*)")') {
+        if ($Matches[1] -ne "null") { $webdriverError = [string]$Matches[2] }
+      }
+      if ($raw -match '"webdriverError1"\s*:\s*(null|"([^"]*)")') {
+        if ($Matches[1] -ne "null") { $webdriverError1 = [string]$Matches[2] }
+      }
+      if ($raw -match '"webdriverError2"\s*:\s*(null|"([^"]*)")') {
+        if ($Matches[1] -ne "null") { $webdriverError2 = [string]$Matches[2] }
+      }
+      if ($raw -match '"hrefBeforeUiInit"\s*:\s*(null|"([^"]*)")') {
+        if ($Matches[1] -ne "null") { $hrefBeforeUiInit = [string]$Matches[2] }
+      }
+      if ($raw -match '"navigateAttempted"\s*:\s*(true|false)') { $navigateAttempted = ([string]$Matches[1] -eq "true") }
+      if ($raw -match '"navigateHttpStatus"\s*:\s*(null|-?\d+)') {
+        if ($Matches[1] -ne "null") { $navigateHttpStatus = [int]$Matches[1] }
+      }
+      if ($raw -match '"navigateErrorClass"\s*:\s*(null|"([^"]*)")') {
+        if ($Matches[1] -ne "null") { $navigateErrorClass = [string]$Matches[2] }
+      }
+
+      return [ordered]@{
+        runType = $runType
+        webdriverError = $webdriverError
+        webdriverError1 = $webdriverError1
+        webdriverError2 = $webdriverError2
+        hrefBeforeUiInit = $hrefBeforeUiInit
+        navigateAttempted = $navigateAttempted
+        navigateHttpStatus = $navigateHttpStatus
+        navigateErrorClass = $navigateErrorClass
+      }
+    } catch {
+      return $null
+    }
+  }
+
+  function Invoke-CompareChildRun([bool]$skipNavigate) {
+    if ($skipNavigate) {
+      $env:STABILITY_COMPARE_SKIP_NAVIGATE = "1"
+    } else {
+      Remove-Item Env:STABILITY_COMPARE_SKIP_NAVIGATE -ErrorAction SilentlyContinue
+    }
+    $env:STABILITY_REPEAT_CHILD = "1"
+    $env:STABILITY_COMPARE_CHILD = "1"
+    try {
+      & powershell -ExecutionPolicy Bypass -File $script:selfPath | Out-Null
+    } catch {}
+    $exitCode = $LASTEXITCODE
+    $diag = $null
+    for ($attempt = 1; $attempt -le 10; $attempt++) {
+      $diag = Get-ComparePreUiSnapshot
+      if ($diag) { break }
+      Start-Sleep -Milliseconds 200
+    }
+    return [ordered]@{
+      skipNavigate = $skipNavigate
+      exitCode = $exitCode
+      diagnostic = $diag
+    }
+  }
+
+  Write-Host "[stability-test] compare-run start axis=navigate with/without"
+  $withNavigate = Invoke-CompareChildRun $false
+  $withoutNavigate = Invoke-CompareChildRun $true
+  $withDiag = $withNavigate.diagnostic
+  $withoutDiag = $withoutNavigate.diagnostic
+  $diffSummary = [ordered]@{
+    runTypeChanged = ([string]$withDiag.runType -ne [string]$withoutDiag.runType)
+    webdriverErrorChanged = ([string]$withDiag.webdriverError -ne [string]$withoutDiag.webdriverError)
+    webdriverError1Changed = ([string]$withDiag.webdriverError1 -ne [string]$withoutDiag.webdriverError1)
+    webdriverError2Changed = ([string]$withDiag.webdriverError2 -ne [string]$withoutDiag.webdriverError2)
+    hrefBeforeUiInitChanged = ([string]$withDiag.hrefBeforeUiInit -ne [string]$withoutDiag.hrefBeforeUiInit)
+    navigateErrorClassChanged = ([string]$withDiag.navigateErrorClass -ne [string]$withoutDiag.navigateErrorClass)
+    withNavigateAttempted = if ($null -ne $withDiag) { [bool]$withDiag.navigateAttempted } else { $false }
+    withoutNavigateAttempted = if ($null -ne $withoutDiag) { [bool]$withoutDiag.navigateAttempted } else { $false }
+  }
+  $compareSummary = [ordered]@{
+    comparedAt = (Get-Date).ToString("o")
+    withNavigate = $withNavigate
+    withoutNavigate = $withoutNavigate
+    diffSummary = $diffSummary
+  }
+  ($compareSummary | ConvertTo-Json -Depth 10) | Set-Content -Path $script:compareSummaryPath -Encoding UTF8
+  Write-Host "[stability-test] compare-run summary written path=$script:compareSummaryPath"
+  Remove-Item Env:STABILITY_REPEAT_CHILD -ErrorAction SilentlyContinue
+  Remove-Item Env:STABILITY_COMPARE_CHILD -ErrorAction SilentlyContinue
+  Remove-Item Env:STABILITY_COMPARE_SKIP_NAVIGATE -ErrorAction SilentlyContinue
+  return
+}
 
 if (-not $env:STABILITY_REPEAT_CHILD) {
   $repeatCount = 5
@@ -1876,6 +1984,8 @@ try {
     $navigateStderrSummary = ""
     $navigateTransportUsed = "curl"
     $webdriverError = $null
+    $navigateAttempted = $false
+    $skipDirectNavigateForCompare = ($env:STABILITY_COMPARE_SKIP_NAVIGATE -eq "1")
     $curlNavigateAttempted = $false
     $curlNavigateSucceeded = $false
     $curlNavigateExitCode = $null
@@ -2021,7 +2131,23 @@ try {
     $sessionsExtractedCount = @($sessionsExtractedIds).Count
     $sessionIdFoundInExtractedIds = (-not [string]::IsNullOrWhiteSpace($checkedSessionId)) -and (@($sessionsExtractedIds) -contains $checkedSessionId)
     $directNavBody = @{ url = $navigateTargetUrl } | ConvertTo-Json -Compress
-    $directNavigateResult = Invoke-SessionNavigateViaCurl $script:sessionId $navigateTargetUrl 20
+    if ($skipDirectNavigateForCompare) {
+      Write-Host "[stability-test] direct webdriver navigate skipped for compare mode"
+      $directNavigateResult = [ordered]@{
+        ok = $false
+        exitCode = -2
+        httpStatus = $null
+        responseBody = ""
+        stderrSummary = "skipped by compare mode"
+        webdriverError = $null
+        errorClass = "skipped-by-compare"
+        errorMessage = "direct webdriver navigate skipped"
+        transportUsed = "skipped"
+      }
+    } else {
+      $navigateAttempted = $true
+      $directNavigateResult = Invoke-SessionNavigateViaCurl $script:sessionId $navigateTargetUrl 20
+    }
     $script:lastNavigateAttempt = $directNavigateResult
     $navigateTransportUsed = [string]$directNavigateResult.transportUsed
     $navigateHttpStatus = $directNavigateResult.httpStatus
@@ -2215,7 +2341,7 @@ try {
     $directNavigateDiagnostic = [ordered]@{
       phase = "direct-webdriver-navigate"
       navigateTargetUrl = $navigateTargetUrl
-      navigateAttempted = $true
+      navigateAttempted = $navigateAttempted
       navigateResponseReceived = $navigateResponseReceived
       navigateResponseStatusCode = $navigateResponseStatusCode
       navigateHttpStatus = $navigateHttpStatus

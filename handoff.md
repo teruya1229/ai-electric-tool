@@ -842,3 +842,18 @@ visitedJunctions 再検討トリガー
 - エンジン本体は未変更（parser / groups / circuits / graph / layout / wirePaths）。
 - `.tmp_case_results.json` の既存構造は維持する。
 - 追加集計は `.tmp_case_results_repeat.json` 側に閉じている。
+
+---
+
+## 2026-03-16 次にやるべき1手（compare結果を起点に切り分け継続）
+- `navigate あり / なし` compare（`.tmp_case_results_compare.json`）を基準に、timeout 発生寄与の高い要素を1つずつ分離して次の観測設計を行う。
+
+判断基準
+- 現時点の compare では、両条件とも `runType=timeout_only` かつ `webdriverError*` はすべて null。
+- 差分は主に `navigateAttempted` と `navigateErrorClass`（`timeout` vs `skipped-by-compare`）で、mixed判定に直結する差分は未観測。
+- 今後 mixed を追う場合は、同条件repeatではなく compare 軸を追加した別条件設計で行う。
+
+注意点
+- エンジン本体は未変更（parser / groups / circuits / graph / layout / wirePaths）。
+- `stability-test.ps1` の既存 repeat ロジック・既存 runType 判定・`.tmp_case_results.json` 構造は維持する。
+- 追加比較結果は `.tmp_case_results_compare.json` に閉じる。

@@ -2,6 +2,31 @@
 
 ## AI電気施工アシスタント（更新: 108107e）
 
+## 2026-03-16 E2E compare観測（navigateあり/なし）（commit: pending）
+
+### 今日やったこと
+- `status.md` / `handoff.md` を再読し、timeout_only 前提の次切り分け方針を確認
+- `stability-test.ps1` に最小差分で compare モードを追加（親実行 + 明示フラグ時のみ）
+- 比較軸を `navigate あり / なし` の1条件に限定し、既存 `preUiInitDiagnostic` 同系統項目を採取
+- 追加結果を `.tmp_case_results_compare.json` に出力し、既存 `.tmp_case_results.json` 構造を維持
+- compare 実行して `withNavigate` / `withoutNavigate` の両条件を取得
+
+### 現在の状態
+- compare 出力: `.tmp_case_results_compare.json`
+- `withNavigate`:
+  - `runType=timeout_only`
+  - `webdriverError / webdriverError1 / webdriverError2 = null`
+  - `navigateAttempted=true`
+  - `navigateHttpStatus=0`
+  - `navigateErrorClass=timeout`
+- `withoutNavigate`:
+  - `runType=timeout_only`
+  - `webdriverError / webdriverError1 / webdriverError2 = null`
+  - `navigateAttempted=false`
+  - `navigateHttpStatus=null`
+  - `navigateErrorClass=skipped-by-compare`
+- 差分要約は `navigateErrorClassChanged=true`、それ以外（runType / webdriverError系 / hrefBeforeUiInit）は差分なし
+
 ## 2026-03-16 E2E repeat観測固定化（commit: pending）
 
 ### 今日やったこと
