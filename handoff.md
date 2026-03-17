@@ -887,3 +887,18 @@ visitedJunctions 再検討トリガー
 - エンジン本体は未変更（parser / groups / circuits / graph / layout / wirePaths）。
 - `stability-test.ps1` の既存 repeat ロジック・既存 runType 判定・`.tmp_case_results.json` 構造は維持する。
 - compare 結果は `.tmp_case_results_compare.json` で管理し、既存JSON契約を変更しない。
+
+---
+
+## 2026-03-17 次にやるべき1手（execute軸の結論固定後）
+- execute compare は追加改修せず終了し、次の単一比較軸へ進む準備を行う（候補軸の設計のみ）。
+
+判断基準
+- 3回分の execute compare は「初回のみ差分あり、以後2回連続で非再現」。
+- よって現時点は「単発差分の可能性が高い」と扱い、execute軸を優先仮説としては固定しない。
+- 追加改修を入れる前に、次軸は1つだけ選び、同じ compare 形式で観測可能かを先に定義する。
+
+注意点
+- エンジン本体は未変更（parser / groups / circuits / graph / layout / wirePaths）。
+- `stability-test.ps1` の既存 repeat ロジック・既存 runType 判定・`.tmp_case_results.json` 構造は維持する。
+- compare 結果は `.tmp_case_results_compare.json` に閉じ、既存JSON契約を変更しない。
