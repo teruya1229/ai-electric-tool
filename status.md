@@ -2,6 +2,26 @@
 
 ## AI電気施工アシスタント（更新: 108107e）
 
+## 2026-03-17 E2E execute compare再現確認（commit: pending）
+
+### 今日やったこと
+- `status.md` / `handoff.md` を再読して、execute compare 再現確認の前提を確認
+- コード変更なしで `STABILITY_COMPARE_EXECUTE_MODES=1` を同条件再実行
+- `.tmp_case_results_compare.json` を確認し、`withExecute` / `withoutExecute` と `diffSummary` を前回結果と比較
+- 再現有無を固定するため、今回結果を status/handoff に記録
+
+### 現在の状態
+- 今回 compare（再実行）では以下を確認
+  - `withExecute.runType=timeout_only`
+  - `withoutExecute.runType=timeout_only`
+  - `withExecute.webdriverError / webdriverError1 / webdriverError2 = null / null / null`
+  - `withoutExecute.webdriverError / webdriverError1 / webdriverError2 = null / null / null`
+  - `withExecute.executeAttempted=true, executeSucceeded=true, executeResult="1", executeErrorClass=null`
+  - `withoutExecute.executeAttempted=false, executeSucceeded=false, executeResult=null, executeErrorClass=null`
+  - `diffSummary.runTypeChanged=false`
+  - `diffSummary.webdriverError2Changed=false`
+- 前回観測（`withoutExecute=mixed_webdriver_error`, `webdriverError2=no such window`）は今回は再現せず、単発差分の可能性を残す
+
 ## 2026-03-16 E2E compare観測（最小executeあり/なし）（commit: pending）
 
 ### 今日やったこと

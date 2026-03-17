@@ -872,3 +872,18 @@ visitedJunctions 再検討トリガー
 - エンジン本体は未変更（parser / groups / circuits / graph / layout / wirePaths）。
 - `stability-test.ps1` の既存 repeat ロジック・既存 runType 判定・`.tmp_case_results.json` 構造は維持する。
 - compare 結果は `.tmp_case_results_compare.json` に閉じ、他JSONの契約は変更しない。
+
+---
+
+## 2026-03-17 次にやるべき1手（execute compare事実固定後）
+- 追加改修は行わず、`最小 execute あり / なし` compare を同条件であと1回だけ確認し、再現性の有無を事実ベースで確定してから次軸へ進む。
+
+判断基準
+- 今回の再実行では `withExecute/withoutExecute` とも `runType=timeout_only`、`webdriverError*` はすべて null で、前回差分は再現しなかった。
+- 再現した場合は「最小 execute 到達の有無」仮説を強化する。
+- 再現しない場合は単発差分の可能性を優先し、即時の追加改修は行わず次軸設計へ進む。
+
+注意点
+- エンジン本体は未変更（parser / groups / circuits / graph / layout / wirePaths）。
+- `stability-test.ps1` の既存 repeat ロジック・既存 runType 判定・`.tmp_case_results.json` 構造は維持する。
+- compare 結果は `.tmp_case_results_compare.json` で管理し、既存JSON契約を変更しない。
