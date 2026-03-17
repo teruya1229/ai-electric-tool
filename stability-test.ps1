@@ -225,6 +225,204 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_EXECUTE_MODE
   return
 }
 
+if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_WINDOW_MODES -eq "1")) {
+  function Get-ComparePreUiSnapshotForWindow() {
+    if (-not (Test-Path $outputPath -PathType Leaf)) { return $null }
+    try {
+      $raw = Get-Content -Raw -Path $outputPath
+      if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+      $runType = $null
+      $webdriverError = $null
+      $webdriverError1 = $null
+      $webdriverError2 = $null
+      $hrefBeforeUiInit = $null
+      $windowProbeAttempted = $false
+      $currentWindowHandleSucceeded = $false
+      $currentWindowHandleErrorClass = $null
+      $windowHandlesSucceeded = $false
+      $windowHandlesCount = $null
+      $windowHandlesErrorClass = $null
+
+      if ($raw -match '"runType"\s*:\s*"([^"]*)"') { $runType = [string]$Matches[1] }
+      if ($raw -match '"webdriverError"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError = [string]$Matches[2] } }
+      if ($raw -match '"webdriverError1"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError1 = [string]$Matches[2] } }
+      if ($raw -match '"webdriverError2"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError2 = [string]$Matches[2] } }
+      if ($raw -match '"hrefBeforeUiInit"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $hrefBeforeUiInit = [string]$Matches[2] } }
+      if ($raw -match '"windowProbeAttempted"\s*:\s*(true|false)') { $windowProbeAttempted = ([string]$Matches[1] -eq "true") }
+      if ($raw -match '"currentWindowHandleSucceeded"\s*:\s*(true|false)') { $currentWindowHandleSucceeded = ([string]$Matches[1] -eq "true") }
+      if ($raw -match '"currentWindowHandleErrorClass"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $currentWindowHandleErrorClass = [string]$Matches[2] } }
+      if ($raw -match '"windowHandlesSucceeded"\s*:\s*(true|false)') { $windowHandlesSucceeded = ([string]$Matches[1] -eq "true") }
+      if ($raw -match '"windowHandlesCount"\s*:\s*(null|-?\d+)') { if ($Matches[1] -ne "null") { $windowHandlesCount = [int]$Matches[1] } }
+      if ($raw -match '"windowHandlesErrorClass"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $windowHandlesErrorClass = [string]$Matches[2] } }
+
+      return [ordered]@{
+        runType = $runType
+        webdriverError = $webdriverError
+        webdriverError1 = $webdriverError1
+        webdriverError2 = $webdriverError2
+        hrefBeforeUiInit = $hrefBeforeUiInit
+        windowProbeAttempted = $windowProbeAttempted
+        currentWindowHandleSucceeded = $currentWindowHandleSucceeded
+        currentWindowHandleErrorClass = $currentWindowHandleErrorClass
+        windowHandlesSucceeded = $windowHandlesSucceeded
+        windowHandlesCount = $windowHandlesCount
+        windowHandlesErrorClass = $windowHandlesErrorClass
+      }
+    } catch {
+      return $null
+    }
+  }
+
+  function Invoke-CompareWindowChildRun([bool]$withWindowProbe) {
+    if ($withWindowProbe) {
+      $env:STABILITY_COMPARE_WITH_WINDOW_PROBE = "1"
+    } else {
+      Remove-Item Env:STABILITY_COMPARE_WITH_WINDOW_PROBE -ErrorAction SilentlyContinue
+    }
+    $env:STABILITY_REPEAT_CHILD = "1"
+    $env:STABILITY_COMPARE_CHILD = "1"
+    try {
+      & powershell -ExecutionPolicy Bypass -File $script:selfPath | Out-Null
+    } catch {}
+    $exitCode = $LASTEXITCODE
+    $diag = $null
+    for ($attempt = 1; $attempt -le 10; $attempt++) {
+      $diag = Get-ComparePreUiSnapshotForWindow
+      if ($diag) { break }
+      Start-Sleep -Milliseconds 200
+    }
+    return [ordered]@{
+      withWindowProbe = $withWindowProbe
+      exitCode = $exitCode
+      diagnostic = $diag
+    }
+  }
+
+  Write-Host "[stability-test] compare-run start axis=window-handle-probe with/without"
+  $withWindowProbe = Invoke-CompareWindowChildRun $true
+  $withoutWindowProbe = Invoke-CompareWindowChildRun $false
+  $withDiag = $withWindowProbe.diagnostic
+  $withoutDiag = $withoutWindowProbe.diagnostic
+  $diffSummary = [ordered]@{
+    runTypeChanged = ([string]$withDiag.runType -ne [string]$withoutDiag.runType)
+    webdriverErrorChanged = ([string]$withDiag.webdriverError -ne [string]$withoutDiag.webdriverError)
+    webdriverError1Changed = ([string]$withDiag.webdriverError1 -ne [string]$withoutDiag.webdriverError1)
+    webdriverError2Changed = ([string]$withDiag.webdriverError2 -ne [string]$withoutDiag.webdriverError2)
+    hrefBeforeUiInitChanged = ([string]$withDiag.hrefBeforeUiInit -ne [string]$withoutDiag.hrefBeforeUiInit)
+    currentWindowHandleErrorClassChanged = ([string]$withDiag.currentWindowHandleErrorClass -ne [string]$withoutDiag.currentWindowHandleErrorClass)
+    windowHandlesCountChanged = ([string]$withDiag.windowHandlesCount -ne [string]$withoutDiag.windowHandlesCount)
+    windowHandlesErrorClassChanged = ([string]$withDiag.windowHandlesErrorClass -ne [string]$withoutDiag.windowHandlesErrorClass)
+    withWindowProbeAttempted = if ($null -ne $withDiag) { [bool]$withDiag.windowProbeAttempted } else { $false }
+    withoutWindowProbeAttempted = if ($null -ne $withoutDiag) { [bool]$withoutDiag.windowProbeAttempted } else { $false }
+  }
+  $compareSummary = [ordered]@{
+    comparedAt = (Get-Date).ToString("o")
+    withWindowProbe = $withWindowProbe
+    withoutWindowProbe = $withoutWindowProbe
+    diffSummary = $diffSummary
+  }
+  ($compareSummary | ConvertTo-Json -Depth 10) | Set-Content -Path $script:compareSummaryPath -Encoding UTF8
+  Write-Host "[stability-test] compare-run summary written path=$script:compareSummaryPath"
+  Remove-Item Env:STABILITY_REPEAT_CHILD -ErrorAction SilentlyContinue
+  Remove-Item Env:STABILITY_COMPARE_CHILD -ErrorAction SilentlyContinue
+  Remove-Item Env:STABILITY_COMPARE_WITH_WINDOW_PROBE -ErrorAction SilentlyContinue
+  return
+}
+
+if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_CURRENT_WINDOW_MODES -eq "1")) {
+  function Get-ComparePreUiSnapshotForCurrentWindow() {
+    if (-not (Test-Path $outputPath -PathType Leaf)) { return $null }
+    try {
+      $raw = Get-Content -Raw -Path $outputPath
+      if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+      $runType = $null
+      $webdriverError = $null
+      $webdriverError1 = $null
+      $webdriverError2 = $null
+      $hrefBeforeUiInit = $null
+      $currentWindowProbeAttempted = $false
+      $currentWindowHandleSucceeded = $false
+      $currentWindowHandleErrorClass = $null
+
+      if ($raw -match '"runType"\s*:\s*"([^"]*)"') { $runType = [string]$Matches[1] }
+      if ($raw -match '"webdriverError"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError = [string]$Matches[2] } }
+      if ($raw -match '"webdriverError1"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError1 = [string]$Matches[2] } }
+      if ($raw -match '"webdriverError2"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError2 = [string]$Matches[2] } }
+      if ($raw -match '"hrefBeforeUiInit"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $hrefBeforeUiInit = [string]$Matches[2] } }
+      if ($raw -match '"currentWindowProbeAttempted"\s*:\s*(true|false)') { $currentWindowProbeAttempted = ([string]$Matches[1] -eq "true") }
+      if ($raw -match '"currentWindowHandleSucceeded"\s*:\s*(true|false)') { $currentWindowHandleSucceeded = ([string]$Matches[1] -eq "true") }
+      if ($raw -match '"currentWindowHandleErrorClass"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $currentWindowHandleErrorClass = [string]$Matches[2] } }
+
+      return [ordered]@{
+        runType = $runType
+        webdriverError = $webdriverError
+        webdriverError1 = $webdriverError1
+        webdriverError2 = $webdriverError2
+        hrefBeforeUiInit = $hrefBeforeUiInit
+        currentWindowProbeAttempted = $currentWindowProbeAttempted
+        currentWindowHandleSucceeded = $currentWindowHandleSucceeded
+        currentWindowHandleErrorClass = $currentWindowHandleErrorClass
+      }
+    } catch {
+      return $null
+    }
+  }
+
+  function Invoke-CompareCurrentWindowChildRun([bool]$withCurrentWindowProbe) {
+    if ($withCurrentWindowProbe) {
+      $env:STABILITY_COMPARE_WITH_CURRENT_WINDOW_PROBE = "1"
+    } else {
+      Remove-Item Env:STABILITY_COMPARE_WITH_CURRENT_WINDOW_PROBE -ErrorAction SilentlyContinue
+    }
+    $env:STABILITY_REPEAT_CHILD = "1"
+    $env:STABILITY_COMPARE_CHILD = "1"
+    try {
+      & powershell -ExecutionPolicy Bypass -File $script:selfPath | Out-Null
+    } catch {}
+    $exitCode = $LASTEXITCODE
+    $diag = $null
+    for ($attempt = 1; $attempt -le 10; $attempt++) {
+      $diag = Get-ComparePreUiSnapshotForCurrentWindow
+      if ($diag) { break }
+      Start-Sleep -Milliseconds 200
+    }
+    return [ordered]@{
+      withCurrentWindowProbe = $withCurrentWindowProbe
+      exitCode = $exitCode
+      diagnostic = $diag
+    }
+  }
+
+  Write-Host "[stability-test] compare-run start axis=current-window-handle with/without"
+  $withCurrentWindowProbe = Invoke-CompareCurrentWindowChildRun $true
+  $withoutCurrentWindowProbe = Invoke-CompareCurrentWindowChildRun $false
+  $withDiag = $withCurrentWindowProbe.diagnostic
+  $withoutDiag = $withoutCurrentWindowProbe.diagnostic
+  $diffSummary = [ordered]@{
+    runTypeChanged = ([string]$withDiag.runType -ne [string]$withoutDiag.runType)
+    webdriverErrorChanged = ([string]$withDiag.webdriverError -ne [string]$withoutDiag.webdriverError)
+    webdriverError1Changed = ([string]$withDiag.webdriverError1 -ne [string]$withoutDiag.webdriverError1)
+    webdriverError2Changed = ([string]$withDiag.webdriverError2 -ne [string]$withoutDiag.webdriverError2)
+    hrefBeforeUiInitChanged = ([string]$withDiag.hrefBeforeUiInit -ne [string]$withoutDiag.hrefBeforeUiInit)
+    currentWindowHandleSucceededChanged = ([string]$withDiag.currentWindowHandleSucceeded -ne [string]$withoutDiag.currentWindowHandleSucceeded)
+    currentWindowHandleErrorClassChanged = ([string]$withDiag.currentWindowHandleErrorClass -ne [string]$withoutDiag.currentWindowHandleErrorClass)
+    withCurrentWindowProbeAttempted = if ($null -ne $withDiag) { [bool]$withDiag.currentWindowProbeAttempted } else { $false }
+    withoutCurrentWindowProbeAttempted = if ($null -ne $withoutDiag) { [bool]$withoutDiag.currentWindowProbeAttempted } else { $false }
+  }
+  $compareSummary = [ordered]@{
+    comparedAt = (Get-Date).ToString("o")
+    withCurrentWindowProbe = $withCurrentWindowProbe
+    withoutCurrentWindowProbe = $withoutCurrentWindowProbe
+    diffSummary = $diffSummary
+  }
+  ($compareSummary | ConvertTo-Json -Depth 10) | Set-Content -Path $script:compareSummaryPath -Encoding UTF8
+  Write-Host "[stability-test] compare-run summary written path=$script:compareSummaryPath"
+  Remove-Item Env:STABILITY_REPEAT_CHILD -ErrorAction SilentlyContinue
+  Remove-Item Env:STABILITY_COMPARE_CHILD -ErrorAction SilentlyContinue
+  Remove-Item Env:STABILITY_COMPARE_WITH_CURRENT_WINDOW_PROBE -ErrorAction SilentlyContinue
+  return
+}
+
 if (-not $env:STABILITY_REPEAT_CHILD) {
   $repeatCount = 5
   if (-not [string]::IsNullOrWhiteSpace($env:STABILITY_REPEAT_COUNT)) {
@@ -2060,8 +2258,26 @@ try {
     try { Remove-Session } catch {}
     $minimalForE2E = New-WebDriverSessionMinimal
     $script:sessionId = $minimalForE2E.sessionId
-    Write-Host "[stability-test] check window handle"
-    $windowCheck = Invoke-WindowHandleCheck $script:sessionId
+    $compareWithWindowProbe = ($env:STABILITY_COMPARE_WITH_WINDOW_PROBE -eq "1")
+    $windowProbeControlled = ($env:STABILITY_COMPARE_WINDOW_MODES -eq "1")
+    $compareWithCurrentWindowProbe = ($env:STABILITY_COMPARE_WITH_CURRENT_WINDOW_PROBE -eq "1")
+    $currentWindowProbeControlled = ($env:STABILITY_COMPARE_CURRENT_WINDOW_MODES -eq "1")
+    if ((-not $windowProbeControlled -and -not $currentWindowProbeControlled) -or $compareWithWindowProbe -or $compareWithCurrentWindowProbe) {
+      Write-Host "[stability-test] check window handle"
+      $windowCheck = Invoke-WindowHandleCheck $script:sessionId
+    } else {
+      Write-Host "[stability-test] check window handle skipped for compare mode"
+      $windowCheck = [ordered]@{
+        windowCheckAttempted = $false
+        windowCheckStdout = ""
+        windowCheckStderr = ""
+        windowCheckExitCode = $null
+        windowHandleFound = $false
+        windowHandleValue = $null
+        windowHandleErrorClass = $null
+        windowHandleErrorMessage = $null
+      }
+    }
     Write-Host "[stability-test] check current url"
     $currentUrlCheck = Invoke-CurrentUrlCheck $script:sessionId
     Log-SessionCapabilitiesSummary $minimalForE2E.response "minimal-e2e-only"
@@ -2166,14 +2382,37 @@ try {
     $navigateResponseBody2 = $null
     $navigateStderrSummary2 = $null
     $webdriverError2 = $null
-    $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
-    $windowCheckStdout = [string]$windowCheck.windowCheckStdout
-    $windowCheckStderr = [string]$windowCheck.windowCheckStderr
-    $windowCheckExitCode = $windowCheck.windowCheckExitCode
-    $windowHandleFound = [bool]$windowCheck.windowHandleFound
-    $windowHandleValue = if ($null -ne $windowCheck.windowHandleValue) { [string]$windowCheck.windowHandleValue } else { $null }
-    $windowHandleErrorClass = if ($null -ne $windowCheck.windowHandleErrorClass) { [string]$windowCheck.windowHandleErrorClass } else { $null }
-    $windowHandleErrorMessage = if ($null -ne $windowCheck.windowHandleErrorMessage) { [string]$windowCheck.windowHandleErrorMessage } else { $null }
+    $windowProbeAttempted = $false
+    $currentWindowProbeAttempted = $false
+    $currentWindowHandleSucceeded = $false
+    $currentWindowHandleErrorClass = $null
+    $windowHandlesSucceeded = $false
+    $windowHandlesCount = $null
+    $windowHandlesErrorClass = $null
+    $runCurrentWindowProbe = ((-not $windowProbeControlled -and -not $currentWindowProbeControlled) -or $compareWithWindowProbe -or $compareWithCurrentWindowProbe)
+    $runWindowHandlesProbe = ((-not $windowProbeControlled -and -not $currentWindowProbeControlled) -or $compareWithWindowProbe)
+    if ($runCurrentWindowProbe) {
+      $windowProbeAttempted = $true
+      $currentWindowProbeAttempted = $true
+      $windowCheckAttempted = [bool]$windowCheck.windowCheckAttempted
+      $windowCheckStdout = [string]$windowCheck.windowCheckStdout
+      $windowCheckStderr = [string]$windowCheck.windowCheckStderr
+      $windowCheckExitCode = $windowCheck.windowCheckExitCode
+      $windowHandleFound = [bool]$windowCheck.windowHandleFound
+      $windowHandleValue = if ($null -ne $windowCheck.windowHandleValue) { [string]$windowCheck.windowHandleValue } else { $null }
+      $windowHandleErrorClass = if ($null -ne $windowCheck.windowHandleErrorClass) { [string]$windowCheck.windowHandleErrorClass } else { $null }
+      $windowHandleErrorMessage = if ($null -ne $windowCheck.windowHandleErrorMessage) { [string]$windowCheck.windowHandleErrorMessage } else { $null }
+      $currentWindowHandleSucceeded = $windowHandleFound
+      $currentWindowHandleErrorClass = $windowHandleErrorClass
+      if ($runWindowHandlesProbe) {
+        $windowHandlesCheck = Invoke-WindowHandlesCountCheck $script:sessionId
+        $windowHandlesCount = if ($null -ne $windowHandlesCheck.handlesCount) { [int]$windowHandlesCheck.handlesCount } else { $null }
+        $windowHandlesSucceeded = [bool]($null -ne $windowHandlesCount)
+        $windowHandlesErrorClass = if ($null -ne $windowHandlesCheck.handlesErrorClass) { [string]$windowHandlesCheck.handlesErrorClass } else { $null }
+      }
+    } else {
+      Write-Host "[stability-test] window handle probe skipped for compare mode"
+    }
     $currentUrlCheckAttempted = [bool]$currentUrlCheck.currentUrlCheckAttempted
     $currentUrlFound = [bool]$currentUrlCheck.currentUrlFound
     $currentUrlValue = if ($null -ne $currentUrlCheck.currentUrlValue) { [string]$currentUrlCheck.currentUrlValue } else { $null }
@@ -2302,7 +2541,7 @@ try {
       ($navigateErrorClass -eq "no-such-window-or-404") -or
       ($currentUrlErrorClass -eq "no-such-window-or-404") -or
       ((($navigateErrorClass -eq "timeout") -or ($postNavigateUrlErrorClass -eq "timeout")) -and $urlIsDataBlank) -or
-      (-not $windowHandleFound)
+      ($windowProbeAttempted -and (-not $currentWindowHandleSucceeded))
     if ($needsSessionRecovery) {
       $sessionRecoveryReason = if ($urlIsDataBlank) { "navigate timeout on data url before UI init" } else { "session invalidated before UI init" }
       Write-Host "[stability-test] session recovery start reason=$sessionRecoveryReason"
@@ -2480,6 +2719,13 @@ try {
       executeResult = $executeResult
       executeErrorClass = $executeErrorClass
       executeErrorMessage = $executeErrorMessage
+      windowProbeAttempted = $windowProbeAttempted
+      currentWindowProbeAttempted = $currentWindowProbeAttempted
+      currentWindowHandleSucceeded = $currentWindowHandleSucceeded
+      currentWindowHandleErrorClass = $currentWindowHandleErrorClass
+      windowHandlesSucceeded = $windowHandlesSucceeded
+      windowHandlesCount = $windowHandlesCount
+      windowHandlesErrorClass = $windowHandlesErrorClass
       runType = $runType
       postNavigateUrlCheckAttempted = $postNavigateUrlCheckAttempted
       postNavigateUrlFound = $postNavigateUrlFound
@@ -2636,6 +2882,13 @@ try {
             executeResult = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeResult) { [string]$directNavigateDiagnostic.executeResult } else { $null }
             executeErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeErrorClass) { [string]$directNavigateDiagnostic.executeErrorClass } else { $null }
             executeErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeErrorMessage) { [string]$directNavigateDiagnostic.executeErrorMessage } else { "" }
+            windowProbeAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.windowProbeAttempted } else { $false }
+            currentWindowProbeAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.currentWindowProbeAttempted } else { $false }
+            currentWindowHandleSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.currentWindowHandleSucceeded } else { $false }
+            currentWindowHandleErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.currentWindowHandleErrorClass) { [string]$directNavigateDiagnostic.currentWindowHandleErrorClass } else { $null }
+            windowHandlesSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.windowHandlesSucceeded } else { $false }
+            windowHandlesCount = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandlesCount) { [int]$directNavigateDiagnostic.windowHandlesCount } else { $null }
+            windowHandlesErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandlesErrorClass) { [string]$directNavigateDiagnostic.windowHandlesErrorClass } else { $null }
             runType = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.runType) { [string]$directNavigateDiagnostic.runType } else { "timeout_only" }
             postNavigateUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlCheckAttempted } else { $false }
             postNavigateUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlFound } else { $false }
@@ -2897,6 +3150,13 @@ try {
         executeResult = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeResult) { [string]$directNavigateDiagnostic.executeResult } else { $null }
         executeErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeErrorClass) { [string]$directNavigateDiagnostic.executeErrorClass } else { $null }
         executeErrorMessage = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.executeErrorMessage) { [string]$directNavigateDiagnostic.executeErrorMessage } else { "" }
+        windowProbeAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.windowProbeAttempted } else { $false }
+        currentWindowProbeAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.currentWindowProbeAttempted } else { $false }
+        currentWindowHandleSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.currentWindowHandleSucceeded } else { $false }
+        currentWindowHandleErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.currentWindowHandleErrorClass) { [string]$directNavigateDiagnostic.currentWindowHandleErrorClass } else { $null }
+        windowHandlesSucceeded = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.windowHandlesSucceeded } else { $false }
+        windowHandlesCount = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandlesCount) { [int]$directNavigateDiagnostic.windowHandlesCount } else { $null }
+        windowHandlesErrorClass = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.windowHandlesErrorClass) { [string]$directNavigateDiagnostic.windowHandlesErrorClass } else { $null }
         runType = if ($directNavigateDiagnostic -and $null -ne $directNavigateDiagnostic.runType) { [string]$directNavigateDiagnostic.runType } else { "timeout_only" }
         postNavigateUrlCheckAttempted = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlCheckAttempted } else { $false }
         postNavigateUrlFound = if ($directNavigateDiagnostic) { [bool]$directNavigateDiagnostic.postNavigateUrlFound } else { $false }

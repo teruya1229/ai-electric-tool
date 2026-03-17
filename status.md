@@ -2,6 +2,36 @@
 
 ## AI電気施工アシスタント（更新: 108107e）
 
+## 2026-03-17 E2E compare観測（currentWindowHandleあり/なし）（commit: pending）
+
+### 今日やったこと
+- `status.md` / `handoff.md` を再読し、window probe 分解の前提を確認
+- `stability-test.ps1` を最小差分で更新し、`STABILITY_COMPARE_CURRENT_WINDOW_MODES=1` の compare 軸（`withCurrentWindowProbe` / `withoutCurrentWindowProbe`）を追加
+- `withCurrentWindowProbe` では currentWindowHandle のみ実行し、`withoutCurrentWindowProbe` では window 系 probe を実行しないようにした（windowHandles probe は今回軸に含めない）
+- compare を1回実行し、`.tmp_case_results_compare.json` で差分を確認
+
+### 現在の状態
+- compare 出力: `.tmp_case_results_compare.json`
+- `withCurrentWindowProbe`
+  - `runType=timeout_only`
+  - `webdriverError / webdriverError1 / webdriverError2 = null / null / null`
+  - `currentWindowProbeAttempted=true`
+  - `currentWindowHandleSucceeded=true`
+  - `currentWindowHandleErrorClass=null`
+- `withoutCurrentWindowProbe`
+  - `runType=mixed_webdriver_error`
+  - `webdriverError / webdriverError1 / webdriverError2 = null / null / "invalid session id"`
+  - `currentWindowProbeAttempted=false`
+  - `currentWindowHandleSucceeded=false`
+  - `currentWindowHandleErrorClass=null`
+- `diffSummary`
+  - `runTypeChanged=true`
+  - `webdriverError2Changed=true`
+  - `currentWindowHandleSucceededChanged=true`
+  - `withCurrentWindowProbeAttempted=true`
+  - `withoutCurrentWindowProbeAttempted=false`
+- 今回1回観測では、currentWindowHandle probe 単独軸でも runType / webdriverError2 に差分が出た
+
 ## 2026-03-17 E2E execute compare再現性確定（commit: pending）
 
 ### 今日やったこと

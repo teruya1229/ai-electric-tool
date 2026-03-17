@@ -902,3 +902,18 @@ visitedJunctions 再検討トリガー
 - エンジン本体は未変更（parser / groups / circuits / graph / layout / wirePaths）。
 - `stability-test.ps1` の既存 repeat ロジック・既存 runType 判定・`.tmp_case_results.json` 構造は維持する。
 - compare 結果は `.tmp_case_results_compare.json` に閉じ、既存JSON契約を変更しない。
+
+---
+
+## 2026-03-17 次にやるべき1手（currentWindowHandle compare 1回観測後）
+- `currentWindowHandle あり / なし` compare の追加1回結果を基準に、同一軸で再現確認を優先する（追加改修は入れない）。
+
+判断基準
+- 今回1回観測では `withCurrentWindowProbe=timeout_only` に対して `withoutCurrentWindowProbe=mixed_webdriver_error`（`webdriverError2=invalid session id`）となり、runType差分が出た。
+- 次回も同傾向が再現するなら、currentWindowHandle probe 単独軸を主因候補として優先する。
+- 再現しない場合は、単発差分の可能性を残し、windowHandles または組み合わせ要因を次候補として扱う。
+
+注意点
+- エンジン本体は未変更（parser / groups / circuits / graph / layout / wirePaths）。
+- `stability-test.ps1` の既存 repeat ロジック・既存 runType 判定・`.tmp_case_results.json` 構造は維持する。
+- compare 結果は `.tmp_case_results_compare.json` で管理し、既存JSON契約を変更しない。
