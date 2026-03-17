@@ -6,6 +6,19 @@ AI電気工事サポートツールを開発する。
 
 ## AI電気施工アシスタント 引き継ぎ（最新）
 
+## 2026-03-17 次にやるべき1手（windowHandles compare 事実固定後）
+- `windowHandles 取得を避ける / 遅らせる / 条件化する` の3案で、呼び出し位置と呼び出し条件の compare 設計を `stability-test.ps1` 側だけで定義する（実装は次回）。
+
+判断基準
+- windowHandles 単独 compare では `withWindowHandlesProbe=mixed_webdriver_error` かつ `webdriverError2=invalid session id`、`withoutWindowHandlesProbe=timeout_only` を確認済み。
+- currentWindowHandle 単独 compare は再実行で差分非再現があり、現時点では決定打ではない。
+- 次回は windowHandles 呼び出し位置（セッション直後/URL確認後など）と呼び出し条件（明示フラグ時のみ等）の違いで、mixed 側への寄り方が再現するかを評価する。
+
+注意点
+- エンジン本体（parser / groups / circuits / graph / layout / wirePaths）は未変更のまま維持する。
+- `.tmp_case_results.json` の既存構造は維持し、外部契約を変更しない。
+- compare 結果は `.tmp_case_results_compare.json` 側に閉じて扱う。
+
 ### 現在フェーズ
 UI整理 + 表示日本語化 完了
 

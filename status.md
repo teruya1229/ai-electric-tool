@@ -2,6 +2,32 @@
 
 ## AI電気施工アシスタント（更新: 108107e）
 
+## 2026-03-17 E2E compare観測（windowHandlesあり/なし）（commit: pending）
+
+### 今日やったこと
+- `status.md` / `handoff.md` を再読して前提を確認
+- `.tmp_case_results_compare.json` の `withWindowHandlesProbe` / `withoutWindowHandlesProbe` / `diffSummary` を確認し、今回結果を固定
+- 今回は `stability-test.ps1` を編集せず、追加観測も行わず、記録更新のみに限定
+
+### 現在の状態
+- compare 出力: `.tmp_case_results_compare.json`
+- `withWindowHandlesProbe`
+  - `runType=mixed_webdriver_error`
+  - `webdriverError2="invalid session id"`
+  - `windowHandlesSucceeded=true`
+  - `windowHandlesCount=1`
+- `withoutWindowHandlesProbe`
+  - `runType=timeout_only`
+  - `webdriverError2=null`
+  - `windowHandlesSucceeded=false`
+  - `windowHandlesCount=null`
+- `diffSummary`
+  - `runTypeChanged=true`
+  - `webdriverError2Changed=true`
+  - `windowHandlesSucceededChanged=true`
+  - `windowHandlesCountChanged=true`
+- 今回1回観測では、windowHandles 単独 compare で mixed 側へ寄る差分を確認
+
 ## 2026-03-17 E2E compare観測（currentWindowHandleあり/なし）（commit: pending）
 
 ### 今日やったこと
