@@ -429,6 +429,10 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_WINDOW_HANDL
     try {
       $raw = Get-Content -Raw -Path $outputPath
       if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+      $json = $null
+      try { $json = $raw | ConvertFrom-Json -Depth 20 } catch {}
+      $diag = $null
+      if ($json -and $json.preUiInitDiagnostic) { $diag = $json.preUiInitDiagnostic }
       $runType = $null
       $webdriverError = $null
       $webdriverError1 = $null
@@ -439,15 +443,27 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_WINDOW_HANDL
       $windowHandlesCount = $null
       $windowHandlesErrorClass = $null
 
-      if ($raw -match '"runType"\s*:\s*"([^"]*)"') { $runType = [string]$Matches[1] }
-      if ($raw -match '"webdriverError"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError = [string]$Matches[2] } }
-      if ($raw -match '"webdriverError1"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError1 = [string]$Matches[2] } }
-      if ($raw -match '"webdriverError2"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError2 = [string]$Matches[2] } }
-      if ($raw -match '"hrefBeforeUiInit"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $hrefBeforeUiInit = [string]$Matches[2] } }
-      if ($raw -match '"windowHandlesProbeAttempted"\s*:\s*(true|false)') { $windowHandlesProbeAttempted = ([string]$Matches[1] -eq "true") }
-      if ($raw -match '"windowHandlesSucceeded"\s*:\s*(true|false)') { $windowHandlesSucceeded = ([string]$Matches[1] -eq "true") }
-      if ($raw -match '"windowHandlesCount"\s*:\s*(null|-?\d+)') { if ($Matches[1] -ne "null") { $windowHandlesCount = [int]$Matches[1] } }
-      if ($raw -match '"windowHandlesErrorClass"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $windowHandlesErrorClass = [string]$Matches[2] } }
+      if ($diag) {
+        if ($null -ne $diag.runType) { $runType = [string]$diag.runType }
+        if ($null -ne $diag.webdriverError) { $webdriverError = [string]$diag.webdriverError }
+        if ($null -ne $diag.webdriverError1) { $webdriverError1 = [string]$diag.webdriverError1 }
+        if ($null -ne $diag.webdriverError2) { $webdriverError2 = [string]$diag.webdriverError2 }
+        if ($null -ne $diag.hrefBeforeUiInit) { $hrefBeforeUiInit = [string]$diag.hrefBeforeUiInit }
+        if ($null -ne $diag.windowHandlesProbeAttempted) { $windowHandlesProbeAttempted = [bool]$diag.windowHandlesProbeAttempted }
+        if ($null -ne $diag.windowHandlesSucceeded) { $windowHandlesSucceeded = [bool]$diag.windowHandlesSucceeded }
+        if ($null -ne $diag.windowHandlesCount) { $windowHandlesCount = [int]$diag.windowHandlesCount }
+        if ($null -ne $diag.windowHandlesErrorClass) { $windowHandlesErrorClass = [string]$diag.windowHandlesErrorClass }
+      } else {
+        if ($raw -match '"runType"\s*:\s*"([^"]*)"') { $runType = [string]$Matches[1] }
+        if ($raw -match '"webdriverError"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError = [string]$Matches[2] } }
+        if ($raw -match '"webdriverError1"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError1 = [string]$Matches[2] } }
+        if ($raw -match '"webdriverError2"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError2 = [string]$Matches[2] } }
+        if ($raw -match '"hrefBeforeUiInit"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $hrefBeforeUiInit = [string]$Matches[2] } }
+        if ($raw -match '"windowHandlesProbeAttempted"\s*:\s*(true|false)') { $windowHandlesProbeAttempted = ([string]$Matches[1] -eq "true") }
+        if ($raw -match '"windowHandlesSucceeded"\s*:\s*(true|false)') { $windowHandlesSucceeded = ([string]$Matches[1] -eq "true") }
+        if ($raw -match '"windowHandlesCount"\s*:\s*(null|-?\d+)') { if ($Matches[1] -ne "null") { $windowHandlesCount = [int]$Matches[1] } }
+        if ($raw -match '"windowHandlesErrorClass"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $windowHandlesErrorClass = [string]$Matches[2] } }
+      }
 
       return [ordered]@{
         runType = $runType
