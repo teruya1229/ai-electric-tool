@@ -510,7 +510,7 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_WINDOW_HANDL
     } catch {}
     $exitCode = $LASTEXITCODE
     $diag = $null
-    for ($attempt = 1; $attempt -le 10; $attempt++) {
+    for ($attempt = 1; $attempt -le 50; $attempt++) {
       $diag = Get-ComparePreUiSnapshotForWindowHandles
       if ($diag) { break }
       Start-Sleep -Milliseconds 200
