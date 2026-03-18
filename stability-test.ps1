@@ -2469,7 +2469,7 @@ try {
         if ($parsedDelayMs -gt 0) { $windowHandlesDelayMs = $parsedDelayMs }
       } catch {}
     }
-    if ((-not $windowProbeControlled -and -not $currentWindowProbeControlled -and -not $windowHandlesProbeControlled) -or $compareWithWindowProbe -or $compareWithCurrentWindowProbe) {
+    if ((-not $windowProbeControlled -and -not $currentWindowProbeControlled -and -not $windowHandlesProbeControlled) -or $compareWithWindowProbe -or $compareWithCurrentWindowProbe -or $compareWithWindowHandlesProbe) {
       Write-Host "[stability-test] check window handle"
       $windowCheck = Invoke-WindowHandleCheck $script:sessionId
     } else {
