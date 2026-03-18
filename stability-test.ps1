@@ -2921,6 +2921,17 @@ try {
     $hrefAfterCurlFileNavigate = ""
     try { $hrefAfterCurlFileNavigate = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-curl-file-navigate") } catch { $hrefAfterCurlFileNavigate = "" }
     $preUiState = Get-UiInitDiagnostics
+    if ($compareWithWindowHandlesProbe -and (-not $windowHandlesProbeAttempted)) {
+      $windowProbeAttempted = $true
+      $windowHandlesProbeAttempted = $true
+      if ($windowHandlesDelayMs -gt 0) {
+        Start-Sleep -Milliseconds $windowHandlesDelayMs
+      }
+      $windowHandlesCheck = Invoke-WindowHandlesCountCheck $script:sessionId
+      $windowHandlesCount = if ($null -ne $windowHandlesCheck.handlesCount) { [int]$windowHandlesCheck.handlesCount } else { $null }
+      $windowHandlesSucceeded = [bool]($null -ne $windowHandlesCount)
+      $windowHandlesErrorClass = if ($null -ne $windowHandlesCheck.handlesErrorClass) { [string]$windowHandlesCheck.handlesErrorClass } else { $null }
+    }
     $runType = "timeout_only"
     foreach ($we in @($webdriverError, $webdriverError1, $webdriverError2)) {
       if (-not [string]::IsNullOrWhiteSpace([string]$we)) {
