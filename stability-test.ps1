@@ -442,6 +442,11 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_WINDOW_HANDL
       $windowHandlesSucceeded = $false
       $windowHandlesCount = $null
       $windowHandlesErrorClass = $null
+      $compareWithWindowHandlesProbe = $false
+      $runWindowHandlesProbe = $false
+      $windowHandlesTimingProbeControlled = $false
+      $compareWithWindowHandlesProbeEnv = $null
+      $windowHandlesDelayMs = 0
 
       if ($diag) {
         if ($null -ne $diag.runType) { $runType = [string]$diag.runType }
@@ -453,6 +458,11 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_WINDOW_HANDL
         if ($null -ne $diag.windowHandlesSucceeded) { $windowHandlesSucceeded = [bool]$diag.windowHandlesSucceeded }
         if ($null -ne $diag.windowHandlesCount) { $windowHandlesCount = [int]$diag.windowHandlesCount }
         if ($null -ne $diag.windowHandlesErrorClass) { $windowHandlesErrorClass = [string]$diag.windowHandlesErrorClass }
+        if ($null -ne $diag.compareWithWindowHandlesProbe) { $compareWithWindowHandlesProbe = [bool]$diag.compareWithWindowHandlesProbe }
+        if ($null -ne $diag.runWindowHandlesProbe) { $runWindowHandlesProbe = [bool]$diag.runWindowHandlesProbe }
+        if ($null -ne $diag.windowHandlesTimingProbeControlled) { $windowHandlesTimingProbeControlled = [bool]$diag.windowHandlesTimingProbeControlled }
+        if ($null -ne $diag.compareWithWindowHandlesProbeEnv) { $compareWithWindowHandlesProbeEnv = [string]$diag.compareWithWindowHandlesProbeEnv }
+        if ($null -ne $diag.windowHandlesDelayMs) { $windowHandlesDelayMs = [int]$diag.windowHandlesDelayMs }
       } else {
         if ($raw -match '"runType"\s*:\s*"([^"]*)"') { $runType = [string]$Matches[1] }
         if ($raw -match '"webdriverError"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $webdriverError = [string]$Matches[2] } }
@@ -475,6 +485,11 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_WINDOW_HANDL
         windowHandlesSucceeded = $windowHandlesSucceeded
         windowHandlesCount = $windowHandlesCount
         windowHandlesErrorClass = $windowHandlesErrorClass
+        compareWithWindowHandlesProbe = $compareWithWindowHandlesProbe
+        runWindowHandlesProbe = $runWindowHandlesProbe
+        windowHandlesTimingProbeControlled = $windowHandlesTimingProbeControlled
+        compareWithWindowHandlesProbeEnv = $compareWithWindowHandlesProbeEnv
+        windowHandlesDelayMs = $windowHandlesDelayMs
       }
     } catch {
       return $null
@@ -2476,6 +2491,7 @@ try {
     $compareWithCurrentWindowProbe = ($env:STABILITY_COMPARE_WITH_CURRENT_WINDOW_PROBE -eq "1")
     $currentWindowProbeControlled = ($env:STABILITY_COMPARE_CURRENT_WINDOW_MODES -eq "1")
     $compareWithWindowHandlesProbe = ($env:STABILITY_COMPARE_WITH_WINDOW_HANDLES_PROBE -eq "1")
+    $compareWithWindowHandlesProbeEnv = if ($null -ne $env:STABILITY_COMPARE_WITH_WINDOW_HANDLES_PROBE) { [string]$env:STABILITY_COMPARE_WITH_WINDOW_HANDLES_PROBE } else { $null }
     $windowHandlesTimingProbeControlled = ($env:STABILITY_COMPARE_WINDOW_HANDLES_TIMING_MODES -eq "1")
     $windowHandlesProbeControlled = (($env:STABILITY_COMPARE_WINDOW_HANDLES_MODES -eq "1") -or $windowHandlesTimingProbeControlled)
     $windowHandlesDelayMs = 0
@@ -2968,6 +2984,11 @@ try {
       windowHandlesSucceeded = $windowHandlesSucceeded
       windowHandlesCount = $windowHandlesCount
       windowHandlesErrorClass = $windowHandlesErrorClass
+      compareWithWindowHandlesProbe = $compareWithWindowHandlesProbe
+      runWindowHandlesProbe = $runWindowHandlesProbe
+      windowHandlesTimingProbeControlled = $windowHandlesTimingProbeControlled
+      compareWithWindowHandlesProbeEnv = $compareWithWindowHandlesProbeEnv
+      windowHandlesDelayMs = $windowHandlesDelayMs
       runType = $runType
       postNavigateUrlCheckAttempted = $postNavigateUrlCheckAttempted
       postNavigateUrlFound = $postNavigateUrlFound
