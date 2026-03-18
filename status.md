@@ -2,6 +2,45 @@
 
 ## AI電気施工アシスタント（更新: 108107e）
 
+## 2026-03-18 終了時点（windowHandles child読み取り経路）（commit: 5ae0e8e）
+
+### 今日やったこと
+- windowHandles-only compare の child 実行後読み取り経路を再確認した。
+- `diagnostic=null` 直返し経路（child 後再読ループで最後まで null の場合にそのまま返却）を特定した。
+- `stability-test.ps1` に、`diagnostic` が null にならない最小 fallback と `diagnosticReadState`（`missing` / `empty` / `unreadable` / `unreadable-or-unexpected-json`）を追加した。
+- commit / push を完了した（`5ae0e8e`）。
+
+### 現在の状態
+- 修正は `origin/main` に反映済み。
+- 他ファイルへの変更波及なし（今回作業分）。
+- 実行は未実施。
+- 次回は `.tmp_case_results_compare.json` の `diagnosticReadState` 確認から再開する。
+
+## 2026-03-17 確定事項反映（更新専用）（commit: pending）
+
+### 今日やったこと
+- `status.md` / `handoff.md` を再読し、今回チャットで確定した固定運用ルールと技術結論のみを反映した。
+- コード編集・追加実行は行わず、記録更新のみに限定した。
+
+### 現在の状態
+- 固定運用ルール
+  - Cursorは編集・更新専用
+  - 実行はCursorにやらせない
+  - 実行系はGPTが出すPowerShellコマンドをユーザーが貼って実行する
+  - `1会話 = 1役割`
+  - コメントアウト付き実行文、EOFっぽい崩れ、別文脈混入、聞き返し増加が出たらその実行は破棄して新チャット候補にする
+- 技術結論（確定）
+  - windowHandles 単独 compare で差分あり
+  - withWindowHandlesProbe:
+    - `runType = mixed_webdriver_error`
+    - `webdriverError2 = invalid session id`
+    - `windowHandlesSucceeded = true`
+    - `windowHandlesCount = 1`
+  - withoutWindowHandlesProbe:
+    - `runType = timeout_only`
+    - `webdriverError2 = null`
+  - 現時点の最有力仮説は、windowHandles 取得が invalid session id 側の表面化に強く関与していること
+
 ## 2026-03-17 Cursor運用ルール固定（編集/更新専用）（commit: pending）
 
 ### 今日やったこと
@@ -13,6 +52,31 @@
 - 今後は `Cursor=編集/更新専用`、`実行=GPTのPowerShellコマンド方式` で進める。
 - 軽量運用（`status.md` / `handoff.md` 中心）は維持する。
 - 実行系の崩れ（コメントアウト付き実行文、EOFっぽい崩れ、別文脈混入、聞き返し増加）は Cursor 運用設計で吸収する方針に変更した。
+
+## 2026-03-17 現在固定（更新専用チャット反映）（commit: pending）
+
+### 今日やったこと
+- `status.md` / `handoff.md` を再読し、固定運用と技術結論を再確認した。
+- 更新専用チャットの固定ルール（役割/対象ファイル/禁止事項の3行固定、Cursorは編集専用、実行はユーザー実行）を明文化した。
+- window compare 系の確定事実を、次チャットで修正に直行できる形に集約した。
+
+### 現在の状態
+- 固定運用
+  - `1会話 = 1役割` を維持
+  - Cursor は編集/更新専用（追加実行はしない）
+  - 実行は GPT が提示する PowerShell コマンドをユーザーが貼り付け実行
+  - 新チャット冒頭は `役割 / 対象ファイル / 禁止事項` の3行を固定
+  - 基本参照は `status.md` / `handoff.md`、`PROJECT_STATE.md` / `rules.md` は必要時のみ
+- 技術結論（確定）
+  - `repeatCount=10` 完走でも `allTimeoutOnly=true`
+  - `navigate あり/なし` compare は本質差なし
+  - `execute あり/なし` compare は初回のみ差分、以後は非再現（単発差分寄り）
+  - `window probe あり/なし` compare では差分あり
+  - `currentWindowHandle` 単独 compare は1回差分後に非再現で決定打ではない
+  - `windowHandles` 単独 compare は明確差分あり
+    - with: `runType=mixed_webdriver_error`, `webdriverError2=invalid session id`, `windowHandlesSucceeded=true`, `windowHandlesCount=1`
+    - without: `runType=timeout_only`, `webdriverError2=null`
+  - 現時点の最有力仮説: `windowHandles` 取得が `invalid session id` 側の表面化に強く関与
 
 ## 2026-03-17 E2E compare観測（windowHandlesあり/なし）（commit: pending）
 

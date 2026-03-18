@@ -6,6 +6,63 @@ AI電気工事サポートツールを開発する。
 
 ## AI電気施工アシスタント 引き継ぎ（最新）
 
+## 2026-03-18 次にやるべき1手（windowHandles child読み取り切り分け）
+- `powershell -ExecutionPolicy Bypass -File .\tools\run-window-handles-only.ps1`
+- `Get-Content .\.tmp_case_results_compare.json`
+を実行し、`withWindowHandlesProbe.diagnostic` / `withoutWindowHandlesProbe.diagnostic` の `diagnosticReadState` を確認する。
+
+判断基準
+- `diagnosticReadState` で child 出力欠落位置を特定する。
+- `missing` / `empty` / `unreadable` / `unreadable-or-unexpected-json` のどれかを基に、次の最小修正点を1点に絞る。
+
+注意点
+- 実行は Cursor にやらせない。
+- 実行は GPT が出す PowerShell コマンド方式を維持する。
+- 今回の修正は compare 判定仕様変更ではなく、観測性向上のみ。
+
+## 2026-03-17 確定事項反映（更新専用チャット）
+- このチャットでは更新のみを実施し、コード編集・追加実行は行わない。
+
+固定運用ルール
+- Cursorは編集・更新専用
+- 実行はCursorにやらせない
+- 実行系はGPTが出すPowerShellコマンドをユーザーが貼って実行する
+- `1会話 = 1役割`
+- コメントアウト付き実行文、EOFっぽい崩れ、別文脈混入、聞き返し増加が出たらその実行は破棄して新チャット候補にする
+
+技術結論（確定）
+- windowHandles 単独 compare で差分あり
+- withWindowHandlesProbe:
+  - `runType = mixed_webdriver_error`
+  - `webdriverError2 = invalid session id`
+  - `windowHandlesSucceeded = true`
+  - `windowHandlesCount = 1`
+- withoutWindowHandlesProbe:
+  - `runType = timeout_only`
+  - `webdriverError2 = null`
+- 現時点の最有力仮説は、windowHandles 取得が invalid session id 側の表面化に強く関与していること
+
+## 2026-03-17 更新専用チャット固定（次チャット着手用）
+- このチャットは更新専用として扱い、コード編集・追加実行は行わない。
+
+判断基準
+- Cursor は編集/更新専用、実行は GPT 提示の PowerShell コマンドをユーザーが実行する方式を固定する。
+- 新チャット冒頭は `役割 / 対象ファイル / 禁止事項` の3行を固定する。
+- コメントアウト付き実行文、EOFっぽい崩れ、別文脈混入、聞き返し増加が出た実行は破棄し、新チャット候補とする。
+- 基本参照は `status.md` / `handoff.md`、`PROJECT_STATE.md` / `rules.md` は必要時のみ参照する。
+
+技術結論（確定）
+- `repeatCount=10` 完走でも `allTimeoutOnly=true`。
+- `navigate あり/なし` compare は本質差なし。
+- `execute あり/なし` compare は初回のみ差分、以後非再現（単発差分寄り）。
+- `window probe あり/なし` compare は差分あり。
+- `currentWindowHandle` 単独 compare は1回差分後に非再現で決定打ではない。
+- `windowHandles` 単独 compare は明確差分あり（with: `mixed_webdriver_error` + `webdriverError2=invalid session id`、without: `timeout_only`）。
+- 現時点の最有力仮説は「windowHandles 取得が `invalid session id` 側の表面化に強く関与」。
+
+次チャットの開始点
+- 修正タスクは `stability-test.ps1` 側の限定変更で開始し、windowHandles 呼び出しの位置/条件を compare で評価する。
+
 ## 2026-03-17 次にやるべき1手（Cursor運用固定後）
 - 今後の Cursor 依頼は、毎回チャット冒頭で `役割` / `対象ファイル` / `禁止事項` を固定して出す。
 
