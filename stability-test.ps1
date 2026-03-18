@@ -504,6 +504,7 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_WINDOW_HANDL
     }
     $env:STABILITY_REPEAT_CHILD = "1"
     $env:STABILITY_COMPARE_CHILD = "1"
+    try { Remove-Item $outputPath -Force -ErrorAction SilentlyContinue } catch {}
     try {
       & powershell -ExecutionPolicy Bypass -File $script:selfPath | Out-Null
     } catch {}
