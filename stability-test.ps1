@@ -515,6 +515,32 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_WINDOW_HANDL
       if ($diag) { break }
       Start-Sleep -Milliseconds 200
     }
+    if (-not $diag) {
+      $readState = "missing"
+      if (Test-Path $outputPath -PathType Leaf) {
+        try {
+          $len = (Get-Item $outputPath).Length
+          $readState = if ($len -gt 0) { "unreadable-or-unexpected-json" } else { "empty" }
+        } catch { $readState = "unreadable" }
+      }
+      $diag = [ordered]@{
+        runType = $null
+        webdriverError = $null
+        webdriverError1 = $null
+        webdriverError2 = $null
+        hrefBeforeUiInit = $null
+        windowHandlesProbeAttempted = $false
+        windowHandlesSucceeded = $false
+        windowHandlesCount = $null
+        windowHandlesErrorClass = $null
+        compareWithWindowHandlesProbe = $withWindowHandlesProbe
+        runWindowHandlesProbe = $false
+        windowHandlesTimingProbeControlled = $false
+        compareWithWindowHandlesProbeEnv = if ($withWindowHandlesProbe) { "1" } else { $null }
+        windowHandlesDelayMs = 0
+        diagnosticReadState = $readState
+      }
+    }
     return [ordered]@{
       withWindowHandlesProbe = $withWindowHandlesProbe
       exitCode = $exitCode
