@@ -475,6 +475,7 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_WINDOW_HANDL
         if ($raw -match '"windowHandlesErrorClass"\s*:\s*(null|"([^"]*)")') { if ($Matches[1] -ne "null") { $windowHandlesErrorClass = [string]$Matches[2] } }
       }
 
+      $readState = if ($null -ne $json -and $null -ne $json.preUiInitDiagnostic) { "ok" } elseif ($null -ne $json) { "no-preUiInitDiagnostic" } else { "json-parse-failed" }
       return [ordered]@{
         runType = $runType
         webdriverError = $webdriverError
@@ -490,6 +491,7 @@ if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_WINDOW_HANDL
         windowHandlesTimingProbeControlled = $windowHandlesTimingProbeControlled
         compareWithWindowHandlesProbeEnv = $compareWithWindowHandlesProbeEnv
         windowHandlesDelayMs = $windowHandlesDelayMs
+        diagnosticReadState = $readState
       }
     } catch {
       return $null
