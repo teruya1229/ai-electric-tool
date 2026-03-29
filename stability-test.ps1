@@ -1783,7 +1783,36 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
   }
   $scOut = if ($null -ne $sessionsCount) { [string]$sessionsCount } else { "n/a" }
   $containsOut = if ($contains) { 1 } else { 0 }
-  'navigate session-sync label={0} driverBaseUrl={1} port={2} sessionId={3} statusExit={4} statusHttp={5} statusOk={6} sessionsExit={7} sessionsHttp={8} sessionsOk={9} sessionsCount={10} sessionIdsSample={11} containsTarget={12} sessionsMaxTimeSec={13}' -f $label, $base, $portOut, $sessionId, $statusExit, $statusHttp, $statusOk, $sessionsExit, $sessionsHttp, $sessionsOk, $scOut, $sampleStr, $containsOut, $sessionsProbeMaxSec
+  $driverPid = "n/a"
+  $driverProcessFound = 0
+  $driverAlive = "n/a"
+  $driverName = "n/a"
+  if ($label -eq 'post-navigate-timeout') {
+    try {
+      if ($null -ne $script:driverProc -and $script:driverProc.Id) {
+        $driverPid = [string]$script:driverProc.Id
+        $driverProcessFound = 1
+        $gp = Get-Process -Id $script:driverProc.Id -ErrorAction SilentlyContinue
+        if ($null -ne $gp) {
+          try { $gp.Refresh() } catch {}
+          $driverAlive = if ($gp.HasExited) { 0 } else { 1 }
+          $driverName = [string]$gp.ProcessName
+        } else {
+          $driverAlive = 0
+          $driverName = "gone"
+        }
+      }
+    } catch {
+      $driverProcessFound = 0
+      $driverAlive = "err"
+      $driverName = "err"
+    }
+  }
+  $core = 'navigate session-sync label={0} driverBaseUrl={1} port={2} sessionId={3} statusExit={4} statusHttp={5} statusOk={6} sessionsExit={7} sessionsHttp={8} sessionsOk={9} sessionsCount={10} sessionIdsSample={11} containsTarget={12} sessionsMaxTimeSec={13}' -f $label, $base, $portOut, $sessionId, $statusExit, $statusHttp, $statusOk, $sessionsExit, $sessionsHttp, $sessionsOk, $scOut, $sampleStr, $containsOut, $sessionsProbeMaxSec
+  if ($label -eq 'post-navigate-timeout') {
+    $core = $core + ' | driverProbe driverPid=' + $driverPid + ' driverProcessFound=' + $driverProcessFound + ' driverAlive=' + $driverAlive + ' driverName=' + $driverName
+  }
+  $core
 }
 
 function Write-NavigateSessionSyncDiagnostics([string]$label, [string]$sessionId) {
