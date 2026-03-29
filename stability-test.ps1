@@ -1685,6 +1685,19 @@ function Exec-Script([string]$js, [object[]]$args = @(), [string]$scriptLabel = 
   $resp.value
 }
 
+function Invoke-RecoveredPostNavigateExecuteProbe([string]$label, [string]$scriptText) {
+  try {
+    $v = Exec-Script $scriptText @() ("recovered-post-nav-" + $label)
+    $s = if ($null -eq $v) { "" } else { ([string]$v) -replace "[\r\n]+", " " }
+    if ($s.Length -gt 200) { $s = $s.Substring(0, 200) }
+    Write-Host "[stability-test] recovered post-nav probe label=$label ok=True value=$s"
+  } catch {
+    $em = [string]$_.Exception.Message
+    if ($em.Length -gt 200) { $em = $em.Substring(0, 200) }
+    Write-Host "[stability-test] recovered post-nav probe label=$label ok=False error=$em"
+  }
+}
+
 function Open-Page {
   $navigateResult = Invoke-SessionNavigateViaCurl $script:sessionId "$($script:baseUrl)/wiring-diagram.html" 20
   $script:lastNavigateAttempt = $navigateResult
@@ -3203,6 +3216,11 @@ try {
         } catch {
           $retryInvokeError = [string]$_.Exception.Message
           Write-Host "[stability-test] recovered session Open-PageWithRetry failed retry=$openRetry message=$($_.Exception.Message)"
+        }
+        if ($openRetry -eq 1 -and $retryInvokeSucceeded -and $script:lastNavigateAttempt -and [bool]$script:lastNavigateAttempt.ok) {
+          Invoke-RecoveredPostNavigateExecuteProbe "return-1" "return 1;"
+          Invoke-RecoveredPostNavigateExecuteProbe "ready-state" "return document.readyState;"
+          Invoke-RecoveredPostNavigateExecuteProbe "location-href" "return String(location.href || '');"
         }
         if ($openRetry -eq 1) {
           $retryInvokeSucceeded1 = $retryInvokeSucceeded
