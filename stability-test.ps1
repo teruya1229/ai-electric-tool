@@ -1711,6 +1711,7 @@ function Open-PageViaCurl([string]$sessionId, [int]$maxTimeSec = 20) {
 
 function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sessionId) {
   $base = [string]$script:driverBaseUrl
+  $sessionsProbeMaxSec = if ($label -eq 'post-navigate-timeout') { "10" } else { "3" }
   $portOut = "n/a"
   try {
     $u = [System.Uri]$base
@@ -1747,7 +1748,7 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
   $sampleStr = ""
   $contains = $false
   try {
-    $sessArgs = @("--silent", "--show-error", "--max-time", "3", "-o", $outPath, "-w", "%{http_code}", "$base/sessions")
+    $sessArgs = @("--silent", "--show-error", "--max-time", $sessionsProbeMaxSec, "-o", $outPath, "-w", "%{http_code}", "$base/sessions")
     $sessProc = Start-Process -FilePath "curl.exe" -ArgumentList $sessArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $sessCodePath -RedirectStandardError $errPath
     $sessionsExit = [string]$sessProc.ExitCode
     $sessCodeRaw = ""
@@ -1782,7 +1783,7 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
   }
   $scOut = if ($null -ne $sessionsCount) { [string]$sessionsCount } else { "n/a" }
   $containsOut = if ($contains) { 1 } else { 0 }
-  'navigate session-sync label={0} driverBaseUrl={1} port={2} sessionId={3} statusExit={4} statusHttp={5} statusOk={6} sessionsExit={7} sessionsHttp={8} sessionsOk={9} sessionsCount={10} sessionIdsSample={11} containsTarget={12}' -f $label, $base, $portOut, $sessionId, $statusExit, $statusHttp, $statusOk, $sessionsExit, $sessionsHttp, $sessionsOk, $scOut, $sampleStr, $containsOut
+  'navigate session-sync label={0} driverBaseUrl={1} port={2} sessionId={3} statusExit={4} statusHttp={5} statusOk={6} sessionsExit={7} sessionsHttp={8} sessionsOk={9} sessionsCount={10} sessionIdsSample={11} containsTarget={12} sessionsMaxTimeSec={13}' -f $label, $base, $portOut, $sessionId, $statusExit, $statusHttp, $statusOk, $sessionsExit, $sessionsHttp, $sessionsOk, $scOut, $sampleStr, $containsOut, $sessionsProbeMaxSec
 }
 
 function Write-NavigateSessionSyncDiagnostics([string]$label, [string]$sessionId) {
