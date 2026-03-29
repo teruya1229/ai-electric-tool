@@ -1709,6 +1709,25 @@ function Open-PageViaCurl([string]$sessionId, [int]$maxTimeSec = 20) {
   }
 }
 
+function Get-CdLogTailCompact([string]$logPath, [int]$maxLines = 10, [int]$maxChars = 420) {
+  if ([string]::IsNullOrWhiteSpace($logPath) -or -not (Test-Path $logPath -PathType Leaf)) {
+    return "n/a"
+  }
+  try {
+    $lines = Get-Content -Path $logPath -Tail $maxLines -ErrorAction SilentlyContinue
+    if (-not $lines) { return "(empty)" }
+    $s = [string]::Join(" ", @($lines))
+    $s = ($s -replace "`r`n|`n|`r", " ") -replace '\s+', ' '
+    $s = $s -replace '\|', '/'
+    if ($s.Length -gt $maxChars) {
+      $s = $s.Substring($s.Length - $maxChars)
+    }
+    return $s
+  } catch {
+    return "err"
+  }
+}
+
 function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sessionId) {
   $base = [string]$script:driverBaseUrl
   $sessionsProbeMaxSec = if ($label -eq 'post-navigate-timeout') { "10" } else { "3" }
@@ -1835,6 +1854,8 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
   $endpoint = "$($script:driverBaseUrl)/session/$sessionId/url"
   Write-Host ('[stability-test] direct webdriver navigate phase=start target={0} maxTimeSec={1} endpoint={2}' -f $targetUrl, $maxTimeSec, $endpoint)
   Write-NavigateSessionSyncDiagnostics 'pre-navigate' $sessionId
+  $preCdTail = Get-CdLogTailCompact $script:chromeDriverLogPath 10 420
+  Write-Host ('[stability-test] cd-log-tail label=pre-direct-url preNavigateCdLogTail=' + $preCdTail)
   $emitNavPhase = {
     param([string]$phaseLabel, [string]$sessionSyncSegment = "")
     $bl = 0
@@ -1887,6 +1908,8 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
     $result.errorClass = "timeout"
     $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl timeout" }
     $postSyncSeg = Get-NavigateSessionSyncDiagnosticsSegment 'post-navigate-timeout' $sessionId
+    $postCdTail = Get-CdLogTailCompact $script:chromeDriverLogPath 10 420
+    $postSyncSeg = $postSyncSeg + ' postNavigateCdLogTail=' + $postCdTail
     & $emitNavPhase 'error' $postSyncSeg
     return $result
   }
