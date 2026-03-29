@@ -1728,6 +1728,19 @@ function Get-CdLogTailCompact([string]$logPath, [int]$maxLines = 10, [int]$maxCh
   }
 }
 
+function Get-CdLogPostKeywordFlags([string]$tail) {
+  if ([string]::IsNullOrWhiteSpace($tail) -or $tail -eq "n/a" -or $tail -eq "(empty)") {
+    return " postCdHasSessionsKeyword=0 postCdHasCommandKeyword=0 postCdHasDevToolsKeyword=0"
+  }
+  $t = $tail.ToLowerInvariant()
+  $s = 0
+  if (($t.IndexOf("/sessions") -ge 0) -or ($t.IndexOf("session list") -ge 0) -or ($t.IndexOf("/session/") -ge 0) -or ($t.IndexOf("sessions") -ge 0)) { $s = 1 }
+  $c = if ($t.IndexOf("command") -ge 0) { 1 } else { 0 }
+  $d = 0
+  if (($t.IndexOf("devtools") -ge 0) -or ($t.IndexOf("websocket") -ge 0) -or ($t.IndexOf("page") -ge 0) -or ($t.IndexOf("frame") -ge 0)) { $d = 1 }
+  return " postCdHasSessionsKeyword=$s postCdHasCommandKeyword=$c postCdHasDevToolsKeyword=$d"
+}
+
 function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sessionId) {
   $base = [string]$script:driverBaseUrl
   $sessionsProbeMaxSec = if ($label -eq 'post-navigate-timeout') { "10" } else { "3" }
@@ -1909,7 +1922,7 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
     $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl timeout" }
     $postSyncSeg = Get-NavigateSessionSyncDiagnosticsSegment 'post-navigate-timeout' $sessionId
     $postCdTail = Get-CdLogTailCompact $script:chromeDriverLogPath 10 420
-    $postSyncSeg = $postSyncSeg + ' postNavigateCdLogTail=' + $postCdTail
+    $postSyncSeg = $postSyncSeg + ' postNavigateCdLogTail=' + $postCdTail + (Get-CdLogPostKeywordFlags $postCdTail)
     & $emitNavPhase 'error' $postSyncSeg
     return $result
   }
