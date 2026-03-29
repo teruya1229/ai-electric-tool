@@ -1760,6 +1760,34 @@ function Get-CdLogWideKeywordFlags([string]$logPath, [int]$maxLines = 80) {
   }
 }
 
+function Get-CdLogSessionCommandExcerpt([string]$logPath, [int]$tailLines = 80, [int]$maxKeptLines = 3, [int]$maxChars = 480) {
+  if ([string]::IsNullOrWhiteSpace($logPath) -or -not (Test-Path $logPath -PathType Leaf)) {
+    return " postCdSessionCommandExcerpt=n/a"
+  }
+  try {
+    $all = Get-Content -Path $logPath -Tail $tailLines -ErrorAction SilentlyContinue
+    if (-not $all) { return " postCdSessionCommandExcerpt=(empty)" }
+    $hits = @()
+    foreach ($line in @($all)) {
+      $lc = $line.ToLowerInvariant()
+      if (($lc.IndexOf("sessions") -ge 0) -or ($lc.IndexOf("/session/") -ge 0) -or ($lc.IndexOf("command") -ge 0)) {
+        $one = ($line -replace "`r`n|`n|`r", " ") -replace '\s+', ' '
+        $one = ($one.Trim()) -replace '\|', '/'
+        $hits += ,$one
+      }
+    }
+    if ($hits.Count -eq 0) { return " postCdSessionCommandExcerpt=(none)" }
+    if ($hits.Count -gt $maxKeptLines) {
+      $hits = $hits[-$maxKeptLines..-1]
+    }
+    $s = [string]::Join(" // ", $hits)
+    if ($s.Length -gt $maxChars) { $s = $s.Substring($s.Length - $maxChars) }
+    return " postCdSessionCommandExcerpt=" + $s
+  } catch {
+    return " postCdSessionCommandExcerpt=err"
+  }
+}
+
 function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sessionId) {
   $base = [string]$script:driverBaseUrl
   $sessionsProbeMaxSec = if ($label -eq 'post-navigate-timeout') { "10" } else { "3" }
@@ -1941,7 +1969,7 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
     $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl timeout" }
     $postSyncSeg = Get-NavigateSessionSyncDiagnosticsSegment 'post-navigate-timeout' $sessionId
     $postCdTail = Get-CdLogTailCompact $script:chromeDriverLogPath 10 420
-    $postSyncSeg = $postSyncSeg + ' postNavigateCdLogTail=' + $postCdTail + (Get-CdLogPostKeywordFlags $postCdTail) + (Get-CdLogWideKeywordFlags $script:chromeDriverLogPath 80)
+    $postSyncSeg = $postSyncSeg + ' postNavigateCdLogTail=' + $postCdTail + (Get-CdLogPostKeywordFlags $postCdTail) + (Get-CdLogWideKeywordFlags $script:chromeDriverLogPath 80) + (Get-CdLogSessionCommandExcerpt $script:chromeDriverLogPath)
     & $emitNavPhase 'error' $postSyncSeg
     return $result
   }
