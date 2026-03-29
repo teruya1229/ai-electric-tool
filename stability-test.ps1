@@ -1720,8 +1720,22 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
     errorClass = "unknown"
     errorMessage = ""
     exitCode = $null
+    maxTimeSecApplied = $maxTimeSec
   }
   $endpoint = "$($script:driverBaseUrl)/session/$sessionId/url"
+  Write-Host ('[stability-test] direct webdriver navigate phase=start target={0} maxTimeSec={1} endpoint={2}' -f $targetUrl, $maxTimeSec, $endpoint)
+  $emitNavPhase = {
+    param([string]$phaseLabel)
+    $bl = 0
+    if ($result.responseBody) { $bl = $result.responseBody.Length }
+    $bp = ""
+    if ($bl -gt 0) {
+      $take = [Math]::Min(200, $bl)
+      $bp = (($result.responseBody.Substring(0, $take)) -replace "[\r\n]+", " ")
+    }
+    $cls = if ($null -ne $result.errorClass) { [string]$result.errorClass } else { "" }
+    Write-Host ('[stability-test] direct webdriver navigate phase=' + $phaseLabel + ' exitCode=' + $result.exitCode + ' httpStatus=' + $result.httpStatus + ' maxTimeSec=' + $maxTimeSec + ' class=' + $cls + ' bodyLen=' + $bl + ' bodyPreview=' + $bp + ' stderrSummary=' + $result.stderrSummary)
+  }
   $payload = @{ url = $targetUrl } | ConvertTo-Json -Compress
   $bodyPath = [IO.Path]::GetTempFileName()
   $errPath = [IO.Path]::GetTempFileName()
@@ -1753,11 +1767,13 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
   if (($result.exitCode -eq 28) -or ($stderrLower -match "timeout")) {
     $result.errorClass = "timeout"
     $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl timeout" }
+    & $emitNavPhase 'error'
     return $result
   }
   if ($result.exitCode -ne 0) {
     $result.errorClass = "curl-error"
     $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl exitCode=$($result.exitCode)" }
+    & $emitNavPhase 'error'
     return $result
   }
   $wdError = $null
@@ -1796,6 +1812,7 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
       $result.errorClass = "webdriver-error"
     }
     $result.errorMessage = if ($wdMessage) { $wdMessage } else { $wdError }
+    & $emitNavPhase 'error'
     return $result
   }
   if (($null -ne $result.httpStatus) -and (($result.httpStatus -lt 200) -or ($result.httpStatus -ge 300))) {
@@ -1805,11 +1822,13 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
       $result.errorClass = "http-error"
     }
     $result.errorMessage = "http status=$($result.httpStatus)"
+    & $emitNavPhase 'error'
     return $result
   }
   $result.ok = $true
   $result.errorClass = $null
   $result.errorMessage = ""
+  & $emitNavPhase 'done'
   $result
 }
 
@@ -2778,6 +2797,7 @@ try {
         errorClass = "skipped-by-compare"
         errorMessage = "direct webdriver navigate skipped"
         transportUsed = "skipped"
+        maxTimeSecApplied = $null
       }
     } else {
       $navigateAttempted = $true
@@ -2800,7 +2820,6 @@ try {
       $navigateErrorClass = if ($directNavigateResult.errorClass) { [string]$directNavigateResult.errorClass } else { "webdriver-error" }
       $navigateErrorMessage = if ($directNavigateResult.errorMessage) { [string]$directNavigateResult.errorMessage } else { "navigate failed" }
       $navigateErrorType = "CurlNavigateError"
-      Write-Host "[stability-test] direct webdriver navigate error=$navigateErrorMessage"
     }
     $postNavigateUrlCheck = Invoke-CurrentUrlCheck $script:sessionId
     $postNavigateUrlCheckAttempted = [bool]$postNavigateUrlCheck.currentUrlCheckAttempted
@@ -2987,6 +3006,7 @@ try {
     $directNavigateDiagnostic = [ordered]@{
       phase = "direct-webdriver-navigate"
       navigateTargetUrl = $navigateTargetUrl
+      navigateMaxTimeSec = if ($null -ne $directNavigateResult.maxTimeSecApplied) { $directNavigateResult.maxTimeSecApplied } else { $null }
       navigateAttempted = $navigateAttempted
       navigateResponseReceived = $navigateResponseReceived
       navigateResponseStatusCode = $navigateResponseStatusCode
