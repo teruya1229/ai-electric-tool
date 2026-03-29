@@ -1709,7 +1709,7 @@ function Open-PageViaCurl([string]$sessionId, [int]$maxTimeSec = 20) {
   }
 }
 
-function Write-NavigateSessionSyncDiagnostics([string]$label, [string]$sessionId) {
+function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sessionId) {
   $base = [string]$script:driverBaseUrl
   $portOut = "n/a"
   try {
@@ -1749,7 +1749,11 @@ function Write-NavigateSessionSyncDiagnostics([string]$label, [string]$sessionId
     try { Remove-Item $errPath -Force -ErrorAction SilentlyContinue } catch {}
   }
   $scOut = if ($null -ne $sessionsCount) { [string]$sessionsCount } else { "n/a" }
-  Write-Host ('[stability-test] navigate session-sync label={0} driverBaseUrl={1} port={2} sessionId={3} sessionsCount={4} sessionIdsSample={5} containsTarget={6}' -f $label, $base, $portOut, $sessionId, $scOut, $sampleStr, $contains)
+  'navigate session-sync label={0} driverBaseUrl={1} port={2} sessionId={3} sessionsCount={4} sessionIdsSample={5} containsTarget={6}' -f $label, $base, $portOut, $sessionId, $scOut, $sampleStr, $contains
+}
+
+function Write-NavigateSessionSyncDiagnostics([string]$label, [string]$sessionId) {
+  Write-Host ('[stability-test] ' + (Get-NavigateSessionSyncDiagnosticsSegment $label $sessionId))
 }
 
 function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [int]$maxTimeSec = 20) {
@@ -1769,7 +1773,7 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
   Write-Host ('[stability-test] direct webdriver navigate phase=start target={0} maxTimeSec={1} endpoint={2}' -f $targetUrl, $maxTimeSec, $endpoint)
   Write-NavigateSessionSyncDiagnostics 'pre-navigate' $sessionId
   $emitNavPhase = {
-    param([string]$phaseLabel)
+    param([string]$phaseLabel, [string]$sessionSyncSegment = "")
     $bl = 0
     if ($result.responseBody) { $bl = $result.responseBody.Length }
     $bp = ""
@@ -1778,7 +1782,9 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
       $bp = (($result.responseBody.Substring(0, $take)) -replace "[\r\n]+", " ")
     }
     $cls = if ($null -ne $result.errorClass) { [string]$result.errorClass } else { "" }
-    Write-Host ('[stability-test] direct webdriver navigate phase=' + $phaseLabel + ' exitCode=' + $result.exitCode + ' httpStatus=' + $result.httpStatus + ' maxTimeSec=' + $maxTimeSec + ' class=' + $cls + ' bodyLen=' + $bl + ' bodyPreview=' + $bp + ' stderrSummary=' + $result.stderrSummary)
+    $line = '[stability-test] direct webdriver navigate phase=' + $phaseLabel + ' exitCode=' + $result.exitCode + ' httpStatus=' + $result.httpStatus + ' maxTimeSec=' + $maxTimeSec + ' class=' + $cls + ' bodyLen=' + $bl + ' bodyPreview=' + $bp + ' stderrSummary=' + $result.stderrSummary
+    if ($sessionSyncSegment) { $line = $line + ' | [stability-test] ' + $sessionSyncSegment }
+    Write-Host $line
   }
   $payload = @{ url = $targetUrl } | ConvertTo-Json -Compress
   $bodyPath = [IO.Path]::GetTempFileName()
@@ -1811,8 +1817,8 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
   if (($result.exitCode -eq 28) -or ($stderrLower -match "timeout")) {
     $result.errorClass = "timeout"
     $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl timeout" }
-    Write-NavigateSessionSyncDiagnostics 'post-navigate-timeout' $sessionId
-    & $emitNavPhase 'error'
+    $postSyncSeg = Get-NavigateSessionSyncDiagnosticsSegment 'post-navigate-timeout' $sessionId
+    & $emitNavPhase 'error' $postSyncSeg
     return $result
   }
   if ($result.exitCode -ne 0) {
