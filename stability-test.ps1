@@ -1223,12 +1223,14 @@ function New-Session {
   $resp
 }
 
-function New-WebDriverSessionMinimal() {
+function New-WebDriverSessionMinimal([string]$pageLoadStrategy = $null) {
+  $alwaysMatch = @{ browserName = "chrome" }
+  if (-not [string]::IsNullOrWhiteSpace($pageLoadStrategy)) {
+    $alwaysMatch.pageLoadStrategy = $pageLoadStrategy
+  }
   $caps = @{
     capabilities = @{
-      alwaysMatch = @{
-        browserName = "chrome"
-      }
+      alwaysMatch = $alwaysMatch
     }
   } | ConvertTo-Json -Depth 8
   $resp = Invoke-RestMethod -Method Post -Uri "$($script:driverBaseUrl)/session" -ContentType "application/json" -Body $caps -TimeoutSec 30
@@ -3151,7 +3153,7 @@ try {
         Start-Driver
         Write-Host "[stability-test] driver recycle done oldPort=$oldDriverPort newPort=$($script:driverPort)"
       }
-      $minimalRecovered = New-WebDriverSessionMinimal
+      $minimalRecovered = New-WebDriverSessionMinimal -pageLoadStrategy "none"
       $script:sessionId = $minimalRecovered.sessionId
       Log-SessionCapabilitiesSummary $minimalRecovered.response "minimal-e2e-recovered"
       $checkedSessionId = [string]$script:sessionId
@@ -3440,7 +3442,7 @@ try {
     if ((-not $recoveryOpenReachedTarget) -and (-not (Open-PageViaCurl $script:sessionId 25))) {
       Write-Host "[stability-test] minimal curl page-open failed; retry with recovered minimal session"
       try { Remove-Session } catch {}
-      $minimalRecovered = New-WebDriverSessionMinimal
+      $minimalRecovered = New-WebDriverSessionMinimal -pageLoadStrategy "none"
       $script:sessionId = $minimalRecovered.sessionId
       Log-SessionCapabilitiesSummary $minimalRecovered.response "minimal-e2e-recovered-open-page"
       Wait-BrowserReady 500
