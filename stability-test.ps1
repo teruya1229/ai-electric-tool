@@ -1716,14 +1716,46 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
     $u = [System.Uri]$base
     $portOut = [string]$u.Port
   } catch { $portOut = "n/a" }
+  $statusExit = "n/a"
+  $statusHttp = "n/a"
+  $statusOk = 0
+  $stBody = [IO.Path]::GetTempFileName()
+  $stErr = [IO.Path]::GetTempFileName()
+  $stCode = [IO.Path]::GetTempFileName()
+  try {
+    $stArgs = @("--silent", "--show-error", "--max-time", "3", "-o", $stBody, "-w", "%{http_code}", "$base/status")
+    $stProc = Start-Process -FilePath "curl.exe" -ArgumentList $stArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stCode -RedirectStandardError $stErr
+    $statusExit = [string]$stProc.ExitCode
+    $stCodeRaw = ""
+    try { $stCodeRaw = ([string](Get-Content -Raw -Path $stCode)).Trim() } catch { $stCodeRaw = "" }
+    if ($stCodeRaw -match '^\d+$') {
+      $statusHttp = $stCodeRaw
+      if ($stProc.ExitCode -eq 0 -and [int]$stCodeRaw -eq 200) { $statusOk = 1 }
+    }
+  } catch {
+    $statusExit = "err"
+  } finally {
+    try { Remove-Item $stBody, $stErr, $stCode -Force -ErrorAction SilentlyContinue } catch {}
+  }
   $outPath = [IO.Path]::GetTempFileName()
   $errPath = [IO.Path]::GetTempFileName()
+  $sessCodePath = [IO.Path]::GetTempFileName()
+  $sessionsExit = "n/a"
+  $sessionsHttp = "n/a"
+  $sessionsOk = 0
   $sessionsCount = $null
   $sampleStr = ""
   $contains = $false
   try {
-    $sessArgs = @("--silent", "--show-error", "--max-time", "3", "$base/sessions")
-    $null = Start-Process -FilePath "curl.exe" -ArgumentList $sessArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $outPath -RedirectStandardError $errPath
+    $sessArgs = @("--silent", "--show-error", "--max-time", "3", "-o", $outPath, "-w", "%{http_code}", "$base/sessions")
+    $sessProc = Start-Process -FilePath "curl.exe" -ArgumentList $sessArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $sessCodePath -RedirectStandardError $errPath
+    $sessionsExit = [string]$sessProc.ExitCode
+    $sessCodeRaw = ""
+    try { $sessCodeRaw = ([string](Get-Content -Raw -Path $sessCodePath)).Trim() } catch { $sessCodeRaw = "" }
+    if ($sessCodeRaw -match '^\d+$') {
+      $sessionsHttp = $sessCodeRaw
+      if ($sessProc.ExitCode -eq 0 -and [int]$sessCodeRaw -eq 200) { $sessionsOk = 1 }
+    }
     $raw = ""
     try { $raw = [string](Get-Content -Raw -Path $outPath) } catch { $raw = "" }
     if (-not [string]::IsNullOrWhiteSpace($raw)) {
@@ -1743,13 +1775,14 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
         $sampleStr = [string]::Join(',', $idsSample)
       }
     }
-  } catch {}
-  finally {
-    try { Remove-Item $outPath -Force -ErrorAction SilentlyContinue } catch {}
-    try { Remove-Item $errPath -Force -ErrorAction SilentlyContinue } catch {}
+  } catch {
+    $sessionsExit = "err"
+  } finally {
+    try { Remove-Item $outPath, $errPath, $sessCodePath -Force -ErrorAction SilentlyContinue } catch {}
   }
   $scOut = if ($null -ne $sessionsCount) { [string]$sessionsCount } else { "n/a" }
-  'navigate session-sync label={0} driverBaseUrl={1} port={2} sessionId={3} sessionsCount={4} sessionIdsSample={5} containsTarget={6}' -f $label, $base, $portOut, $sessionId, $scOut, $sampleStr, $contains
+  $containsOut = if ($contains) { 1 } else { 0 }
+  'navigate session-sync label={0} driverBaseUrl={1} port={2} sessionId={3} statusExit={4} statusHttp={5} statusOk={6} sessionsExit={7} sessionsHttp={8} sessionsOk={9} sessionsCount={10} sessionIdsSample={11} containsTarget={12}' -f $label, $base, $portOut, $sessionId, $statusExit, $statusHttp, $statusOk, $sessionsExit, $sessionsHttp, $sessionsOk, $scOut, $sampleStr, $containsOut
 }
 
 function Write-NavigateSessionSyncDiagnostics([string]$label, [string]$sessionId) {
