@@ -1709,6 +1709,49 @@ function Open-PageViaCurl([string]$sessionId, [int]$maxTimeSec = 20) {
   }
 }
 
+function Write-NavigateSessionSyncDiagnostics([string]$label, [string]$sessionId) {
+  $base = [string]$script:driverBaseUrl
+  $portOut = "n/a"
+  try {
+    $u = [System.Uri]$base
+    $portOut = [string]$u.Port
+  } catch { $portOut = "n/a" }
+  $outPath = [IO.Path]::GetTempFileName()
+  $errPath = [IO.Path]::GetTempFileName()
+  $sessionsCount = $null
+  $sampleStr = ""
+  $contains = $false
+  try {
+    $sessArgs = @("--silent", "--show-error", "--max-time", "3", "$base/sessions")
+    $null = Start-Process -FilePath "curl.exe" -ArgumentList $sessArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $outPath -RedirectStandardError $errPath
+    $raw = ""
+    try { $raw = [string](Get-Content -Raw -Path $outPath) } catch { $raw = "" }
+    if (-not [string]::IsNullOrWhiteSpace($raw)) {
+      $sessionsJson = $raw | ConvertFrom-Json -ErrorAction SilentlyContinue
+      if ($sessionsJson -and $sessionsJson.value) {
+        $valueList = @($sessionsJson.value)
+        $sessionsCount = $valueList.Count
+        $idBag = New-Object System.Collections.Generic.List[string]
+        foreach ($entry in $valueList) {
+          if ($entry -and $entry.id) { $idBag.Add([string]$entry.id) }
+          if ($entry -and $entry.sessionId) { $idBag.Add([string]$entry.sessionId) }
+        }
+        $ids = @($idBag | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+        $contains = (-not [string]::IsNullOrWhiteSpace($sessionId)) -and ($ids -contains $sessionId)
+        $take = [Math]::Min(5, $ids.Count)
+        if ($take -gt 0) { $idsSample = $ids[0..($take-1)] } else { $idsSample = @() }
+        $sampleStr = [string]::Join(',', $idsSample)
+      }
+    }
+  } catch {}
+  finally {
+    try { Remove-Item $outPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $errPath -Force -ErrorAction SilentlyContinue } catch {}
+  }
+  $scOut = if ($null -ne $sessionsCount) { [string]$sessionsCount } else { "n/a" }
+  Write-Host ('[stability-test] navigate session-sync label={0} driverBaseUrl={1} port={2} sessionId={3} sessionsCount={4} sessionIdsSample={5} containsTarget={6}' -f $label, $base, $portOut, $sessionId, $scOut, $sampleStr, $contains)
+}
+
 function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [int]$maxTimeSec = 20) {
   $result = [ordered]@{
     ok = $false
@@ -1724,6 +1767,7 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
   }
   $endpoint = "$($script:driverBaseUrl)/session/$sessionId/url"
   Write-Host ('[stability-test] direct webdriver navigate phase=start target={0} maxTimeSec={1} endpoint={2}' -f $targetUrl, $maxTimeSec, $endpoint)
+  Write-NavigateSessionSyncDiagnostics 'pre-navigate' $sessionId
   $emitNavPhase = {
     param([string]$phaseLabel)
     $bl = 0
@@ -1767,6 +1811,7 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
   if (($result.exitCode -eq 28) -or ($stderrLower -match "timeout")) {
     $result.errorClass = "timeout"
     $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl timeout" }
+    Write-NavigateSessionSyncDiagnostics 'post-navigate-timeout' $sessionId
     & $emitNavPhase 'error'
     return $result
   }
