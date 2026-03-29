@@ -1894,6 +1894,43 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
     }
     try { Remove-Item $outPath, $errPath, $sessCodePath -Force -ErrorAction SilentlyContinue } catch {}
   }
+  $sessions2Exit = "n/a"
+  $sessions2Http = "n/a"
+  $sessions2Ok = 0
+  $sessions2ElapsedMs = "n/a"
+  if ($label -eq 'post-navigate-timeout') {
+    $outPath2 = [IO.Path]::GetTempFileName()
+    $errPath2 = [IO.Path]::GetTempFileName()
+    $sessCodePath2 = [IO.Path]::GetTempFileName()
+    $swSessions2 = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+      $sessArgs2 = @("--silent", "--show-error", "--max-time", $sessionsProbeMaxSec, "-o", $outPath2, "-w", "%{http_code}", "$base/sessions")
+      $sessProc2 = Start-Process -FilePath "curl.exe" -ArgumentList $sessArgs2 -NoNewWindow -Wait -PassThru -RedirectStandardOutput $sessCodePath2 -RedirectStandardError $errPath2
+      if ($null -ne $swSessions2) {
+        $swSessions2.Stop()
+        $sessions2ElapsedMs = [string]$swSessions2.ElapsedMilliseconds
+      }
+      $sessions2Exit = [string]$sessProc2.ExitCode
+      $sessCodeRaw2 = ""
+      try { $sessCodeRaw2 = ([string](Get-Content -Raw -Path $sessCodePath2)).Trim() } catch { $sessCodeRaw2 = "" }
+      if ($sessCodeRaw2 -match '^\d+$') {
+        $sessions2Http = $sessCodeRaw2
+        if ($sessProc2.ExitCode -eq 0 -and [int]$sessCodeRaw2 -eq 200) { $sessions2Ok = 1 }
+      }
+    } catch {
+      $sessions2Exit = "err"
+      if ($null -ne $swSessions2 -and $swSessions2.IsRunning) {
+        $swSessions2.Stop()
+        $sessions2ElapsedMs = [string]$swSessions2.ElapsedMilliseconds
+      }
+    } finally {
+      if ($null -ne $swSessions2 -and $swSessions2.IsRunning) {
+        $swSessions2.Stop()
+        $sessions2ElapsedMs = [string]$swSessions2.ElapsedMilliseconds
+      }
+      try { Remove-Item $outPath2, $errPath2, $sessCodePath2 -Force -ErrorAction SilentlyContinue } catch {}
+    }
+  }
   $scOut = if ($null -ne $sessionsCount) { [string]$sessionsCount } else { "n/a" }
   $containsOut = if ($contains) { 1 } else { 0 }
   $driverPid = "n/a"
@@ -1923,7 +1960,7 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
   }
   $core = 'navigate session-sync label={0} driverBaseUrl={1} port={2} sessionId={3} statusExit={4} statusHttp={5} statusOk={6} sessionsExit={7} sessionsHttp={8} sessionsOk={9} sessionsCount={10} sessionIdsSample={11} containsTarget={12} sessionsMaxTimeSec={13}' -f $label, $base, $portOut, $sessionId, $statusExit, $statusHttp, $statusOk, $sessionsExit, $sessionsHttp, $sessionsOk, $scOut, $sampleStr, $containsOut, $sessionsProbeMaxSec
   if ($label -eq 'post-navigate-timeout') {
-    $core = $core + ' statusElapsedMs=' + $statusElapsedMs + ' sessionsElapsedMs=' + $sessionsElapsedMs
+    $core = $core + ' statusElapsedMs=' + $statusElapsedMs + ' sessionsElapsedMs=' + $sessionsElapsedMs + ' sessions2Exit=' + $sessions2Exit + ' sessions2Http=' + $sessions2Http + ' sessions2Ok=' + $sessions2Ok + ' sessions2ElapsedMs=' + $sessions2ElapsedMs
     $core = $core + ' | driverProbe driverPid=' + $driverPid + ' driverProcessFound=' + $driverProcessFound + ' driverAlive=' + $driverAlive + ' driverName=' + $driverName
   }
   $core
