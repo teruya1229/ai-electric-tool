@@ -1817,6 +1817,12 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
     $cls = if ($null -ne $result.errorClass) { [string]$result.errorClass } else { "" }
     $line = '[stability-test] direct webdriver navigate phase=' + $phaseLabel + ' exitCode=' + $result.exitCode + ' httpStatus=' + $result.httpStatus + ' maxTimeSec=' + $maxTimeSec + ' class=' + $cls + ' bodyLen=' + $bl + ' bodyPreview=' + $bp + ' stderrSummary=' + $result.stderrSummary
     if ($sessionSyncSegment) { $line = $line + ' | [stability-test] ' + $sessionSyncSegment }
+    if ($sessionSyncSegment -and ($sessionSyncSegment -match 'label=post-navigate-timeout')) {
+      try {
+        $timeoutDiagPath = Join-Path $script:projectRoot ".tmp_navigate_last_direct_timeout.txt"
+        [IO.File]::WriteAllText($timeoutDiagPath, $line + "`r`n", [Text.UTF8Encoding]::new($false))
+      } catch {}
+    }
     Write-Host $line
   }
   $payload = @{ url = $targetUrl } | ConvertTo-Json -Compress
