@@ -3142,6 +3142,15 @@ try {
       $sessionRecoveryReason = if ($urlIsDataBlank) { "navigate timeout on data url before UI init" } else { "session invalidated before UI init" }
       Write-Host "[stability-test] session recovery start reason=$sessionRecoveryReason"
       try { Remove-Session } catch {}
+      if ($navigateErrorClass -eq "timeout") {
+        $oldDriverPort = $script:driverPort
+        Write-Host "[stability-test] driver recycle start reason=navigate timeout"
+        Stop-Driver
+        $script:driverPort = Get-AvailablePort $driverPortCandidates
+        $script:driverBaseUrl = "http://127.0.0.1:$($script:driverPort)"
+        Start-Driver
+        Write-Host "[stability-test] driver recycle done oldPort=$oldDriverPort newPort=$($script:driverPort)"
+      }
       $minimalRecovered = New-WebDriverSessionMinimal
       $script:sessionId = $minimalRecovered.sessionId
       Log-SessionCapabilitiesSummary $minimalRecovered.response "minimal-e2e-recovered"
