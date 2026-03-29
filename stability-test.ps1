@@ -1799,12 +1799,23 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
   $statusExit = "n/a"
   $statusHttp = "n/a"
   $statusOk = 0
+  $statusElapsedMs = "n/a"
+  $sessionsElapsedMs = "n/a"
+  $swStatus = $null
+  $swSessions = $null
+  if ($label -eq 'post-navigate-timeout') {
+    $swStatus = [System.Diagnostics.Stopwatch]::StartNew()
+  }
   $stBody = [IO.Path]::GetTempFileName()
   $stErr = [IO.Path]::GetTempFileName()
   $stCode = [IO.Path]::GetTempFileName()
   try {
     $stArgs = @("--silent", "--show-error", "--max-time", "3", "-o", $stBody, "-w", "%{http_code}", "$base/status")
     $stProc = Start-Process -FilePath "curl.exe" -ArgumentList $stArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stCode -RedirectStandardError $stErr
+    if ($null -ne $swStatus) {
+      $swStatus.Stop()
+      $statusElapsedMs = [string]$swStatus.ElapsedMilliseconds
+    }
     $statusExit = [string]$stProc.ExitCode
     $stCodeRaw = ""
     try { $stCodeRaw = ([string](Get-Content -Raw -Path $stCode)).Trim() } catch { $stCodeRaw = "" }
@@ -1814,7 +1825,15 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
     }
   } catch {
     $statusExit = "err"
+    if ($null -ne $swStatus -and $swStatus.IsRunning) {
+      $swStatus.Stop()
+      $statusElapsedMs = [string]$swStatus.ElapsedMilliseconds
+    }
   } finally {
+    if ($null -ne $swStatus -and $swStatus.IsRunning) {
+      $swStatus.Stop()
+      $statusElapsedMs = [string]$swStatus.ElapsedMilliseconds
+    }
     try { Remove-Item $stBody, $stErr, $stCode -Force -ErrorAction SilentlyContinue } catch {}
   }
   $outPath = [IO.Path]::GetTempFileName()
@@ -1826,9 +1845,16 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
   $sessionsCount = $null
   $sampleStr = ""
   $contains = $false
+  if ($label -eq 'post-navigate-timeout') {
+    $swSessions = [System.Diagnostics.Stopwatch]::StartNew()
+  }
   try {
     $sessArgs = @("--silent", "--show-error", "--max-time", $sessionsProbeMaxSec, "-o", $outPath, "-w", "%{http_code}", "$base/sessions")
     $sessProc = Start-Process -FilePath "curl.exe" -ArgumentList $sessArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $sessCodePath -RedirectStandardError $errPath
+    if ($null -ne $swSessions) {
+      $swSessions.Stop()
+      $sessionsElapsedMs = [string]$swSessions.ElapsedMilliseconds
+    }
     $sessionsExit = [string]$sessProc.ExitCode
     $sessCodeRaw = ""
     try { $sessCodeRaw = ([string](Get-Content -Raw -Path $sessCodePath)).Trim() } catch { $sessCodeRaw = "" }
@@ -1857,7 +1883,15 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
     }
   } catch {
     $sessionsExit = "err"
+    if ($null -ne $swSessions -and $swSessions.IsRunning) {
+      $swSessions.Stop()
+      $sessionsElapsedMs = [string]$swSessions.ElapsedMilliseconds
+    }
   } finally {
+    if ($null -ne $swSessions -and $swSessions.IsRunning) {
+      $swSessions.Stop()
+      $sessionsElapsedMs = [string]$swSessions.ElapsedMilliseconds
+    }
     try { Remove-Item $outPath, $errPath, $sessCodePath -Force -ErrorAction SilentlyContinue } catch {}
   }
   $scOut = if ($null -ne $sessionsCount) { [string]$sessionsCount } else { "n/a" }
@@ -1889,6 +1923,7 @@ function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sess
   }
   $core = 'navigate session-sync label={0} driverBaseUrl={1} port={2} sessionId={3} statusExit={4} statusHttp={5} statusOk={6} sessionsExit={7} sessionsHttp={8} sessionsOk={9} sessionsCount={10} sessionIdsSample={11} containsTarget={12} sessionsMaxTimeSec={13}' -f $label, $base, $portOut, $sessionId, $statusExit, $statusHttp, $statusOk, $sessionsExit, $sessionsHttp, $sessionsOk, $scOut, $sampleStr, $containsOut, $sessionsProbeMaxSec
   if ($label -eq 'post-navigate-timeout') {
+    $core = $core + ' statusElapsedMs=' + $statusElapsedMs + ' sessionsElapsedMs=' + $sessionsElapsedMs
     $core = $core + ' | driverProbe driverPid=' + $driverPid + ' driverProcessFound=' + $driverProcessFound + ' driverAlive=' + $driverAlive + ' driverName=' + $driverName
   }
   $core
