@@ -894,19 +894,11 @@ function Start-ChromeDriverVerbose() {
   if (-not $script:driverPort) {
     throw "Driver port is not initialized."
   }
-  $script:chromeDriverLogPath = Join-Path $script:projectRoot "cd.log"
-  if (Test-Path -LiteralPath $script:chromeDriverLogPath -PathType Leaf) {
-    $rotateStamp = (Get-Date).ToString("yyyyMMdd-HHmmss")
-    $bakPath = Join-Path $script:projectRoot "cd.log.bak.$rotateStamp"
-    try {
-      Move-Item -LiteralPath $script:chromeDriverLogPath -Destination $bakPath -Force -ErrorAction Stop
-      Write-Host "[stability-test] chromedriver-log-rotated-bak=$bakPath runStartedAt=$($script:runStartedAt)"
-    } catch {
-      Write-Host "[stability-test] chromedriver-log-rotate-failed path=$($script:chromeDriverLogPath) error=$($_.Exception.Message)"
-    }
-  }
-  $script:driverProc = Start-Process -FilePath $chromeDriverPath -ArgumentList @("--port=$($script:driverPort)", "--verbose", "--log-path=$($script:chromeDriverLogPath)") -PassThru
+  $logStamp = (Get-Date).ToString("yyyyMMdd-HHmmss-fff")
+  $script:chromeDriverLogPath = Join-Path $script:projectRoot "cd.run-$logStamp.log"
+  Write-Host "[stability-test] runStartedAt=$($script:runStartedAt)"
   Write-Host "[stability-test] chromedriver-log=$($script:chromeDriverLogPath)"
+  $script:driverProc = Start-Process -FilePath $chromeDriverPath -ArgumentList @("--port=$($script:driverPort)", "--verbose", "--log-path=$($script:chromeDriverLogPath)") -PassThru
 }
 
 function Read-ChromeDriverVerboseHighlights([string]$logPath) {
