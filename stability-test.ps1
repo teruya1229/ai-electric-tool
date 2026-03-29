@@ -1741,6 +1741,25 @@ function Get-CdLogPostKeywordFlags([string]$tail) {
   return " postCdHasSessionsKeyword=$s postCdHasCommandKeyword=$c postCdHasDevToolsKeyword=$d"
 }
 
+function Get-CdLogWideKeywordFlags([string]$logPath, [int]$maxLines = 80) {
+  if ([string]::IsNullOrWhiteSpace($logPath) -or -not (Test-Path $logPath -PathType Leaf)) {
+    return " postCdWideHasSessionsKeyword=0 postCdWideHasCommandKeyword=0"
+  }
+  try {
+    $lines = Get-Content -Path $logPath -Tail $maxLines -ErrorAction SilentlyContinue
+    if (-not $lines) {
+      return " postCdWideHasSessionsKeyword=0 postCdWideHasCommandKeyword=0"
+    }
+    $blob = ([string]::Join(" ", @($lines))).ToLowerInvariant()
+    $s = 0
+    if (($blob.IndexOf("/sessions") -ge 0) -or ($blob.IndexOf("session list") -ge 0) -or ($blob.IndexOf("/session/") -ge 0) -or ($blob.IndexOf("sessions") -ge 0)) { $s = 1 }
+    $c = if ($blob.IndexOf("command") -ge 0) { 1 } else { 0 }
+    return " postCdWideHasSessionsKeyword=$s postCdWideHasCommandKeyword=$c"
+  } catch {
+    return " postCdWideHasSessionsKeyword=0 postCdWideHasCommandKeyword=0"
+  }
+}
+
 function Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sessionId) {
   $base = [string]$script:driverBaseUrl
   $sessionsProbeMaxSec = if ($label -eq 'post-navigate-timeout') { "10" } else { "3" }
@@ -1922,7 +1941,7 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
     $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl timeout" }
     $postSyncSeg = Get-NavigateSessionSyncDiagnosticsSegment 'post-navigate-timeout' $sessionId
     $postCdTail = Get-CdLogTailCompact $script:chromeDriverLogPath 10 420
-    $postSyncSeg = $postSyncSeg + ' postNavigateCdLogTail=' + $postCdTail + (Get-CdLogPostKeywordFlags $postCdTail)
+    $postSyncSeg = $postSyncSeg + ' postNavigateCdLogTail=' + $postCdTail + (Get-CdLogPostKeywordFlags $postCdTail) + (Get-CdLogWideKeywordFlags $script:chromeDriverLogPath 80)
     & $emitNavPhase 'error' $postSyncSeg
     return $result
   }
