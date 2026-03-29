@@ -2619,7 +2619,13 @@ try {
     Write-Host "[stability-test] check current url"
     $currentUrlCheck = Invoke-CurrentUrlCheck $script:sessionId
     Log-SessionCapabilitiesSummary $minimalForE2E.response "minimal-e2e-only"
-    Wait-BrowserReady 700
+    $trimNavigatePrepForProbeParentBudget = ($env:STABILITY_COMPARE_CHILD -eq "1" -and $env:STABILITY_REPEAT_CHILD -eq "1" -and [string]::IsNullOrWhiteSpace($env:STABILITY_COMPARE_NAV_MODES))
+    if ($trimNavigatePrepForProbeParentBudget) {
+      Wait-BrowserReady 200
+      Write-Host "[stability-test] navigate prep trim wait=200ms (compare repeat child; parent WaitForExit budget before curl max-time navigate)"
+    } else {
+      Wait-BrowserReady 700
+    }
     Write-Host "[stability-test] direct webdriver navigate"
     $navigateTargetUrl = "$($script:baseUrl)/wiring-diagram.html"
     $navigateSucceeded = $false
@@ -2782,59 +2788,78 @@ try {
         }
       }
     }
-    Write-Host "[stability-test] check chromedriver status"
-    $chromeStatusOutPath = [IO.Path]::GetTempFileName()
-    $chromeStatusErrPath = [IO.Path]::GetTempFileName()
-    try {
-      $chromeDriverStatusAttempted = $true
-      $statusArgs = @("--silent", "--show-error", "--max-time", "3", "$($script:driverBaseUrl)/status")
-      $statusProc = Start-Process -FilePath "curl.exe" -ArgumentList $statusArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $chromeStatusOutPath -RedirectStandardError $chromeStatusErrPath
-      $chromeDriverStatusExitCode = $statusProc.ExitCode
-      try { $chromeDriverStatusStdout = [string](Get-Content -Raw -Path $chromeStatusOutPath) } catch { $chromeDriverStatusStdout = "" }
-      try { $chromeDriverStatusStderr = [string](Get-Content -Raw -Path $chromeStatusErrPath) } catch { $chromeDriverStatusStderr = "" }
-    } finally {
-      try { Remove-Item $chromeStatusOutPath -Force -ErrorAction SilentlyContinue } catch {}
-      try { Remove-Item $chromeStatusErrPath -Force -ErrorAction SilentlyContinue } catch {}
-    }
-    if ($chromeDriverStatusStdout.Length -gt 500) { $chromeDriverStatusStdout = $chromeDriverStatusStdout.Substring(0, 500) }
-    if ($chromeDriverStatusStderr.Length -gt 500) { $chromeDriverStatusStderr = $chromeDriverStatusStderr.Substring(0, 500) }
-    Write-Host "[stability-test] check sessions list"
-    $sessionStatusOutPath = [IO.Path]::GetTempFileName()
-    $sessionStatusErrPath = [IO.Path]::GetTempFileName()
-    try {
-      $sessionsCheckAttempted = $true
-      $sessionArgs = @("--silent", "--show-error", "--max-time", "3", "$($script:driverBaseUrl)/sessions")
-      $sessionProc = Start-Process -FilePath "curl.exe" -ArgumentList $sessionArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $sessionStatusOutPath -RedirectStandardError $sessionStatusErrPath
-      $sessionsCheckExitCode = $sessionProc.ExitCode
-      try { $sessionsCheckStdout = [string](Get-Content -Raw -Path $sessionStatusOutPath) } catch { $sessionsCheckStdout = "" }
-      $sessionsCheckStdoutRaw = $sessionsCheckStdout
-      try { $sessionsCheckStderr = [string](Get-Content -Raw -Path $sessionStatusErrPath) } catch { $sessionsCheckStderr = "" }
-    } finally {
-      try { Remove-Item $sessionStatusOutPath -Force -ErrorAction SilentlyContinue } catch {}
-      try { Remove-Item $sessionStatusErrPath -Force -ErrorAction SilentlyContinue } catch {}
-    }
-    if ($sessionsCheckStdout.Length -gt 500) { $sessionsCheckStdout = $sessionsCheckStdout.Substring(0, 500) }
-    if ($sessionsCheckStderr.Length -gt 500) { $sessionsCheckStderr = $sessionsCheckStderr.Substring(0, 500) }
-    $sessionIdFoundInSessions = (-not [string]::IsNullOrWhiteSpace($checkedSessionId)) -and $sessionsCheckStdout.Contains($checkedSessionId)
-    Write-Host "[stability-test] extract session ids from /sessions"
-    try {
-      if (-not [string]::IsNullOrWhiteSpace($sessionsCheckStdoutRaw)) {
-        $sessionsJson = $sessionsCheckStdoutRaw | ConvertFrom-Json -ErrorAction Stop
-        $idBag = New-Object System.Collections.Generic.List[string]
-        if ($sessionsJson -and $sessionsJson.value) {
-          $valueList = @($sessionsJson.value)
-          foreach ($entry in $valueList) {
-            if ($entry -and $entry.id) { $idBag.Add([string]$entry.id) }
-            if ($entry -and $entry.sessionId) { $idBag.Add([string]$entry.sessionId) }
-          }
-        }
-        $sessionsExtractedIds = @($idBag | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
-      }
-    } catch {
+    if ($trimNavigatePrepForProbeParentBudget) {
+      Write-Host "[stability-test] check chromedriver status skipped (compare repeat child; defer to navigate session-sync + parent time budget)"
+      $chromeDriverStatusAttempted = $false
+      $chromeDriverStatusStdout = ""
+      $chromeDriverStatusStderr = ""
+      $chromeDriverStatusExitCode = $null
+      Write-Host "[stability-test] check sessions list skipped (compare repeat child; defer to navigate session-sync + parent time budget)"
+      $sessionsCheckAttempted = $false
+      $sessionsCheckStdout = ""
+      $sessionsCheckStdoutRaw = ""
+      $sessionsCheckStderr = ""
+      $sessionsCheckExitCode = $null
+      $sessionIdFoundInSessions = $false
+      Write-Host "[stability-test] extract session ids from /sessions skipped (compare repeat child; defer to navigate session-sync + parent time budget)"
       $sessionsExtractedIds = @()
+      $sessionsExtractedCount = 0
+      $sessionIdFoundInExtractedIds = $false
+    } else {
+      Write-Host "[stability-test] check chromedriver status"
+      $chromeStatusOutPath = [IO.Path]::GetTempFileName()
+      $chromeStatusErrPath = [IO.Path]::GetTempFileName()
+      try {
+        $chromeDriverStatusAttempted = $true
+        $statusArgs = @("--silent", "--show-error", "--max-time", "3", "$($script:driverBaseUrl)/status")
+        $statusProc = Start-Process -FilePath "curl.exe" -ArgumentList $statusArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $chromeStatusOutPath -RedirectStandardError $chromeStatusErrPath
+        $chromeDriverStatusExitCode = $statusProc.ExitCode
+        try { $chromeDriverStatusStdout = [string](Get-Content -Raw -Path $chromeStatusOutPath) } catch { $chromeDriverStatusStdout = "" }
+        try { $chromeDriverStatusStderr = [string](Get-Content -Raw -Path $chromeStatusErrPath) } catch { $chromeDriverStatusStderr = "" }
+      } finally {
+        try { Remove-Item $chromeStatusOutPath -Force -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Item $chromeStatusErrPath -Force -ErrorAction SilentlyContinue } catch {}
+      }
+      if ($chromeDriverStatusStdout.Length -gt 500) { $chromeDriverStatusStdout = $chromeDriverStatusStdout.Substring(0, 500) }
+      if ($chromeDriverStatusStderr.Length -gt 500) { $chromeDriverStatusStderr = $chromeDriverStatusStderr.Substring(0, 500) }
+      Write-Host "[stability-test] check sessions list"
+      $sessionStatusOutPath = [IO.Path]::GetTempFileName()
+      $sessionStatusErrPath = [IO.Path]::GetTempFileName()
+      try {
+        $sessionsCheckAttempted = $true
+        $sessionArgs = @("--silent", "--show-error", "--max-time", "3", "$($script:driverBaseUrl)/sessions")
+        $sessionProc = Start-Process -FilePath "curl.exe" -ArgumentList $sessionArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $sessionStatusOutPath -RedirectStandardError $sessionStatusErrPath
+        $sessionsCheckExitCode = $sessionProc.ExitCode
+        try { $sessionsCheckStdout = [string](Get-Content -Raw -Path $sessionStatusOutPath) } catch { $sessionsCheckStdout = "" }
+        $sessionsCheckStdoutRaw = $sessionsCheckStdout
+        try { $sessionsCheckStderr = [string](Get-Content -Raw -Path $sessionStatusErrPath) } catch { $sessionsCheckStderr = "" }
+      } finally {
+        try { Remove-Item $sessionStatusOutPath -Force -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Item $sessionStatusErrPath -Force -ErrorAction SilentlyContinue } catch {}
+      }
+      if ($sessionsCheckStdout.Length -gt 500) { $sessionsCheckStdout = $sessionsCheckStdout.Substring(0, 500) }
+      if ($sessionsCheckStderr.Length -gt 500) { $sessionsCheckStderr = $sessionsCheckStderr.Substring(0, 500) }
+      $sessionIdFoundInSessions = (-not [string]::IsNullOrWhiteSpace($checkedSessionId)) -and $sessionsCheckStdout.Contains($checkedSessionId)
+      Write-Host "[stability-test] extract session ids from /sessions"
+      try {
+        if (-not [string]::IsNullOrWhiteSpace($sessionsCheckStdoutRaw)) {
+          $sessionsJson = $sessionsCheckStdoutRaw | ConvertFrom-Json -ErrorAction Stop
+          $idBag = New-Object System.Collections.Generic.List[string]
+          if ($sessionsJson -and $sessionsJson.value) {
+            $valueList = @($sessionsJson.value)
+            foreach ($entry in $valueList) {
+              if ($entry -and $entry.id) { $idBag.Add([string]$entry.id) }
+              if ($entry -and $entry.sessionId) { $idBag.Add([string]$entry.sessionId) }
+            }
+          }
+          $sessionsExtractedIds = @($idBag | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+        }
+      } catch {
+        $sessionsExtractedIds = @()
+      }
+      $sessionsExtractedCount = @($sessionsExtractedIds).Count
+      $sessionIdFoundInExtractedIds = (-not [string]::IsNullOrWhiteSpace($checkedSessionId)) -and (@($sessionsExtractedIds) -contains $checkedSessionId)
     }
-    $sessionsExtractedCount = @($sessionsExtractedIds).Count
-    $sessionIdFoundInExtractedIds = (-not [string]::IsNullOrWhiteSpace($checkedSessionId)) -and (@($sessionsExtractedIds) -contains $checkedSessionId)
     $directNavBody = @{ url = $navigateTargetUrl } | ConvertTo-Json -Compress
     if ($skipDirectNavigateForCompare) {
       Write-Host "[stability-test] direct webdriver navigate skipped for compare mode"
