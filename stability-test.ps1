@@ -1686,15 +1686,111 @@ function Exec-Script([string]$js, [object[]]$args = @(), [string]$scriptLabel = 
 }
 
 function Invoke-RecoveredPostNavigateExecuteProbe([string]$label, [string]$scriptText) {
+  $scriptLabel = "recovered-post-nav-" + $label
+  $payload = @{ script = $scriptText; args = @() }
+  $requestUrl = "$($script:driverBaseUrl)/session/$($script:sessionId)/execute/sync"
+  $bodyJson = $payload | ConvertTo-Json -Depth 8
+  Log-WebDriverExecuteRequestInfo $scriptLabel $requestUrl "/session/{id}/execute/sync" @($payload.Keys) $false
+  $endpointShort = if ($requestUrl.Length -gt 160) { $requestUrl.Substring(0, 160) + "..." } else { $requestUrl }
+  Write-Host "[stability-test] exec-transport label=$label endpoint=$endpointShort"
+
+  $curlExit = -1
+  $curlHttp = "000"
+  $curlElapsedMs = -1
+  $curlStderr = ""
+  $curlBodyPreview = ""
+  $curlClass = "not-run"
+  $payloadPath = [IO.Path]::GetTempFileName()
+  $curlOutPath = [IO.Path]::GetTempFileName()
+  $curlErrPath = [IO.Path]::GetTempFileName()
+  $curlCodePath = [IO.Path]::GetTempFileName()
   try {
-    $v = Exec-Script $scriptText @() ("recovered-post-nav-" + $label)
-    $s = if ($null -eq $v) { "" } else { ([string]$v) -replace "[\r\n]+", " " }
-    if ($s.Length -gt 200) { $s = $s.Substring(0, 200) }
-    Write-Host "[stability-test] recovered post-nav probe label=$label ok=True value=$s"
+    [IO.File]::WriteAllText($payloadPath, $bodyJson, [Text.UTF8Encoding]::new($false))
+    $curlArgs = @(
+      "--silent", "--show-error", "--max-time", "20",
+      "-o", $curlOutPath, "-w", "%{http_code}",
+      "-X", "POST", "-H", "Content-Type:application/json",
+      "--data-binary", "@$payloadPath",
+      $requestUrl
+    )
+    $swCurl = [System.Diagnostics.Stopwatch]::StartNew()
+    $curlProc = Start-Process -FilePath "curl.exe" -ArgumentList $curlArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $curlCodePath -RedirectStandardError $curlErrPath
+    $swCurl.Stop()
+    $curlElapsedMs = [int]$swCurl.ElapsedMilliseconds
+    $curlExit = [int]$curlProc.ExitCode
+    try { $curlStderr = [string](Get-Content -Raw -Path $curlErrPath) } catch { $curlStderr = "" }
+    if ($curlStderr.Length -gt 240) { $curlStderr = $curlStderr.Substring(0, 240) }
+    try {
+      $rawOut = [string](Get-Content -Raw -Path $curlOutPath)
+      $curlBodyPreview = ($rawOut -replace "[\r\n]+", " ").Trim()
+      if ($curlBodyPreview.Length -gt 160) { $curlBodyPreview = $curlBodyPreview.Substring(0, 160) + "..." }
+    } catch { $curlBodyPreview = "" }
+    $codeRaw = ""
+    try { $codeRaw = ([string](Get-Content -Raw -Path $curlCodePath)).Trim() } catch { $codeRaw = "" }
+    if ($codeRaw -match '^\d{3}$') { $curlHttp = $codeRaw } else { $curlHttp = "000" }
+    $curlLower = $curlStderr.ToLowerInvariant()
+    if (($curlExit -eq 28) -or ($curlLower -match "timeout")) {
+      $curlClass = "timeout"
+    } elseif ($curlExit -eq 0 -and $curlHttp -eq "200") {
+      $curlClass = "ok"
+    } else {
+      $curlClass = "error"
+    }
   } catch {
-    $em = [string]$_.Exception.Message
-    if ($em.Length -gt 200) { $em = $em.Substring(0, 200) }
-    Write-Host "[stability-test] recovered post-nav probe label=$label ok=False error=$em"
+    $curlClass = "error"
+    $curlStderr = [string]$_.Exception.Message
+    if ($curlStderr.Length -gt 240) { $curlStderr = $curlStderr.Substring(0, 240) }
+  } finally {
+    try { Remove-Item $payloadPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $curlOutPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $curlErrPath -Force -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Item $curlCodePath -Force -ErrorAction SilentlyContinue } catch {}
+  }
+  Write-Host "[stability-test] exec-transport-curl label=$label exitCode=$curlExit httpStatus=$curlHttp elapsedMs=$curlElapsedMs class=$curlClass stderrSummary=$curlStderr bodyPreview=$curlBodyPreview"
+
+  $psOk = $false
+  $psElapsedMs = -1
+  $psClass = "not-run"
+  $psErrMsg = ""
+  $v = $null
+  $swPs = [System.Diagnostics.Stopwatch]::StartNew()
+  try {
+    $resp = Invoke-RestMethod -Method Post -Uri $requestUrl -ContentType "application/json" -Body $bodyJson -TimeoutSec 20
+    $swPs.Stop()
+    $psElapsedMs = [int]$swPs.ElapsedMilliseconds
+    $psOk = $true
+    $psClass = "ok"
+    $v = $resp.value
+  } catch {
+    $swPs.Stop()
+    $psElapsedMs = [int]$swPs.ElapsedMilliseconds
+    $psOk = $false
+    $psErrMsg = [string]$_.Exception.Message
+    $msgLower = $psErrMsg.ToLowerInvariant()
+    if ($msgLower -match "timeout") {
+      $psClass = "timeout"
+    } else {
+      $psClass = "error"
+    }
+  }
+  Write-Host "[stability-test] exec-transport-ps label=$label ok=$psOk elapsedMs=$psElapsedMs errorClass=$psClass"
+
+  Write-Host "[stability-test] exec-transport-compare label=$label psOk=$psOk psClass=$psClass curlExit=$curlExit curlHttp=$curlHttp curlClass=$curlClass"
+
+  try {
+    if ($psOk) {
+      $s = if ($null -eq $v) { "" } else { ([string]$v) -replace "[\r\n]+", " " }
+      if ($s.Length -gt 200) { $s = $s.Substring(0, 200) }
+      Write-Host "[stability-test] recovered post-nav probe label=$label ok=True value=$s"
+    } else {
+      $em = $psErrMsg
+      if ($em.Length -gt 200) { $em = $em.Substring(0, 200) }
+      Write-Host "[stability-test] recovered post-nav probe label=$label ok=False error=$em"
+    }
+  } catch {
+    $em2 = [string]$_.Exception.Message
+    if ($em2.Length -gt 200) { $em2 = $em2.Substring(0, 200) }
+    Write-Host "[stability-test] recovered post-nav probe label=$label ok=False error=$em2"
   }
 }
 
