@@ -1,5 +1,27 @@
 # status
 
+## 2026-04-01 ChromeDriver / execute-sync transport 比較（正本）
+
+### 今日やったこと
+- recovered post-nav probe に curl / PowerShell 比較ログを導入済み
+- Windows 正本で execute/sync の transport 比較を実行確認した
+- その run では stdout 先頭の chromedriver-version が **145.0.7632.160**、chrome-version が **146.0.7680.167** だった（当該 run は **145 観測**として扱う）
+- **145 環境の観測結果:**
+  - minimal-e2e-only の direct webdriver navigate は timeout
+  - minimal-e2e-recovered の direct webdriver navigate は httpStatus=200 で成功
+  - recovered post-nav probe 3本（return-1 / ready-state / location-href）は、curl でも PowerShell でも timeout
+- 実ファイル確認: `C:\dev\ai-electric-tool\chromedriver\chromedriver-win64\chromedriver.exe` に旧 145 系の `.bak` 退避があり、現行 exe は **FileVersion 146.0.7680.167** に差し替え済み
+- **146 差し替え後の再計測 run は未実施**（上記 transport 比較の実行確認 run はログ先頭が 145 のため 145 観測）
+
+### 現在の状態
+- Windows 正本の `stability-test.ps1` には transport 比較ログまで反映済み（コード変更は別コミット済みの前提）
+- recovered first navigate が 200 成功したあとも execute/sync が curl / PS 両方 timeout する事実は、**145 環境の run** で確認済み
+- Chrome 本体は 146.0.7680.167
+- 正本の `chromedriver.exe` 実ファイルは 146.0.7680.167 に差し替え済み
+- 次に必要なのは、**実行ログ先頭の chromedriver-version が 146 系**になっていることを確認したうえでの **1回再計測**
+
+---
+
 ## 2026-03-29 stability-test（ChromeDriver / E2E 診断）
 
 ### 今日やったこと

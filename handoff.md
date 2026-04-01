@@ -4,6 +4,27 @@ AI電気施工アシスタント / `C:\dev\ai-electric-tool` の作業メモ。
 
 ---
 
+## 2026-04-01 次手・判断基準（ChromeDriver 146 再計測）
+
+### 次にやるべき1手
+- Windows 正本で、**実行ログ先頭の chromedriver-version が 146 系**になっていることを確認しつつ、`STABILITY_REPEAT_COUNT=1` で `stability-test.ps1` を **1回だけ**実行する
+
+### 判断基準
+- 先頭の chromedriver-version が **146 系**なら、その run を **146 観測**として採用する
+- exe の FileVersion が 146 でも、**ログ先頭の chromedriver-version が 145 のまま**なら、別の chromedriver が使われている可能性を優先して切り分ける
+- **146 観測の run** で recovered post-nav の execute/sync timeout が改善すれば、145/146 不整合の影響が強い可能性が上がる
+- **146 観測の run** でも同様なら、バージョン不整合以外の要因を再検討する
+
+### 注意点
+- `run-window-handles-only.ps1` は触らない
+- 他フォルダは触らない
+- **コード修正はまだしない**（docs のみの更新可）
+- push 未了を反映済み扱いしない
+- e8375a3 を説明する場合は、**Windows 正本では長い版を使っていたこと**、**Git 履歴上は短い版→長い版の復元差分が混ざっていること**を必ず明記する
+- **146 差し替え後の再計測 run を「確認済み」とは書かない**（取れた時点で status / handoff を更新する）
+
+---
+
 ## 2026-03-29 次手・判断基準（post-nav probe）
 
 ### 次にやるべき1手
