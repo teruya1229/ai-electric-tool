@@ -1,24 +1,25 @@
 # status
 
-## 2026-04-01 ChromeDriver / execute-sync transport 比較（正本）
+## 2026-04-01 ChromeDriver 146 再計測・cleanup（正本）
 
 ### 今日やったこと
-- recovered post-nav probe に curl / PowerShell 比較ログを導入済み
-- Windows 正本で execute/sync の transport 比較を実行確認した
-- その run では stdout 先頭の chromedriver-version が **145.0.7632.160**、chrome-version が **146.0.7680.167** だった（当該 run は **145 観測**として扱う）
-- **145 環境の観測結果:**
-  - minimal-e2e-only の direct webdriver navigate は timeout
-  - minimal-e2e-recovered の direct webdriver navigate は httpStatus=200 で成功
-  - recovered post-nav probe 3本（return-1 / ready-state / location-href）は、curl でも PowerShell でも timeout
-- 実ファイル確認: `C:\dev\ai-electric-tool\chromedriver\chromedriver-win64\chromedriver.exe` に旧 145 系の `.bak` 退避があり、現行 exe は **FileVersion 146.0.7680.167** に差し替え済み
-- **146 差し替え後の再計測 run は未実施**（上記 transport 比較の実行確認 run はログ先頭が 145 のため 145 観測）
+- status.md / handoff.md を更新し、commit **94bf7ed** を **main** へ push 済み
+- Windows 正本で chromedriver.exe 実ファイルの差し替え後確認を実施
+- 実ファイルの現行 chromedriver.exe は **146.0.7680.167**
+- Windows 正本で repeat カウント 1 の単発設定で `stability-test.ps1` の再実行を実施
+- この再実行では、実行ログ先頭で chromedriver-version=**146.0.7680.167**、chrome-version=**146.0.7680.167** を確認
+- port 5500 / 5501 が使用中のため **5502** で静的サーバ起動
+- 先頭の pageLoadStrategy=none セッションでは direct webdriver navigate が httpStatus=200 で成功
+- ただし e2e-only mode の直後、finally cleanup 中の Invoke-RestMethod 接続失敗（`stability-test.ps1` 1236 付近）で run 後半観測が阻害された
+- 実行後、暴走気味の再実行状態になったため、chromedriver と stability-test 実行中 PowerShell を手動停止
+- 停止確認では chromedriver / stability-test 該当 PowerShell ともに残プロセスなしを確認
 
 ### 現在の状態
-- Windows 正本の `stability-test.ps1` には transport 比較ログまで反映済み（コード変更は別コミット済みの前提）
-- recovered first navigate が 200 成功したあとも execute/sync が curl / PS 両方 timeout する事実は、**145 環境の run** で確認済み
-- Chrome 本体は 146.0.7680.167
-- 正本の `chromedriver.exe` 実ファイルは 146.0.7680.167 に差し替え済み
-- 次に必要なのは、**実行ログ先頭の chromedriver-version が 146 系**になっていることを確認したうえでの **1回再計測**
+- Windows 正本の `stability-test.ps1` には transport 比較ログが反映済み
+- **145 run** では recovered post-nav の execute/sync が curl / PS 両方 timeout を確認済み
+- **146 run** では実行ログ先頭の chromedriver-version も 146 系になり、Chrome 146 との不整合は解消済み
+- ただし **146 run は cleanup 接続失敗で後半観測が欠けており**、145/146 差分の fully observed 比較は未完了
+- 現在は関連プロセスを停止済みで、再実行していない
 
 ---
 
