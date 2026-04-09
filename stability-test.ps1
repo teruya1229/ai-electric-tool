@@ -2967,6 +2967,79 @@ function Ensure-ChildHelperFunctions {
       }
     }
   }
+  if (-not (Get-Command Invoke-WindowHandleCheck -ErrorAction SilentlyContinue)) {
+    function script:Invoke-WindowHandleCheck([string]$sessionId) {
+      $result = [ordered]@{
+        windowCheckAttempted = $false
+        windowCheckStdout = ""
+        windowCheckStderr = ""
+        windowCheckExitCode = $null
+        windowHandleFound = $false
+        windowHandleValue = $null
+        windowHandleErrorClass = $null
+        windowHandleErrorMessage = $null
+      }
+      $windowStdoutRaw = ""
+      $windowOutPath = [IO.Path]::GetTempFileName()
+      $windowErrPath = [IO.Path]::GetTempFileName()
+      try {
+        $result.windowCheckAttempted = $true
+        $windowArgs = @("--silent", "--show-error", "--max-time", "5", "$($script:driverBaseUrl)/session/$sessionId/window")
+        $windowProc = Start-Process -FilePath "curl.exe" -ArgumentList $windowArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $windowOutPath -RedirectStandardError $windowErrPath
+        $result.windowCheckExitCode = $windowProc.ExitCode
+        try { $result.windowCheckStdout = [string](Get-Content -Raw -Path $windowOutPath) } catch { $result.windowCheckStdout = "" }
+        $windowStdoutRaw = $result.windowCheckStdout
+        try { $result.windowCheckStderr = [string](Get-Content -Raw -Path $windowErrPath) } catch { $result.windowCheckStderr = "" }
+      } finally {
+        try { Remove-Item $windowOutPath -Force -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Item $windowErrPath -Force -ErrorAction SilentlyContinue } catch {}
+      }
+      if ($result.windowCheckStdout.Length -gt 500) { $result.windowCheckStdout = $result.windowCheckStdout.Substring(0, 500) }
+      if ($result.windowCheckStderr.Length -gt 500) { $result.windowCheckStderr = $result.windowCheckStderr.Substring(0, 500) }
+      if ($result.windowCheckExitCode -ne 0) {
+        $errLower = ""
+        try { $errLower = ([string]$result.windowCheckStderr).ToLowerInvariant() } catch { $errLower = "" }
+        if (($result.windowCheckExitCode -eq 28) -or ($errLower -match "timeout")) {
+          $result.windowHandleErrorClass = "timeout"
+        } else {
+          $result.windowHandleErrorClass = "curl-error"
+        }
+        $result.windowHandleErrorMessage = [string]$result.windowCheckStderr
+      }
+      try {
+        if (-not [string]::IsNullOrWhiteSpace($windowStdoutRaw)) {
+          $windowJson = $windowStdoutRaw | ConvertFrom-Json -ErrorAction Stop
+          if ($windowJson -and $windowJson.PSObject.Properties.Name -contains "value" -and $windowJson.value -is [string]) {
+            $result.windowHandleValue = [string]$windowJson.value
+            $result.windowHandleFound = -not [string]::IsNullOrWhiteSpace($result.windowHandleValue)
+            if ($result.windowHandleFound) {
+              $result.windowHandleErrorClass = $null
+              $result.windowHandleErrorMessage = $null
+            }
+          } elseif ($windowJson -and $windowJson.value -and $windowJson.value.error) {
+            $rawError = [string]$windowJson.value.error
+            $rawMessage = if ($windowJson.value.message) { [string]$windowJson.value.message } else { "" }
+            $errorLower = $rawError.ToLowerInvariant()
+            $messageLower = $rawMessage.ToLowerInvariant()
+            if (($errorLower -match "timeout") -or ($messageLower -match "timeout")) {
+              $result.windowHandleErrorClass = "timeout"
+            } elseif (($errorLower -match "no such window") -or ($messageLower -match "no such window") -or ($messageLower -match "404")) {
+              $result.windowHandleErrorClass = "no-such-window-or-404"
+            } else {
+              $result.windowHandleErrorClass = "webdriver-error"
+            }
+            $result.windowHandleErrorMessage = $rawMessage
+          }
+        }
+      } catch {
+        $result.windowHandleValue = $null
+        $result.windowHandleFound = $false
+        if (-not $result.windowHandleErrorClass) { $result.windowHandleErrorClass = "parse-error" }
+        if (-not $result.windowHandleErrorMessage) { $result.windowHandleErrorMessage = $_.Exception.Message }
+      }
+      $result
+    }
+  }
   if (-not (Get-Command Exec-Script -ErrorAction SilentlyContinue)) {
     function script:Exec-Script([string]$js, [object[]]$args = @(), [string]$scriptLabel = "unlabeled") {
       $payload = @{ script = $js; args = $args }
