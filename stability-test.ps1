@@ -2935,6 +2935,18 @@ function Ensure-ChildHelperFunctions {
       Start-Sleep -Milliseconds $waitMs
     }
   }
+  if (-not (Get-Command Get-NavigateSessionSyncDiagnosticsSegment -ErrorAction SilentlyContinue)) {
+    function script:Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sessionId) {
+      $base = if ($script:driverBaseUrl) { [string]$script:driverBaseUrl } else { "n/a" }
+      $sid = if ([string]::IsNullOrWhiteSpace($sessionId)) { "n/a" } else { [string]$sessionId }
+      'navigate session-sync label={0} driverBaseUrl={1} sessionId={2} status=bootstrap-fallback' -f $label, $base, $sid
+    }
+  }
+  if (-not (Get-Command Write-NavigateSessionSyncDiagnostics -ErrorAction SilentlyContinue)) {
+    function script:Write-NavigateSessionSyncDiagnostics([string]$label, [string]$sessionId) {
+      Write-Host ('[stability-test] ' + (Get-NavigateSessionSyncDiagnosticsSegment $label $sessionId))
+    }
+  }
   if (-not (Get-Command Exec-Script -ErrorAction SilentlyContinue)) {
     function script:Exec-Script([string]$js, [object[]]$args = @(), [string]$scriptLabel = "unlabeled") {
       $payload = @{ script = $js; args = $args }
