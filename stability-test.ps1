@@ -2981,6 +2981,26 @@ function Ensure-ChildHelperFunctions {
       return " postCdHasSessionsKeyword=$s postCdHasCommandKeyword=$c postCdHasDevToolsKeyword=$d"
     }
   }
+  if (-not (Get-Command Get-CdLogWideKeywordFlags -ErrorAction SilentlyContinue)) {
+    function script:Get-CdLogWideKeywordFlags([string]$logPath, [int]$maxLines = 80) {
+      if ([string]::IsNullOrWhiteSpace($logPath) -or -not (Test-Path $logPath -PathType Leaf)) {
+        return " postCdWideHasSessionsKeyword=0 postCdWideHasCommandKeyword=0"
+      }
+      try {
+        $lines = Get-Content -Path $logPath -Tail $maxLines -ErrorAction SilentlyContinue
+        if (-not $lines) {
+          return " postCdWideHasSessionsKeyword=0 postCdWideHasCommandKeyword=0"
+        }
+        $blob = ([string]::Join(" ", @($lines))).ToLowerInvariant()
+        $s = 0
+        if (($blob.IndexOf("/sessions") -ge 0) -or ($blob.IndexOf("session list") -ge 0) -or ($blob.IndexOf("/session/") -ge 0) -or ($blob.IndexOf("sessions") -ge 0)) { $s = 1 }
+        $c = if ($blob.IndexOf("command") -ge 0) { 1 } else { 0 }
+        return " postCdWideHasSessionsKeyword=$s postCdWideHasCommandKeyword=$c"
+      } catch {
+        return " postCdWideHasSessionsKeyword=0 postCdWideHasCommandKeyword=0"
+      }
+    }
+  }
   if (-not (Get-Command Invoke-WindowHandleCheck -ErrorAction SilentlyContinue)) {
     function script:Invoke-WindowHandleCheck([string]$sessionId) {
       $result = [ordered]@{
