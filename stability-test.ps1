@@ -2947,6 +2947,26 @@ function Ensure-ChildHelperFunctions {
       Write-Host ('[stability-test] ' + (Get-NavigateSessionSyncDiagnosticsSegment $label $sessionId))
     }
   }
+  if (-not (Get-Command Get-CdLogTailCompact -ErrorAction SilentlyContinue)) {
+    function script:Get-CdLogTailCompact([string]$logPath, [int]$maxLines = 10, [int]$maxChars = 420) {
+      if ([string]::IsNullOrWhiteSpace($logPath) -or -not (Test-Path $logPath -PathType Leaf)) {
+        return "n/a"
+      }
+      try {
+        $lines = Get-Content -Path $logPath -Tail $maxLines -ErrorAction SilentlyContinue
+        if (-not $lines) { return "(empty)" }
+        $s = [string]::Join(" ", @($lines))
+        $s = ($s -replace "`r`n|`n|`r", " ") -replace '\s+', ' '
+        $s = $s -replace '\|', '/'
+        if ($s.Length -gt $maxChars) {
+          $s = $s.Substring($s.Length - $maxChars)
+        }
+        return $s
+      } catch {
+        return "err"
+      }
+    }
+  }
   if (-not (Get-Command Exec-Script -ErrorAction SilentlyContinue)) {
     function script:Exec-Script([string]$js, [object[]]$args = @(), [string]$scriptLabel = "unlabeled") {
       $payload = @{ script = $js; args = $args }
