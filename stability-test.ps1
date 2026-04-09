@@ -1341,7 +1341,9 @@ function Test-MinimalSessionExecute() {
     Log-Step "minimal execute probe" "done"
   } finally {
     if ($minimalSessionId) {
-      try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$minimalSessionId" -TimeoutSec 10 | Out-Null } catch {}
+      Invoke-CleanupRestMethod "delete-session-minimal" {
+        Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$minimalSessionId" -TimeoutSec 10 | Out-Null
+      }
     }
     $script:sessionId = $currentSessionId
   }
@@ -1433,7 +1435,9 @@ function Test-CapabilityBisect() {
       }
     } finally {
       if ($sessionId) {
-        try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$sessionId" -TimeoutSec 10 | Out-Null } catch {}
+        Invoke-CleanupRestMethod "delete-session-bisect-capability" {
+          Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$sessionId" -TimeoutSec 10 | Out-Null
+        }
       }
     }
     if (-not $firstTimeout -and $errorType -eq "TIMEOUT") {
@@ -1506,7 +1510,9 @@ function Test-PageLoadStrategyCompare() {
       $errorType = if ($errorMessage -match "(?i)timeout") { "TIMEOUT" } else { "ERROR" }
     } finally {
       if ($sessionId) {
-        try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$sessionId" -TimeoutSec 10 | Out-Null } catch {}
+        Invoke-CleanupRestMethod "delete-session-page-load-compare" {
+          Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$sessionId" -TimeoutSec 10 | Out-Null
+        }
       }
     }
     $results += [ordered]@{
@@ -1606,7 +1612,9 @@ function Test-ChromeArgsSubtractCompare() {
         $errorType = if ($errorMessage -match "(?i)timeout") { "TIMEOUT" } else { "ERROR" }
       } finally {
         if ($sessionId) {
-          try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$sessionId" -TimeoutSec 10 | Out-Null } catch {}
+          Invoke-CleanupRestMethod "delete-session-chrome-args-bisect" {
+            Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$sessionId" -TimeoutSec 10 | Out-Null
+          }
         }
       }
     }
@@ -1670,9 +1678,28 @@ function Test-ChromeArgsSubtractCompare() {
   }
 }
 
+function Write-CleanupRequestFailure([string]$label, [object]$err) {
+  $msg = ""
+  if ($null -ne $err -and $err.Exception) { $msg = [string]$err.Exception.Message } else { $msg = [string]$err }
+  if ($msg.Length -gt 240) { $msg = $msg.Substring(0, 240) }
+  $cls = "error"
+  if ($msg -match '(?i)接続|connect|could not connect|remote|refused|タイムアウト|timeout|リモート|operation timed out') { $cls = "connect-error" }
+  Write-Host "[stability-test] cleanup request failed label=$label class=$cls message=$msg"
+}
+
+function Invoke-CleanupRestMethod([string]$label, [ScriptBlock]$action) {
+  try {
+    & $action
+  } catch {
+    Write-CleanupRequestFailure $label $_
+  }
+}
+
 function Remove-Session {
   if ($script:sessionId) {
-    try { Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)" -TimeoutSec 10 | Out-Null } catch {}
+    Invoke-CleanupRestMethod "delete-session" {
+      Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)" -TimeoutSec 10 | Out-Null
+    }
   }
 }
 
@@ -2875,6 +2902,227 @@ function Test-DownstreamContractCase([string]$name, [string]$inputText, [object]
   }
 }
 
+function Ensure-ChildHelperFunctions {
+  if (-not (Get-Command Make-Japanese -ErrorAction SilentlyContinue)) {
+    function script:Make-Japanese([int[]]$codes) {
+      $chars = $codes | ForEach-Object { [char]$_ }
+      -join $chars
+    }
+  }
+  if (-not (Get-Command Write-CleanupRequestFailure -ErrorAction SilentlyContinue)) {
+    function script:Write-CleanupRequestFailure([string]$label, [object]$err) {
+      $msg = ""
+      if ($null -ne $err -and $err.Exception) { $msg = [string]$err.Exception.Message } else { $msg = [string]$err }
+      if ($msg.Length -gt 240) { $msg = $msg.Substring(0, 240) }
+      $cls = "error"
+      if ($msg -match '(?i)接続|connect|could not connect|remote|refused|タイムアウト|timeout|リモート|operation timed out') { $cls = "connect-error" }
+      Write-Host "[stability-test] cleanup request failed label=$label class=$cls message=$msg"
+    }
+  }
+  if (-not (Get-Command Remove-Session -ErrorAction SilentlyContinue)) {
+    function script:Remove-Session {
+      if ($script:sessionId) {
+        try {
+          Invoke-RestMethod -Method Delete -Uri "$($script:driverBaseUrl)/session/$($script:sessionId)" -TimeoutSec 10 | Out-Null
+        } catch {
+          Write-CleanupRequestFailure "delete-session" $_
+        }
+      }
+    }
+  }
+  if (-not (Get-Command Wait-BrowserReady -ErrorAction SilentlyContinue)) {
+    function script:Wait-BrowserReady([int]$waitMs = 500) {
+      Start-Sleep -Milliseconds $waitMs
+    }
+  }
+  if (-not (Get-Command Exec-Script -ErrorAction SilentlyContinue)) {
+    function script:Exec-Script([string]$js, [object[]]$args = @(), [string]$scriptLabel = "unlabeled") {
+      $payload = @{ script = $js; args = $args }
+      $requestUrl = "$($script:driverBaseUrl)/session/$($script:sessionId)/execute/sync"
+      Log-WebDriverExecuteRequestInfo $scriptLabel $requestUrl "/session/{id}/execute/sync" @($payload.Keys) ($null -ne $args)
+      $body = $payload | ConvertTo-Json -Depth 8
+      $resp = Invoke-RestMethod -Method Post -Uri $requestUrl -ContentType "application/json" -Body $body -TimeoutSec 20
+      $resp.value
+    }
+  }
+  if (-not (Get-Command Open-Page -ErrorAction SilentlyContinue)) {
+    function script:Open-Page {
+      $navigateResult = Invoke-SessionNavigateViaCurl $script:sessionId "$($script:baseUrl)/wiring-diagram.html" 20
+      $script:lastNavigateAttempt = $navigateResult
+      if (-not $navigateResult.ok) {
+        $statusText = if ($null -ne $navigateResult.httpStatus) { [string]$navigateResult.httpStatus } else { "null" }
+        throw "Open-Page navigate failed: class=$([string]$navigateResult.errorClass) status=$statusText stderr=$([string]$navigateResult.stderrSummary)"
+      }
+    }
+  }
+  if (-not (Get-Command Invoke-SessionNavigateViaCurl -ErrorAction SilentlyContinue)) {
+    function script:Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [int]$maxTimeSec = 20) {
+      $result = [ordered]@{
+        ok = $false
+        transportUsed = "curl"
+        httpStatus = $null
+        responseBody = ""
+        stderrSummary = ""
+        webdriverError = $null
+        errorClass = "unknown"
+        errorMessage = ""
+        exitCode = $null
+        maxTimeSecApplied = $maxTimeSec
+      }
+      $endpoint = "$($script:driverBaseUrl)/session/$sessionId/url"
+      Write-Host ('[stability-test] direct webdriver navigate phase=start target={0} maxTimeSec={1} endpoint={2}' -f $targetUrl, $maxTimeSec, $endpoint)
+      Write-NavigateSessionSyncDiagnostics 'pre-navigate' $sessionId
+      $preCdTail = Get-CdLogTailCompact $script:chromeDriverLogPath 10 420
+      Write-Host ('[stability-test] cd-log-tail label=pre-direct-url preNavigateCdLogTail=' + $preCdTail)
+      $emitNavPhase = {
+        param([string]$phaseLabel, [string]$sessionSyncSegment = "")
+        $bl = 0
+        if ($result.responseBody) { $bl = $result.responseBody.Length }
+        $bp = ""
+        if ($bl -gt 0) {
+          $take = [Math]::Min(200, $bl)
+          $bp = (($result.responseBody.Substring(0, $take)) -replace "[\r\n]+", " ")
+        }
+        $cls = if ($null -ne $result.errorClass) { [string]$result.errorClass } else { "" }
+        $line = '[stability-test] direct webdriver navigate phase=' + $phaseLabel + ' exitCode=' + $result.exitCode + ' httpStatus=' + $result.httpStatus + ' maxTimeSec=' + $maxTimeSec + ' class=' + $cls + ' bodyLen=' + $bl + ' bodyPreview=' + $bp + ' stderrSummary=' + $result.stderrSummary
+        if ($sessionSyncSegment) { $line = $line + ' | [stability-test] ' + $sessionSyncSegment }
+        if ($sessionSyncSegment -and ($sessionSyncSegment -match 'label=post-navigate-timeout')) {
+          try {
+            $timeoutDiagPath = Join-Path $script:projectRoot ".tmp_navigate_last_direct_timeout.txt"
+            [IO.File]::WriteAllText($timeoutDiagPath, $line + "`r`n", [Text.UTF8Encoding]::new($false))
+          } catch {}
+        }
+        Write-Host $line
+      }
+      $payload = @{ url = $targetUrl } | ConvertTo-Json -Compress
+      $bodyPath = [IO.Path]::GetTempFileName()
+      $errPath = [IO.Path]::GetTempFileName()
+      $statusPath = [IO.Path]::GetTempFileName()
+      $payloadPath = [IO.Path]::GetTempFileName()
+      try {
+        [IO.File]::WriteAllText($payloadPath, $payload, [Text.UTF8Encoding]::new($false))
+        $args = @("--silent", "--show-error", "--max-time", "$maxTimeSec", "-o", $bodyPath, "-w", "%{http_code}", "-X", "POST", "-H", "Content-Type:application/json", "--data-binary", "@$payloadPath", $endpoint)
+        $proc = Start-Process -FilePath "curl.exe" -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput $statusPath -RedirectStandardError $errPath
+        $result.exitCode = $proc.ExitCode
+        $statusRaw = ""
+        try { $statusRaw = [string](Get-Content -Raw -Path $statusPath) } catch { $statusRaw = "" }
+        $statusRaw = $statusRaw.Trim()
+        if ($statusRaw -match '^\d+$') {
+          try { $result.httpStatus = [int]$statusRaw } catch { $result.httpStatus = $null }
+        }
+        try { $result.responseBody = [string](Get-Content -Raw -Path $bodyPath) } catch { $result.responseBody = "" }
+        try { $result.stderrSummary = [string](Get-Content -Raw -Path $errPath) } catch { $result.stderrSummary = "" }
+      } finally {
+        try { Remove-Item $payloadPath -Force -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Item $bodyPath -Force -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Item $errPath -Force -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Item $statusPath -Force -ErrorAction SilentlyContinue } catch {}
+      }
+      if ($result.responseBody.Length -gt 800) { $result.responseBody = $result.responseBody.Substring(0, 800) }
+      if ($result.stderrSummary.Length -gt 500) { $result.stderrSummary = $result.stderrSummary.Substring(0, 500) }
+      $stderrLower = ""
+      try { $stderrLower = $result.stderrSummary.ToLowerInvariant() } catch { $stderrLower = "" }
+      if (($result.exitCode -eq 28) -or ($stderrLower -match "timeout")) {
+        $result.errorClass = "timeout"
+        $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl timeout" }
+        $postSyncSeg = Get-NavigateSessionSyncDiagnosticsSegment 'post-navigate-timeout' $sessionId
+        $postCdTail = Get-CdLogTailCompact $script:chromeDriverLogPath 10 420
+        $postSyncSeg = $postSyncSeg + ' postNavigateCdLogTail=' + $postCdTail + (Get-CdLogPostKeywordFlags $postCdTail) + (Get-CdLogWideKeywordFlags $script:chromeDriverLogPath 80) + (Get-CdLogSessionCommandExcerpt $script:chromeDriverLogPath)
+        & $emitNavPhase 'error' $postSyncSeg
+        return $result
+      }
+      if ($result.exitCode -ne 0) {
+        $result.errorClass = "curl-error"
+        $result.errorMessage = if ($result.stderrSummary) { $result.stderrSummary } else { "curl exitCode=$($result.exitCode)" }
+        & $emitNavPhase 'error'
+        return $result
+      }
+      $wdError = $null
+      $wdMessage = ""
+      try {
+        if (-not [string]::IsNullOrWhiteSpace($result.responseBody)) {
+          $json = $result.responseBody | ConvertFrom-Json -ErrorAction Stop
+          if ($json -and $json.value -and $json.value.error) {
+            $wdError = [string]$json.value.error
+            if ($json.value.message) { $wdMessage = [string]$json.value.message }
+          } elseif ($json -and $json.error) {
+            $wdError = [string]$json.error
+            if ($json.message) { $wdMessage = [string]$json.message }
+          }
+        }
+      } catch {}
+      if ([string]::IsNullOrWhiteSpace($wdError) -and (-not [string]::IsNullOrWhiteSpace($result.responseBody))) {
+        if ($result.responseBody -match '"error"\s*:\s*"([^"]+)"') {
+          $wdError = [string]$Matches[1]
+        }
+      }
+      $result.webdriverError = $wdError
+      if ($wdError) {
+        $wdErrorLower = $wdError.ToLowerInvariant()
+        $wdMessageLower = $wdMessage.ToLowerInvariant()
+        if (($wdErrorLower -match "timeout") -or ($wdMessageLower -match "timeout")) {
+          $result.errorClass = "timeout"
+        } elseif (($wdErrorLower -match "no such window") -or ($wdMessageLower -match "no such window")) {
+          $result.errorClass = "no-such-window"
+        } elseif (($wdErrorLower -match "invalid session id") -or ($wdMessageLower -match "invalid session id")) {
+          $result.errorClass = "invalid-session-id"
+        } elseif (($wdErrorLower -match "unknown command") -or ($wdMessageLower -match "unknown command")) {
+          $result.errorClass = "unknown-command"
+        } else {
+          $result.errorClass = "webdriver-error"
+        }
+        $result.errorMessage = if ($wdMessage) { $wdMessage } else { $wdError }
+        & $emitNavPhase 'error'
+        return $result
+      }
+      if (($null -ne $result.httpStatus) -and (($result.httpStatus -lt 200) -or ($result.httpStatus -ge 300))) {
+        if ($result.httpStatus -eq 404) {
+          $result.errorClass = "http-404"
+        } else {
+          $result.errorClass = "http-error"
+        }
+        $result.errorMessage = "http status=$($result.httpStatus)"
+        & $emitNavPhase 'error'
+        return $result
+      }
+      $result.ok = $true
+      $result.errorClass = $null
+      $result.errorMessage = ""
+      & $emitNavPhase 'done'
+      $result
+    }
+  }
+  if (-not (Get-Command Open-PageWithRetry -ErrorAction SilentlyContinue)) {
+    function script:Open-PageWithRetry([int]$maxAttempts = 2, [int]$retryWaitMs = 700) {
+      $targetUrl = "$($script:baseUrl)/wiring-diagram.html"
+      for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        Write-Host "[stability-test] page-open sessionIdPresent=$([bool]$script:sessionId) target=$targetUrl attempt=$attempt/$maxAttempts"
+        try {
+          Open-Page
+          return
+        } catch {
+          Write-Host "[stability-test] page-open failed attempt=$attempt message=$($_.Exception.Message)"
+          if ($attempt -ge $maxAttempts) { break }
+          Write-Host "[stability-test] page-open recreate session before retry"
+          try { Remove-Session } catch {}
+          New-Session
+          Wait-BrowserReady
+          Start-Sleep -Milliseconds $retryWaitMs
+        }
+      }
+      Write-Host "[stability-test] page-open fallback via execute/sync target=$targetUrl"
+      Exec-Script "window.location.href = arguments[0]; return true;" @($targetUrl) | Out-Null
+      $navigated = Wait-Until {
+        [bool](Exec-Script "return location.href.indexOf('wiring-diagram.html') >= 0;")
+      } 10
+      if (-not $navigated) {
+        throw "Page open fallback did not reach target URL."
+      }
+    }
+  }
+}
+Ensure-ChildHelperFunctions
+
 $cases = @(
   @{ name = "case_single_1light"; input = (Make-Japanese @(29255,20999,49,28783)) },
   @{ name = "case_single_2light_same"; input = (Make-Japanese @(29255,20999,50,28783,32,21516,26178)) },
@@ -2885,6 +3133,7 @@ $cases = @(
 )
 
 try {
+  try {
   $script:sourceCommit = Get-SourceCommitShort
   Get-ChromeDriverVersion | Out-Null
   Get-ChromeVersion | Out-Null
@@ -4128,13 +4377,29 @@ try {
   Write-Host ("[E2E] overall={0}" -f $(if ($result.assertions.overall_pass) { "PASS" } else { "FAIL" }))
 }
 finally {
-  Log-Step "finally cleanup" "start"
-  Remove-Session
-  Stop-Driver
-  Stop-StaticServer
-  if ($script:curlProbeBodyPath) {
-    try { Remove-Item $script:curlProbeBodyPath -Force -ErrorAction SilentlyContinue } catch {}
+  try {
+    Log-Step "finally cleanup" "start"
+    Remove-Session
+    Stop-Driver
+    Stop-StaticServer
+    if ($script:curlProbeBodyPath) {
+      try { Remove-Item $script:curlProbeBodyPath -Force -ErrorAction SilentlyContinue } catch {}
+    }
+    try {
+      Read-ChromeDriverVerboseHighlights $script:chromeDriverLogPath
+    } catch {
+      Write-CleanupRequestFailure "cd-log-highlights" $_
+    }
+    Log-Step "finally cleanup" "done"
+  } catch {
+    Write-CleanupRequestFailure "finally-block" $_
   }
-  Read-ChromeDriverVerboseHighlights $script:chromeDriverLogPath
-  Log-Step "finally cleanup" "done"
+}
+} catch {
+  $msg = if ($_.Exception) { [string]$_.Exception.Message } else { "" }
+  if ($msg -match '(?i)接続|connect|could not connect|remote|refused|タイムアウト|timeout|リモート|operation timed out') {
+    Write-CleanupRequestFailure "post-finally-propagation" $_
+  } else {
+    throw
+  }
 }
