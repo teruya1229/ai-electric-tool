@@ -3040,6 +3040,68 @@ function Ensure-ChildHelperFunctions {
       $result
     }
   }
+  if (-not (Get-Command Invoke-CurrentUrlCheck -ErrorAction SilentlyContinue)) {
+    function script:Invoke-CurrentUrlCheck([string]$sessionId) {
+      $result = [ordered]@{
+        currentUrlCheckAttempted = $false
+        currentUrlFound = $false
+        currentUrlValue = $null
+        currentUrlErrorClass = $null
+        currentUrlErrorMessage = $null
+      }
+      $stdoutRaw = ""
+      $outPath = [IO.Path]::GetTempFileName()
+      $errPath = [IO.Path]::GetTempFileName()
+      try {
+        $result.currentUrlCheckAttempted = $true
+        $args = @("--silent", "--show-error", "--max-time", "5", "$($script:driverBaseUrl)/session/$sessionId/url")
+        $proc = Start-Process -FilePath "curl.exe" -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput $outPath -RedirectStandardError $errPath
+        try { $stdoutRaw = [string](Get-Content -Raw -Path $outPath) } catch { $stdoutRaw = "" }
+        try { $stderr = [string](Get-Content -Raw -Path $errPath) } catch { $stderr = "" }
+        if ($proc.ExitCode -ne 0) {
+          $errLower = ""
+          try { $errLower = $stderr.ToLowerInvariant() } catch { $errLower = "" }
+          if (($proc.ExitCode -eq 28) -or ($errLower -match "timeout")) {
+            $result.currentUrlErrorClass = "timeout"
+          } else {
+            $result.currentUrlErrorClass = "curl-error"
+          }
+          $result.currentUrlErrorMessage = $stderr
+          return $result
+        }
+        try {
+          $json = $stdoutRaw | ConvertFrom-Json -ErrorAction Stop
+          if ($json -and $json.PSObject.Properties.Name -contains "value" -and $json.value -is [string]) {
+            $result.currentUrlFound = $true
+            $result.currentUrlValue = [string]$json.value
+          } elseif ($json -and $json.value -and $json.value.error) {
+            $rawError = [string]$json.value.error
+            $rawMessage = if ($json.value.message) { [string]$json.value.message } else { "" }
+            $errorLower = $rawError.ToLowerInvariant()
+            $messageLower = $rawMessage.ToLowerInvariant()
+            if (($errorLower -match "timeout") -or ($messageLower -match "timeout")) {
+              $result.currentUrlErrorClass = "timeout"
+            } elseif (($errorLower -match "no such window") -or ($messageLower -match "no such window") -or ($messageLower -match "404")) {
+              $result.currentUrlErrorClass = "no-such-window-or-404"
+            } else {
+              $result.currentUrlErrorClass = "webdriver-error"
+            }
+            $result.currentUrlErrorMessage = $rawMessage
+          } else {
+            $result.currentUrlErrorClass = "parse-error"
+            $result.currentUrlErrorMessage = "missing value in response"
+          }
+        } catch {
+          $result.currentUrlErrorClass = "parse-error"
+          $result.currentUrlErrorMessage = $_.Exception.Message
+        }
+      } finally {
+        try { Remove-Item $outPath -Force -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Item $errPath -Force -ErrorAction SilentlyContinue } catch {}
+      }
+      $result
+    }
+  }
   if (-not (Get-Command Exec-Script -ErrorAction SilentlyContinue)) {
     function script:Exec-Script([string]$js, [object[]]$args = @(), [string]$scriptLabel = "unlabeled") {
       $payload = @{ script = $js; args = $args }
