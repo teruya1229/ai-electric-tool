@@ -2935,6 +2935,42 @@ function Ensure-ChildHelperFunctions {
       Start-Sleep -Milliseconds $waitMs
     }
   }
+  if (-not (Get-Command Get-UiInitDiagnostics -ErrorAction SilentlyContinue)) {
+    function script:Get-UiInitDiagnostics() {
+      try {
+        $diagScript = @(
+          'const byId = (id) => document.getElementById(id);'
+          'const panel = byId("parseResultPanel");'
+          'const bodyText = (document.body && document.body.innerText ? document.body.innerText : "").replace(/\s+/g, " ").slice(0, 120);'
+          'return {'
+          '  readyState: document.readyState || "",'
+          '  href: (location && location.href) || "",'
+          '  title: document.title || "",'
+          '  hasBody: !!document.body,'
+          '  hasProblemTextInput: !!byId("problemTextInput"),'
+          '  hasParseProblemButton: !!byId("parseProblemButton"),'
+          '  hasParseResultPanel: !!panel,'
+          '  hasParseResultPre: !!(panel && panel.querySelector("pre")),'
+          '  bodyPreview: bodyText'
+          '};'
+        ) -join "`n"
+        Exec-Script $diagScript @() "ui-init-diagnostics"
+      } catch {
+        [ordered]@{
+          readyState = "exec-error"
+          href = ""
+          title = ""
+          hasBody = $false
+          hasProblemTextInput = $false
+          hasParseProblemButton = $false
+          hasParseResultPanel = $false
+          hasParseResultPre = $false
+          bodyPreview = ""
+          error = $_.Exception.Message
+        }
+      }
+    }
+  }
   if (-not (Get-Command Get-NavigateSessionSyncDiagnosticsSegment -ErrorAction SilentlyContinue)) {
     function script:Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sessionId) {
       $base = if ($script:driverBaseUrl) { [string]$script:driverBaseUrl } else { "n/a" }
