@@ -1,5 +1,25 @@
 # status
 
+## 2026-04-10 ChromeDriver 146 ui-init 観測・timeout 対応整理（正本）
+
+### 今日やったこと
+- ui-init precheck / timeout snapshot を含む完走ログを、Windows 正本でバックグラウンド 1 回取得（例: `.tmp_step5_run_146_confirm_uiinit_exec_mapping.txt`）
+- stability 側で `ui-init-precheck-exec-probe` / `ui-init-timeout-snapshot-exec-probe` / 2 回の `ui-init timeout last` / `finally cleanup phase=done` / `repeat-run summary written` まで確認
+- recovered post-nav 3 本（return-1 / ready-state / location-href）と、リカバリ後 ChromeDriver ログ（`cd.run-20260410-213555-932.log`）上の `RESPONSE ExecuteScript ERROR script timeout` をスクリプト本文ベースで対応付け
+- 主因候補は **timeout** が最も強いことを確認（404 / no such window / invalid session id は今回のログ束では主因扱いしない）
+- `ui-init-precheck-exec-probe` / `ui-init-timeout-snapshot-exec-probe` は stability 側ログにはあるが、当該 ChromeDriver ログには対応する `COMMAND ExecuteScript`（例: `return 1;` の追加分）が現れず、**script timeout との 1 対 1 対応は今回ログだけでは確定不能**と確認
+- 使用したリカバリ後ログ `cd.run-20260410-213555-932.log` は **`COMMAND GetUrl` 直後で終端**しており、precheck / timeout-snapshot の execute に対応する追記がない
+
+### 現在の状態
+- 当該 run は `finally cleanup phase=done` / `repeat-run summary written` まで**完走**
+- recovered post-nav 3 本は**維持**（従来どおり ok=False 系）
+- 主因は **timeout 寄り**（レンダラ script timeout / curl 28 / 操作タイムアウト等）
+- 404 / no such window / invalid session id は今回ログ束では**主因として扱わない**
+- **未確定**: precheck / timeout-snapshot の execute と ChromeDriver 側 `RESPONSE ExecuteScript ERROR script timeout` の対応
+- **次の主題**: ChromeDriver ログが途中で止まっているのか / 別ログへ出ているのか / クライアント側 timeout が先行しているのかの切り分け
+
+---
+
 ## 2026-04-01 ChromeDriver 146 再計測・cleanup（正本）
 
 ### 今日やったこと

@@ -4,6 +4,28 @@ AI電気施工アシスタント / `C:\dev\ai-electric-tool` の作業メモ。
 
 ---
 
+## 2026-04-10 次手・判断基準（precheck / timeout-snapshot と ChromeDriver ログ）
+
+### 次にやるべき1手
+- **コード修正ではなく**、同条件のバックグラウンド run を 1 回行い、必ず次を控える
+  - stability 側ログ（全文または末尾＋該当ラベル周辺）
+  - 初期 `chromedriver-log=`（9515 側など）
+  - リカバリ後 `chromedriver-log=`（9516 側など）
+- そのうえで `ui-init-precheck-exec-probe` / `ui-init-timeout-snapshot-exec-probe` が **ChromeDriver 側ログのどの `COMMAND ExecuteScript` に対応するか**（またはなぜ出ないか）を確認する
+
+### 判断基準
+- precheck / timeout-snapshot に対応する **`COMMAND ExecuteScript` が ChromeDriver ログに出るか**
+- **出ない**場合、ChromeDriver ログの終端時刻・ファイルサイズ・行数・末尾行から、途中停止か別ログか判断できる材料があるか
+- **client timeout 先行**の可能性を、stability の `wd-exec-request` 時刻と ChromeDriver の `COMMAND` / `RESPONSE` 時刻で比較できるか
+
+### 注意点
+- **`stability-test.ps1` 以外は触らない**（観測・docs のみ）
+- docs 更新と実行依頼を混在させない（本セクションは観測方針のメモ）
+- 現時点では **timeout が主因候補**のため、404 / no such window / invalid session id を主因として断定しない
+- precheck / timeout-snapshot の execute は**未確定**のため、ChromeDriver script timeout との対応を決め打ちで書かない
+
+---
+
 ## 2026-04-01 次手・判断基準（cleanup 保護と 146 観測の完走）
 
 ### 次にやるべき1手
