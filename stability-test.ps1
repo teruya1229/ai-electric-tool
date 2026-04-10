@@ -2971,6 +2971,23 @@ function Ensure-ChildHelperFunctions {
       }
     }
   }
+  if (-not (Get-Command Wait-UiInitWithDiagnostics -ErrorAction SilentlyContinue)) {
+    function script:Wait-UiInitWithDiagnostics([int]$timeoutSec = 40, [int]$intervalMs = 800) {
+      $until = (Get-Date).AddSeconds($timeoutSec)
+      $last = $null
+      while ((Get-Date) -lt $until) {
+        $d = Get-UiInitDiagnostics
+        $last = $d
+        Write-Host "[stability-test] ui-init readyState=$($d.readyState) input=$($d.hasProblemTextInput) button=$($d.hasParseProblemButton) panel=$($d.hasParseResultPanel) pre=$($d.hasParseResultPre) url=$($d.href)"
+        if (($d.readyState -eq "interactive" -or $d.readyState -eq "complete") -and $d.hasProblemTextInput -and $d.hasParseProblemButton -and $d.hasParseResultPanel -and $d.hasParseResultPre) {
+          return @{ ok = $true; last = $d }
+        }
+        Start-Sleep -Milliseconds $intervalMs
+      }
+      Write-Host "[stability-test] ui-init timeout last readyState=$($last.readyState) input=$($last.hasProblemTextInput) button=$($last.hasParseProblemButton) panel=$($last.hasParseResultPanel) pre=$($last.hasParseResultPre) url=$($last.href) title=$($last.title) body='$($last.bodyPreview)' error=$($last.error)"
+      @{ ok = $false; last = $last }
+    }
+  }
   if (-not (Get-Command Get-NavigateSessionSyncDiagnosticsSegment -ErrorAction SilentlyContinue)) {
     function script:Get-NavigateSessionSyncDiagnosticsSegment([string]$label, [string]$sessionId) {
       $base = if ($script:driverBaseUrl) { [string]$script:driverBaseUrl } else { "n/a" }
