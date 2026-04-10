@@ -2446,6 +2446,39 @@ function Invoke-CurrentUrlCheck([string]$sessionId) {
   $result
 }
 
+function Write-UiInitSessionSnapshot([string]$kind, [string]$sessionId) {
+  $prefix = if ($kind -eq "precheck") { "ui-init precheck" } elseif ($kind -eq "timeout-snapshot") { "ui-init timeout snapshot" } else { "ui-init snapshot" }
+  if ([string]::IsNullOrWhiteSpace($sessionId)) {
+    Write-Host "[stability-test] $prefix current-url sessionIdMissing=1"
+    Write-Host "[stability-test] $prefix window-handle sessionIdMissing=1"
+    Write-Host "[stability-test] $prefix handles-count sessionIdMissing=1"
+    Write-Host "[stability-test] $prefix execute-sync sessionIdMissing=1"
+    return
+  }
+  $cu = Invoke-CurrentUrlCheck $sessionId
+  Write-Host "[stability-test] $prefix current-url found=$($cu.currentUrlFound) value=$($cu.currentUrlValue) errorClass=$($cu.currentUrlErrorClass)"
+  $wh = Invoke-WindowHandleCheck $sessionId
+  Write-Host "[stability-test] $prefix window-handle found=$($wh.windowHandleFound) value=$($wh.windowHandleValue) errorClass=$($wh.windowHandleErrorClass)"
+  $hc = Invoke-WindowHandlesCountCheck $sessionId
+  Write-Host "[stability-test] $prefix handles-count count=$($hc.handlesCount) errorClass=$($hc.handlesErrorClass)"
+  $exOk = $false
+  $exClass = "skipped"
+  try {
+    [void](Exec-Script "return 1;" @() "ui-init-$kind-exec-probe")
+    $exOk = $true
+    $exClass = "ok"
+  } catch {
+    $msg = [string]$_.Exception.Message
+    $el = $msg.ToLowerInvariant()
+    if ($el -match "404") { $exClass = "http-404" }
+    elseif ($el -match "no such window") { $exClass = "no-such-window" }
+    elseif ($el -match "invalid session") { $exClass = "invalid-session" }
+    elseif ($el -match "timeout") { $exClass = "timeout" }
+    else { $exClass = "other" }
+  }
+  Write-Host "[stability-test] $prefix execute-sync ok=$exOk class=$exClass"
+}
+
 function Wait-BrowserReady([int]$waitMs = 500) {
   Start-Sleep -Milliseconds $waitMs
 }
@@ -2577,6 +2610,7 @@ function Wait-UiInitWithDiagnostics([int]$timeoutSec = 40, [int]$intervalMs = 80
     }
     Start-Sleep -Milliseconds $intervalMs
   }
+  Write-UiInitSessionSnapshot "timeout-snapshot" $script:sessionId
   Write-Host "[stability-test] ui-init timeout last readyState=$($last.readyState) input=$($last.hasProblemTextInput) button=$($last.hasParseProblemButton) panel=$($last.hasParseResultPanel) pre=$($last.hasParseResultPre) url=$($last.href) title=$($last.title) body='$($last.bodyPreview)' error=$($last.error)"
   @{ ok = $false; last = $last }
 }
@@ -2971,6 +3005,40 @@ function Ensure-ChildHelperFunctions {
       }
     }
   }
+  if (-not (Get-Command Write-UiInitSessionSnapshot -ErrorAction SilentlyContinue)) {
+    function script:Write-UiInitSessionSnapshot([string]$kind, [string]$sessionId) {
+      $prefix = if ($kind -eq "precheck") { "ui-init precheck" } elseif ($kind -eq "timeout-snapshot") { "ui-init timeout snapshot" } else { "ui-init snapshot" }
+      if ([string]::IsNullOrWhiteSpace($sessionId)) {
+        Write-Host "[stability-test] $prefix current-url sessionIdMissing=1"
+        Write-Host "[stability-test] $prefix window-handle sessionIdMissing=1"
+        Write-Host "[stability-test] $prefix handles-count sessionIdMissing=1"
+        Write-Host "[stability-test] $prefix execute-sync sessionIdMissing=1"
+        return
+      }
+      $cu = Invoke-CurrentUrlCheck $sessionId
+      Write-Host "[stability-test] $prefix current-url found=$($cu.currentUrlFound) value=$($cu.currentUrlValue) errorClass=$($cu.currentUrlErrorClass)"
+      $wh = Invoke-WindowHandleCheck $sessionId
+      Write-Host "[stability-test] $prefix window-handle found=$($wh.windowHandleFound) value=$($wh.windowHandleValue) errorClass=$($wh.windowHandleErrorClass)"
+      $hc = Invoke-WindowHandlesCountCheck $sessionId
+      Write-Host "[stability-test] $prefix handles-count count=$($hc.handlesCount) errorClass=$($hc.handlesErrorClass)"
+      $exOk = $false
+      $exClass = "skipped"
+      try {
+        [void](Exec-Script "return 1;" @() "ui-init-$kind-exec-probe")
+        $exOk = $true
+        $exClass = "ok"
+      } catch {
+        $msg = [string]$_.Exception.Message
+        $el = $msg.ToLowerInvariant()
+        if ($el -match "404") { $exClass = "http-404" }
+        elseif ($el -match "no such window") { $exClass = "no-such-window" }
+        elseif ($el -match "invalid session") { $exClass = "invalid-session" }
+        elseif ($el -match "timeout") { $exClass = "timeout" }
+        else { $exClass = "other" }
+      }
+      Write-Host "[stability-test] $prefix execute-sync ok=$exOk class=$exClass"
+    }
+  }
   if (-not (Get-Command Wait-UiInitWithDiagnostics -ErrorAction SilentlyContinue)) {
     function script:Wait-UiInitWithDiagnostics([int]$timeoutSec = 40, [int]$intervalMs = 800) {
       $until = (Get-Date).AddSeconds($timeoutSec)
@@ -2984,6 +3052,7 @@ function Ensure-ChildHelperFunctions {
         }
         Start-Sleep -Milliseconds $intervalMs
       }
+      Write-UiInitSessionSnapshot "timeout-snapshot" $script:sessionId
       Write-Host "[stability-test] ui-init timeout last readyState=$($last.readyState) input=$($last.hasProblemTextInput) button=$($last.hasParseProblemButton) panel=$($last.hasParseResultPanel) pre=$($last.hasParseResultPre) url=$($last.href) title=$($last.title) body='$($last.bodyPreview)' error=$($last.error)"
       @{ ok = $false; last = $last }
     }
@@ -4562,6 +4631,7 @@ try {
   }
 
   Log-Step "wait start(ui init)" "start"
+  Write-UiInitSessionSnapshot "precheck" $script:sessionId
   $uiInit = Wait-UiInitWithDiagnostics 40 800
   $initialized = [bool]$uiInit.ok
   if (-not $initialized) {
