@@ -3398,6 +3398,26 @@ function Ensure-ChildHelperFunctions {
       }
     }
   }
+  if (-not (Get-Command Open-PageViaCurl -ErrorAction SilentlyContinue)) {
+    function script:Open-PageViaCurl([string]$sessionId, [int]$maxTimeSec = 20) {
+      $openEndpoint = "$($script:driverBaseUrl)/session/$sessionId/url"
+      $openPayload = @{ url = "$($script:baseUrl)/wiring-diagram.html" } | ConvertTo-Json -Compress
+      $openOutPath = [IO.Path]::GetTempFileName()
+      $openErrPath = [IO.Path]::GetTempFileName()
+      try {
+        $openArgs = @("--silent", "--show-error", "--max-time", "$maxTimeSec", "-X", "POST", "-H", "Content-Type:application/json", "--data", $openPayload, $openEndpoint)
+        $openProc = Start-Process -FilePath "curl.exe" -ArgumentList $openArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $openOutPath -RedirectStandardError $openErrPath
+        if ($openProc.ExitCode -eq 0) { return $true }
+        $openErr = ""
+        try { $openErr = Get-Content -Raw -Path $openErrPath } catch {}
+        Write-Host "[stability-test] curl page-open failed exitCode=$($openProc.ExitCode) error=$openErr"
+        $false
+      } finally {
+        try { Remove-Item $openOutPath -Force -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Item $openErrPath -Force -ErrorAction SilentlyContinue } catch {}
+      }
+    }
+  }
   if (-not (Get-Command Invoke-SessionNavigateViaCurl -ErrorAction SilentlyContinue)) {
     function script:Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [int]$maxTimeSec = 20) {
       $result = [ordered]@{
