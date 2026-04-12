@@ -4,6 +4,26 @@ AI電気施工アシスタント / `C:\dev\ai-electric-tool` の作業メモ。
 
 ---
 
+## 2026-04-12 次手・判断基準（CD ログ終端と precheck / timeout-snapshot）
+
+### 次にやるべき1手
+- **コード修正ではなく**、同条件のバックグラウンド run を 1 回行い、時刻・行数・最終更新時刻・ログ末尾で次を突き合わせる
+  - stability 側の `ui-init-precheck-exec-probe` / `ui-init-timeout-snapshot-exec-probe` / `repeat-run summary written`
+  - 初期 `chromedriver-log=` とリカバリ後 `chromedriver-log=` に対応する **各** `cd.run-*.log` の終端（`COMMAND GetUrl` 以降に追記があるか、同一 run 内で別ファイルが増えていないか）
+- 目的: 「stability は先へ進んだのに ChromeDriver ログが止まっている」のか、「別ログに続きがある」のか、「クライアントが先に timeout して CD に `COMMAND ExecuteScript` が残らない」のかを**観測だけ**で切り分ける
+
+### 判断基準
+- precheck / timeout-snapshot に対応しうる **`COMMAND ExecuteScript` が、該当セッションの ChromeDriver ログに現れるか**
+- 現れない場合、**ログファイルの終端時刻・サイズ・行数・末尾 30 行**から、フラッシュ停止・別ログ・未記録を区別できる材料があるか
+- stability のラベル時刻と、ChromeDriver ログの `COMMAND` / `RESPONSE` 時刻を並べ、**client timeout 先行**を否定・肯定できるか
+
+### 注意点
+- **`stability-test.ps1` をコード変更しない**（観測・docs のみ）
+- 現時点では **timeout が主因候補**のため、404 / no such window / invalid session id を主因として断定しない
+- precheck / timeout-snapshot と ChromeDriver script timeout の対応は**未確定**のままにし、決め打ちで書かない
+
+---
+
 ## 2026-04-10 次手・判断基準（precheck / timeout-snapshot と ChromeDriver ログ）
 
 ### 次にやるべき1手
