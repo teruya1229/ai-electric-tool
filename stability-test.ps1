@@ -920,15 +920,34 @@ function Read-ChromeDriverVerboseHighlights([string]$logPath) {
   }
 }
 
+function Get-WdExecScriptHead([string]$scriptText) {
+  if ($null -eq $scriptText) { return $null }
+  $t = [string]$scriptText
+  if ([string]::IsNullOrWhiteSpace($t)) { return "(empty)" }
+  $parts = $t.Trim() -split '\r?\n', 2
+  if ($parts.Count -lt 1) { return "(empty)" }
+  $first = $parts[0]
+  $norm = ($first -replace "[\r\n\t]+", " ") -replace '\s+', ' '
+  $norm = $norm.Trim()
+  if ([string]::IsNullOrWhiteSpace($norm)) { return "(empty)" }
+  if ($norm.Length -gt 120) { $norm = $norm.Substring(0, 117) + "..." }
+  return $norm
+}
+
 function Log-WebDriverExecuteRequestInfo(
   [string]$scriptLabel,
   [string]$requestUrl,
   [string]$endpointPath,
   [string[]]$payloadKeys,
-  [bool]$hasArgs
+  [bool]$hasArgs,
+  [string]$scriptText = $null
 ) {
   $keys = if ($payloadKeys) { ($payloadKeys -join ",") } else { "" }
   Write-Host "[stability-test] wd-exec-request label=$scriptLabel url=$requestUrl endpoint=$endpointPath payloadKeys=$keys hasArgs=$hasArgs"
+  $head = Get-WdExecScriptHead $scriptText
+  if ($null -ne $head) {
+    Write-Host "[stability-test] wd-exec-script-head label=$scriptLabel head=$head"
+  }
 }
 
 function Build-ExecutePayloadJson([string]$scriptText) {
@@ -1706,7 +1725,7 @@ function Remove-Session {
 function Exec-Script([string]$js, [object[]]$args = @(), [string]$scriptLabel = "unlabeled") {
   $payload = @{ script = $js; args = $args }
   $requestUrl = "$($script:driverBaseUrl)/session/$($script:sessionId)/execute/sync"
-  Log-WebDriverExecuteRequestInfo $scriptLabel $requestUrl "/session/{id}/execute/sync" @($payload.Keys) ($null -ne $args)
+  Log-WebDriverExecuteRequestInfo $scriptLabel $requestUrl "/session/{id}/execute/sync" @($payload.Keys) ($null -ne $args) $js
   $body = $payload | ConvertTo-Json -Depth 8
   $resp = Invoke-RestMethod -Method Post -Uri $requestUrl -ContentType "application/json" -Body $body -TimeoutSec 20
   $resp.value
@@ -1717,7 +1736,7 @@ function Invoke-RecoveredPostNavigateExecuteProbe([string]$label, [string]$scrip
   $payload = @{ script = $scriptText; args = @() }
   $requestUrl = "$($script:driverBaseUrl)/session/$($script:sessionId)/execute/sync"
   $bodyJson = $payload | ConvertTo-Json -Depth 8
-  Log-WebDriverExecuteRequestInfo $scriptLabel $requestUrl "/session/{id}/execute/sync" @($payload.Keys) $false
+  Log-WebDriverExecuteRequestInfo $scriptLabel $requestUrl "/session/{id}/execute/sync" @($payload.Keys) $false $scriptText
   $endpointShort = if ($requestUrl.Length -gt 160) { $requestUrl.Substring(0, 160) + "..." } else { $requestUrl }
   Write-Host "[stability-test] exec-transport label=$label endpoint=$endpointShort"
 
@@ -3158,7 +3177,7 @@ function Ensure-ChildHelperFunctions {
       $payload = @{ script = $scriptText; args = @() }
       $requestUrl = "$($script:driverBaseUrl)/session/$($script:sessionId)/execute/sync"
       $bodyJson = $payload | ConvertTo-Json -Depth 8
-      Log-WebDriverExecuteRequestInfo $scriptLabel $requestUrl "/session/{id}/execute/sync" @($payload.Keys) $false
+      Log-WebDriverExecuteRequestInfo $scriptLabel $requestUrl "/session/{id}/execute/sync" @($payload.Keys) $false $scriptText
       $endpointShort = if ($requestUrl.Length -gt 160) { $requestUrl.Substring(0, 160) + "..." } else { $requestUrl }
       Write-Host "[stability-test] exec-transport label=$label endpoint=$endpointShort"
 
@@ -3468,7 +3487,7 @@ function Ensure-ChildHelperFunctions {
     function script:Exec-Script([string]$js, [object[]]$args = @(), [string]$scriptLabel = "unlabeled") {
       $payload = @{ script = $js; args = $args }
       $requestUrl = "$($script:driverBaseUrl)/session/$($script:sessionId)/execute/sync"
-      Log-WebDriverExecuteRequestInfo $scriptLabel $requestUrl "/session/{id}/execute/sync" @($payload.Keys) ($null -ne $args)
+      Log-WebDriverExecuteRequestInfo $scriptLabel $requestUrl "/session/{id}/execute/sync" @($payload.Keys) ($null -ne $args) $js
       $body = $payload | ConvertTo-Json -Depth 8
       $resp = Invoke-RestMethod -Method Post -Uri $requestUrl -ContentType "application/json" -Body $body -TimeoutSec 20
       $resp.value
