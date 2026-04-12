@@ -1,5 +1,25 @@
 # status
 
+## 2026-04-12 単発 run 固定と最低条件完走ログの取得（正本・追記）
+
+### 今日やったこと
+- `STABILITY_REPEAT_COUNT=1` を **`cmd /c "set STABILITY_REPEAT_COUNT=1&& ..."`** の形で子プロセスに渡し、**`repeat-run start index=1/1`** を確認できる実行方式に固定した
+- 保存先 **`C:\dev\ai-electric-tool\.tmp_step5_run_146_timestamp_compare_final.txt`** に、**同一ファイルで最低条件 6 点が揃う** run を取得した  
+  - `repeat-run start index=1/1`  
+  - `step=wait start(ui init) phase=start`  
+  - `wd-exec-script-head label=ui-init-precheck-exec-probe`  
+  - `wd-exec-script-head label=ui-init-timeout-snapshot-exec-probe`  
+  - `finally cleanup phase=done`  
+  - `repeat-run summary written`  
+- 当該 run の**リカバリ後** ChromeDriver ログを **`C:\dev\ai-electric-tool\cd.run-20260412-204940-810.log`** に確定した（前提ログ取得として利用可能）
+
+### 現在の状態
+- **実行条件の問題**（repeat が 1/5 のまま等）は解消し、**分析に必要な完走形ログは取得済み**
+- **次の主題**は、**最初の 9517 系失敗** / **最初の renderer timeout・`RESPONSE ExecuteScript ERROR`** / **`Render process gone.` または同等終端**の前後関係を、**stability 側 `ts=`（UTC）と CD 側イベント時刻**で並べること
+- **コード修正フェーズには戻らず**、**時刻比較分析が主線**（直前まで A/B/C はログ不完全さゆえ **C 寄り**だったが、**比較対象が揃ったため**本分析に入れる段階になった）
+
+---
+
 ## 2026-04-12 ChromeDriver ログ終端と precheck / timeout-snapshot の整理（正本）
 
 ### 今日やったこと

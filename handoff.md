@@ -7,20 +7,22 @@ AI電気施工アシスタント / `C:\dev\ai-electric-tool` の作業メモ。
 ## 2026-04-12 次手・判断基準（CD ログ終端と precheck / timeout-snapshot）
 
 ### 次にやるべき1手
-- **コード修正ではなく**、同条件のバックグラウンド run を 1 回行い、時刻・行数・最終更新時刻・ログ末尾で次を突き合わせる
-  - stability 側の `ui-init-precheck-exec-probe` / `ui-init-timeout-snapshot-exec-probe` / `repeat-run summary written`
-  - 初期 `chromedriver-log=` とリカバリ後 `chromedriver-log=` に対応する **各** `cd.run-*.log` の終端（`COMMAND GetUrl` 以降に追記があるか、同一 run 内で別ファイルが増えていないか）
-- 目的: 「stability は先へ進んだのに ChromeDriver ログが止まっている」のか、「別ログに続きがある」のか、「クライアントが先に timeout して CD に `COMMAND ExecuteScript` が残らない」のかを**観測だけ**で切り分ける
+- **コード修正・実行依頼は混在させない**（本項は分析手順のメモ）
+- 次の **2 ファイル**を対にして、**最初の 9517 系失敗**・**最初の renderer timeout / `RESPONSE ExecuteScript ERROR script timeout`**・**`Render process gone.` または同等終端**の**前後関係**を、**時刻で比較**する  
+  - `C:\dev\ai-electric-tool\.tmp_step5_run_146_timestamp_compare_final.txt`（最低条件 6 点が揃った stability ログ）  
+  - `C:\dev\ai-electric-tool\cd.run-20260412-204940-810.log`（当該 run のリカバリ後 ChromeDriver ログ）
+- 必要なら同一 stability ログ内の**初期** `chromedriver-log=` と突き合わせるが、**主線は上記ペア**とする
 
 ### 判断基準
-- precheck / timeout-snapshot に対応しうる **`COMMAND ExecuteScript` が、該当セッションの ChromeDriver ログに現れるか**
-- 現れない場合、**ログファイルの終端時刻・サイズ・行数・末尾 30 行**から、フラッシュ停止・別ログ・未記録を区別できる材料があるか
-- stability のラベル時刻と、ChromeDriver ログの `COMMAND` / `RESPONSE` 時刻を並べ、**client timeout 先行**を否定・肯定できるか
+- stability 側の **`ts=`（UTC）** と、ChromeDriver 側の **`[...][INFO]` / `[...][SEVERE]` 等の時刻**を**同じテーブルに並べられる**こと
+- **A/B/C**（renderer 先行 vs 9517 不通先行 vs 近接で決め切れない）のうち、**ログ文字列だけで最有力を 1 つ**言える材料があること
+- 以前 **A/B/C が C 寄り**だった**理由がログ不完全**にあった場合は、**今回の完走ログ**で差分を確認できること
 
 ### 注意点
-- **`stability-test.ps1` をコード変更しない**（観測・docs のみ）
+- **`stability-test.ps1` は今回触らない**（観測・docs のみ）
+- **docs 更新と実行依頼を混在させない**
+- **最低条件が揃った run**（`.tmp_step5_run_146_timestamp_compare_final.txt`）を**優先**し、**不完全 run や `.work.txt` を主証拠にしない**
 - 現時点では **timeout が主因候補**のため、404 / no such window / invalid session id を主因として断定しない
-- precheck / timeout-snapshot と ChromeDriver script timeout の対応は**未確定**のままにし、決め打ちで書かない
 
 ---
 
