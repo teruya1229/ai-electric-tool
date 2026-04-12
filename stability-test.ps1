@@ -952,7 +952,7 @@ function Log-WebDriverExecuteRequestInfo(
 ) {
   $keys = if ($payloadKeys) { ($payloadKeys -join ",") } else { "" }
   $tsPart = ""
-  if ($scriptLabel -eq "ui-init-diagnostics") {
+  if ($scriptLabel -eq "ui-init-diagnostics" -or $scriptLabel -like "e2e-only-href*") {
     $tsPart = (Get-StabilityLogUtcTimestamp) + " "
   }
   Write-Host ("[stability-test] " + $tsPart + "wd-exec-request label=$scriptLabel url=$requestUrl endpoint=$endpointPath payloadKeys=$keys hasArgs=$hasArgs")
@@ -1336,7 +1336,7 @@ function Test-MinimalSessionExecute() {
       try { Remove-Item $openErrPath -Force -ErrorAction SilentlyContinue } catch {}
     }
     if (-not $result.pageOpenOk) {
-      Write-Host "[stability-test] minimal page-open failed error=$($result.pageOpenError)"
+      Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " minimal page-open failed error=$($result.pageOpenError)")
     }
     Log-Step "minimal page open" "done"
 
@@ -4185,14 +4185,14 @@ try {
         $recoveryOpenReachedTarget =
           ($recoveryLastOpenedUrl.Contains("wiring-diagram.html")) -and
           (($recoveryLastReadyState -eq "interactive") -or ($recoveryLastReadyState -eq "complete"))
-        Write-Host "[stability-test] recovered session open-state retry=$openRetry url=$recoveryLastOpenedUrl readyState=$recoveryLastReadyState reachedTarget=$recoveryOpenReachedTarget"
+        Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " recovered session open-state retry=$openRetry url=$recoveryLastOpenedUrl readyState=$recoveryLastReadyState reachedTarget=$recoveryOpenReachedTarget")
         if ($recoveryOpenReachedTarget) { break }
       }
     }
     Wait-BrowserReady 350
     $hrefAfterDirectNavigate = ""
     try { $hrefAfterDirectNavigate = [string](Exec-Script "return String(location.href || '');" @() "e2e-only-href-direct-navigate") } catch { $hrefAfterDirectNavigate = "" }
-    Write-Host "[stability-test] href after direct navigate=$hrefAfterDirectNavigate"
+    Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " href after direct navigate=$hrefAfterDirectNavigate")
     $curlNavigateAttempted = $true
     $curlOutPath = [IO.Path]::GetTempFileName()
     $curlErrPath = [IO.Path]::GetTempFileName()
@@ -4383,7 +4383,7 @@ try {
     }
     Write-OutputJson @{ preUiInitDiagnostic = $directNavigateDiagnostic } 8
     if ((-not $recoveryOpenReachedTarget) -and (-not (Open-PageViaCurl $script:sessionId 25))) {
-      Write-Host "[stability-test] minimal curl page-open failed; retry with recovered minimal session"
+      Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " minimal curl page-open failed; retry with recovered minimal session")
       try { Remove-Session } catch {}
       $minimalRecovered = New-WebDriverSessionMinimal -pageLoadStrategy "none"
       $script:sessionId = $minimalRecovered.sessionId
@@ -4551,7 +4551,7 @@ try {
         if ($hrefProbe.Contains("wiring-diagram.html")) {
           Write-Host "[stability-test] page fallback open success"
         }
-        Write-Host "[stability-test] href after fallback=$hrefProbe"
+        Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " href after fallback=$hrefProbe")
       }
     }
     Wait-BrowserReady 500
