@@ -23,6 +23,10 @@ $script:selfPath = $MyInvocation.MyCommand.Path
 $script:repeatSummaryPath = Join-Path $script:projectRoot ".tmp_case_results_repeat.json"
 $script:compareSummaryPath = Join-Path $script:projectRoot ".tmp_case_results_compare.json"
 
+function Get-StabilityLogUtcTimestamp() {
+  return ('ts=' + [DateTimeOffset]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", [Globalization.CultureInfo]::InvariantCulture))
+}
+
 if ((-not $env:STABILITY_REPEAT_CHILD) -and ($env:STABILITY_COMPARE_NAV_MODES -eq "1")) {
   function Get-ComparePreUiSnapshot() {
     if (-not (Test-Path $outputPath -PathType Leaf)) { return $null }
@@ -724,13 +728,17 @@ if (-not $env:STABILITY_REPEAT_CHILD) {
     generatedAt = (Get-Date).ToString("o")
   }
   ($summary | ConvertTo-Json -Depth 8) | Set-Content -Path $script:repeatSummaryPath -Encoding UTF8
-  Write-Host "[stability-test] repeat-run summary written path=$script:repeatSummaryPath mixed=$($summary.mixedWebdriverErrorDetected)"
+  Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + ' repeat-run summary written path=' + $script:repeatSummaryPath + ' mixed=' + $summary.mixedWebdriverErrorDetected)
   Remove-Item Env:STABILITY_REPEAT_CHILD -ErrorAction SilentlyContinue
   return
 }
 
 function Log-Step([string]$step, [string]$phase = "start") {
-  Write-Host "[stability-test] step=$step phase=$phase"
+  if ($step -eq "finally cleanup") {
+    Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " step=$step phase=$phase")
+  } else {
+    Write-Host "[stability-test] step=$step phase=$phase"
+  }
 }
 
 function Get-SourceCommitShort() {
@@ -943,10 +951,14 @@ function Log-WebDriverExecuteRequestInfo(
   [string]$scriptText = $null
 ) {
   $keys = if ($payloadKeys) { ($payloadKeys -join ",") } else { "" }
-  Write-Host "[stability-test] wd-exec-request label=$scriptLabel url=$requestUrl endpoint=$endpointPath payloadKeys=$keys hasArgs=$hasArgs"
+  $tsPart = ""
+  if ($scriptLabel -eq "ui-init-diagnostics") {
+    $tsPart = (Get-StabilityLogUtcTimestamp) + " "
+  }
+  Write-Host ("[stability-test] " + $tsPart + "wd-exec-request label=$scriptLabel url=$requestUrl endpoint=$endpointPath payloadKeys=$keys hasArgs=$hasArgs")
   $head = Get-WdExecScriptHead $scriptText
   if ($null -ne $head) {
-    Write-Host "[stability-test] wd-exec-script-head label=$scriptLabel head=$head"
+    Write-Host ("[stability-test] " + $tsPart + "wd-exec-script-head label=$scriptLabel head=$head")
   }
 }
 
@@ -1703,7 +1715,7 @@ function Write-CleanupRequestFailure([string]$label, [object]$err) {
   if ($msg.Length -gt 240) { $msg = $msg.Substring(0, 240) }
   $cls = "error"
   if ($msg -match '(?i)接続|connect|could not connect|remote|refused|タイムアウト|timeout|リモート|operation timed out') { $cls = "connect-error" }
-  Write-Host "[stability-test] cleanup request failed label=$label class=$cls message=$msg"
+  Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " cleanup request failed label=$label class=$cls message=$msg")
 }
 
 function Invoke-CleanupRestMethod([string]$label, [ScriptBlock]$action) {
@@ -1792,7 +1804,7 @@ function Invoke-RecoveredPostNavigateExecuteProbe([string]$label, [string]$scrip
     try { Remove-Item $curlErrPath -Force -ErrorAction SilentlyContinue } catch {}
     try { Remove-Item $curlCodePath -Force -ErrorAction SilentlyContinue } catch {}
   }
-  Write-Host "[stability-test] exec-transport-curl label=$label exitCode=$curlExit httpStatus=$curlHttp elapsedMs=$curlElapsedMs class=$curlClass stderrSummary=$curlStderr bodyPreview=$curlBodyPreview"
+  Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " exec-transport-curl label=$label exitCode=$curlExit httpStatus=$curlHttp elapsedMs=$curlElapsedMs class=$curlClass stderrSummary=$curlStderr bodyPreview=$curlBodyPreview")
 
   $psOk = $false
   $psElapsedMs = -1
@@ -1827,16 +1839,16 @@ function Invoke-RecoveredPostNavigateExecuteProbe([string]$label, [string]$scrip
     if ($psOk) {
       $s = if ($null -eq $v) { "" } else { ([string]$v) -replace "[\r\n]+", " " }
       if ($s.Length -gt 200) { $s = $s.Substring(0, 200) }
-      Write-Host "[stability-test] recovered post-nav probe label=$label ok=True value=$s"
+      Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " recovered post-nav probe label=$label ok=True value=$s")
     } else {
       $em = $psErrMsg
       if ($em.Length -gt 200) { $em = $em.Substring(0, 200) }
-      Write-Host "[stability-test] recovered post-nav probe label=$label ok=False error=$em"
+      Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " recovered post-nav probe label=$label ok=False error=$em")
     }
   } catch {
     $em2 = [string]$_.Exception.Message
     if ($em2.Length -gt 200) { $em2 = $em2.Substring(0, 200) }
-    Write-Host "[stability-test] recovered post-nav probe label=$label ok=False error=$em2"
+    Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " recovered post-nav probe label=$label ok=False error=$em2")
   }
 }
 
@@ -1860,7 +1872,7 @@ function Open-PageViaCurl([string]$sessionId, [int]$maxTimeSec = 20) {
     if ($openProc.ExitCode -eq 0) { return $true }
     $openErr = ""
     try { $openErr = Get-Content -Raw -Path $openErrPath } catch {}
-    Write-Host "[stability-test] curl page-open failed exitCode=$($openProc.ExitCode) error=$openErr"
+    Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " curl page-open failed exitCode=$($openProc.ExitCode) error=$openErr")
     $false
   } finally {
     try { Remove-Item $openOutPath -Force -ErrorAction SilentlyContinue } catch {}
@@ -2143,7 +2155,7 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
     maxTimeSecApplied = $maxTimeSec
   }
   $endpoint = "$($script:driverBaseUrl)/session/$sessionId/url"
-  Write-Host ('[stability-test] direct webdriver navigate phase=start target={0} maxTimeSec={1} endpoint={2}' -f $targetUrl, $maxTimeSec, $endpoint)
+  Write-Host ('[stability-test] {0} direct webdriver navigate phase=start target={1} maxTimeSec={2} endpoint={3}' -f (Get-StabilityLogUtcTimestamp), $targetUrl, $maxTimeSec, $endpoint)
   Write-NavigateSessionSyncDiagnostics 'pre-navigate' $sessionId
   $preCdTail = Get-CdLogTailCompact $script:chromeDriverLogPath 10 420
   Write-Host ('[stability-test] cd-log-tail label=pre-direct-url preNavigateCdLogTail=' + $preCdTail)
@@ -2157,7 +2169,7 @@ function Invoke-SessionNavigateViaCurl([string]$sessionId, [string]$targetUrl, [
       $bp = (($result.responseBody.Substring(0, $take)) -replace "[\r\n]+", " ")
     }
     $cls = if ($null -ne $result.errorClass) { [string]$result.errorClass } else { "" }
-    $line = '[stability-test] direct webdriver navigate phase=' + $phaseLabel + ' exitCode=' + $result.exitCode + ' httpStatus=' + $result.httpStatus + ' maxTimeSec=' + $maxTimeSec + ' class=' + $cls + ' bodyLen=' + $bl + ' bodyPreview=' + $bp + ' stderrSummary=' + $result.stderrSummary
+    $line = '[stability-test] ' + (Get-StabilityLogUtcTimestamp) + ' direct webdriver navigate phase=' + $phaseLabel + ' exitCode=' + $result.exitCode + ' httpStatus=' + $result.httpStatus + ' maxTimeSec=' + $maxTimeSec + ' class=' + $cls + ' bodyLen=' + $bl + ' bodyPreview=' + $bp + ' stderrSummary=' + $result.stderrSummary
     if ($sessionSyncSegment) { $line = $line + ' | [stability-test] ' + $sessionSyncSegment }
     if ($sessionSyncSegment -and ($sessionSyncSegment -match 'label=post-navigate-timeout')) {
       try {
@@ -2510,7 +2522,7 @@ function Open-PageWithRetry([int]$maxAttempts = 2, [int]$retryWaitMs = 700) {
       Open-Page
       return
     } catch {
-      Write-Host "[stability-test] page-open failed attempt=$attempt message=$($_.Exception.Message)"
+      Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " page-open failed attempt=$attempt message=$($_.Exception.Message)")
       if ($attempt -ge $maxAttempts) { break }
       Write-Host "[stability-test] page-open recreate session before retry"
       try { Remove-Session } catch {}
@@ -2519,7 +2531,7 @@ function Open-PageWithRetry([int]$maxAttempts = 2, [int]$retryWaitMs = 700) {
       Start-Sleep -Milliseconds $retryWaitMs
     }
   }
-  Write-Host "[stability-test] page-open fallback via execute/sync target=$targetUrl"
+  Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " page-open fallback via execute/sync target=$targetUrl")
   Exec-Script "window.location.href = arguments[0]; return true;" @($targetUrl) | Out-Null
   $navigated = Wait-Until {
     [bool](Exec-Script "return location.href.indexOf('wiring-diagram.html') >= 0;")
@@ -2969,7 +2981,7 @@ function Ensure-ChildHelperFunctions {
       if ($msg.Length -gt 240) { $msg = $msg.Substring(0, 240) }
       $cls = "error"
       if ($msg -match '(?i)接続|connect|could not connect|remote|refused|タイムアウト|timeout|リモート|operation timed out') { $cls = "connect-error" }
-      Write-Host "[stability-test] cleanup request failed label=$label class=$cls message=$msg"
+      Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " cleanup request failed label=$label class=$cls message=$msg")
     }
   }
   if (-not (Get-Command Remove-Session -ErrorAction SilentlyContinue)) {
@@ -3233,7 +3245,7 @@ function Ensure-ChildHelperFunctions {
         try { Remove-Item $curlErrPath -Force -ErrorAction SilentlyContinue } catch {}
         try { Remove-Item $curlCodePath -Force -ErrorAction SilentlyContinue } catch {}
       }
-      Write-Host "[stability-test] exec-transport-curl label=$label exitCode=$curlExit httpStatus=$curlHttp elapsedMs=$curlElapsedMs class=$curlClass stderrSummary=$curlStderr bodyPreview=$curlBodyPreview"
+      Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " exec-transport-curl label=$label exitCode=$curlExit httpStatus=$curlHttp elapsedMs=$curlElapsedMs class=$curlClass stderrSummary=$curlStderr bodyPreview=$curlBodyPreview")
 
       $psOk = $false
       $psElapsedMs = -1
@@ -3268,16 +3280,16 @@ function Ensure-ChildHelperFunctions {
         if ($psOk) {
           $s = if ($null -eq $v) { "" } else { ([string]$v) -replace "[\r\n]+", " " }
           if ($s.Length -gt 200) { $s = $s.Substring(0, 200) }
-          Write-Host "[stability-test] recovered post-nav probe label=$label ok=True value=$s"
+          Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " recovered post-nav probe label=$label ok=True value=$s")
         } else {
           $em = $psErrMsg
           if ($em.Length -gt 200) { $em = $em.Substring(0, 200) }
-          Write-Host "[stability-test] recovered post-nav probe label=$label ok=False error=$em"
+          Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " recovered post-nav probe label=$label ok=False error=$em")
         }
       } catch {
         $em2 = [string]$_.Exception.Message
         if ($em2.Length -gt 200) { $em2 = $em2.Substring(0, 200) }
-        Write-Host "[stability-test] recovered post-nav probe label=$label ok=False error=$em2"
+        Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " recovered post-nav probe label=$label ok=False error=$em2")
       }
     }
   }
@@ -3515,7 +3527,7 @@ function Ensure-ChildHelperFunctions {
         if ($openProc.ExitCode -eq 0) { return $true }
         $openErr = ""
         try { $openErr = Get-Content -Raw -Path $openErrPath } catch {}
-        Write-Host "[stability-test] curl page-open failed exitCode=$($openProc.ExitCode) error=$openErr"
+        Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " curl page-open failed exitCode=$($openProc.ExitCode) error=$openErr")
         $false
       } finally {
         try { Remove-Item $openOutPath -Force -ErrorAction SilentlyContinue } catch {}
@@ -3538,7 +3550,7 @@ function Ensure-ChildHelperFunctions {
         maxTimeSecApplied = $maxTimeSec
       }
       $endpoint = "$($script:driverBaseUrl)/session/$sessionId/url"
-      Write-Host ('[stability-test] direct webdriver navigate phase=start target={0} maxTimeSec={1} endpoint={2}' -f $targetUrl, $maxTimeSec, $endpoint)
+      Write-Host ('[stability-test] {0} direct webdriver navigate phase=start target={1} maxTimeSec={2} endpoint={3}' -f (Get-StabilityLogUtcTimestamp), $targetUrl, $maxTimeSec, $endpoint)
       Write-NavigateSessionSyncDiagnostics 'pre-navigate' $sessionId
       $preCdTail = Get-CdLogTailCompact $script:chromeDriverLogPath 10 420
       Write-Host ('[stability-test] cd-log-tail label=pre-direct-url preNavigateCdLogTail=' + $preCdTail)
@@ -3552,7 +3564,7 @@ function Ensure-ChildHelperFunctions {
           $bp = (($result.responseBody.Substring(0, $take)) -replace "[\r\n]+", " ")
         }
         $cls = if ($null -ne $result.errorClass) { [string]$result.errorClass } else { "" }
-        $line = '[stability-test] direct webdriver navigate phase=' + $phaseLabel + ' exitCode=' + $result.exitCode + ' httpStatus=' + $result.httpStatus + ' maxTimeSec=' + $maxTimeSec + ' class=' + $cls + ' bodyLen=' + $bl + ' bodyPreview=' + $bp + ' stderrSummary=' + $result.stderrSummary
+        $line = '[stability-test] ' + (Get-StabilityLogUtcTimestamp) + ' direct webdriver navigate phase=' + $phaseLabel + ' exitCode=' + $result.exitCode + ' httpStatus=' + $result.httpStatus + ' maxTimeSec=' + $maxTimeSec + ' class=' + $cls + ' bodyLen=' + $bl + ' bodyPreview=' + $bp + ' stderrSummary=' + $result.stderrSummary
         if ($sessionSyncSegment) { $line = $line + ' | [stability-test] ' + $sessionSyncSegment }
         if ($sessionSyncSegment -and ($sessionSyncSegment -match 'label=post-navigate-timeout')) {
           try {
@@ -3669,7 +3681,7 @@ function Ensure-ChildHelperFunctions {
           Open-Page
           return
         } catch {
-          Write-Host "[stability-test] page-open failed attempt=$attempt message=$($_.Exception.Message)"
+          Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " page-open failed attempt=$attempt message=$($_.Exception.Message)")
           if ($attempt -ge $maxAttempts) { break }
           Write-Host "[stability-test] page-open recreate session before retry"
           try { Remove-Session } catch {}
@@ -3678,7 +3690,7 @@ function Ensure-ChildHelperFunctions {
           Start-Sleep -Milliseconds $retryWaitMs
         }
       }
-      Write-Host "[stability-test] page-open fallback via execute/sync target=$targetUrl"
+      Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " page-open fallback via execute/sync target=$targetUrl")
       Exec-Script "window.location.href = arguments[0]; return true;" @($targetUrl) | Out-Null
       $navigated = Wait-Until {
         [bool](Exec-Script "return location.href.indexOf('wiring-diagram.html') >= 0;")
@@ -4128,7 +4140,7 @@ try {
           $retryInvokeSucceeded = $true
         } catch {
           $retryInvokeError = [string]$_.Exception.Message
-          Write-Host "[stability-test] recovered session Open-PageWithRetry failed retry=$openRetry message=$($_.Exception.Message)"
+          Write-Host ('[stability-test] ' + (Get-StabilityLogUtcTimestamp) + " recovered session Open-PageWithRetry failed retry=$openRetry message=$($_.Exception.Message)")
         }
         if ($openRetry -eq 1 -and $retryInvokeSucceeded -and $script:lastNavigateAttempt -and [bool]$script:lastNavigateAttempt.ok) {
           Invoke-RecoveredPostNavigateExecuteProbe "return-1" "return 1;"
