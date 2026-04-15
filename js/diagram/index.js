@@ -1,6 +1,7 @@
 /**
  * @typedef {"exam" | "field" | "exam_gamidenki"} DiagramMode
  * @typedef {"single" | "threeway"} CircuitType
+ * @typedef {"normal" | "simplified" | "unsupported"} DiagramCompatibilityLevel
  * @typedef {"power"|"joint"|"switch_single"|"switch_3way"|"switch_4way"|"light"|"outlet"|"outlet_e"|"fan"|"earth"} DeviceKind
  * @typedef {{id:string,kind:DeviceKind,name:string,controlId?:number,position?:number}} InputDevice
  * @typedef {{x:number,y:number}} Point
@@ -99,11 +100,40 @@ export function buildDevicesFromSelection(circuitType, condition) {
  * @param {InputDevice[]} devices
  * @param {DiagramMode} mode
  */
-function groupDevicesByControlWithWarnings(devices, mode) {
+function resolveGroupTemplate(groupDevices) {
+  const switchSingleCount = groupDevices.filter((d) => d.kind === "switch_single").length;
+  const switch3wayCount = groupDevices.filter((d) => d.kind === "switch_3way").length;
+  const lightCount = groupDevices.filter((d) => d.kind === "light").length;
+
+  if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 1) {
+    return { isSupported: true, templateId: "single_switch_1light", switchType: undefined, reasonCode: "single_1light" };
+  }
+  if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 2) {
+    return {
+      isSupported: true,
+      templateId: "single_switch_2lights_same_time",
+      switchType: undefined,
+      reasonCode: "single_2lights_same_time",
+    };
+  }
+  if (switchSingleCount === 0 && switch3wayCount === 2 && lightCount === 1) {
+    return { isSupported: true, templateId: "three_way_1light", switchType: "threeway", reasonCode: "threeway_1light" };
+  }
+  return { isSupported: false, templateId: null, switchType: undefined, reasonCode: "control_template_unmatched" };
+}
+
+/**
+ * compatibility 判定の入口。通常描画 / 簡略表示 / 未対応 を reason code とともに返す。
+ * @param {InputDevice[]} devices
+ * @param {DiagramMode} mode
+ */
+export function resolveDiagramCompatibility(devices, mode) {
   /** @type {Map<number, InputDevice[]>} */
   const byControl = new Map();
   /** @type {string[]} */
   const warnings = [];
+  /** @type {string[]} */
+  const reasonCodes = [];
 
   devices.forEach((device) => {
     if (typeof device.controlId !== "number") return;
@@ -114,39 +144,57 @@ function groupDevicesByControlWithWarnings(devices, mode) {
 
   /** @type {CircuitGroup[]} */
   const groups = [];
+  let unsupportedGroupCount = 0;
 
   [...byControl.entries()]
     .sort((a, b) => a[0] - b[0])
     .forEach(([controlId, groupDevices]) => {
       const controlLabel = getControlLabel(controlId, mode);
-      const switchSingleCount = groupDevices.filter((d) => d.kind === "switch_single").length;
-      const switch3wayCount = groupDevices.filter((d) => d.kind === "switch_3way").length;
-      const lightCount = groupDevices.filter((d) => d.kind === "light").length;
-
-      if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 1) {
-        groups.push({ controlId, controlLabel, templateId: "single_switch_1light", devices: groupDevices });
-        return;
-      }
-      if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 2) {
-        groups.push({ controlId, controlLabel, templateId: "single_switch_2lights_same_time", devices: groupDevices });
-        return;
-      }
-      if (switchSingleCount === 0 && switch3wayCount === 2 && lightCount === 1) {
+      const template = resolveGroupTemplate(groupDevices);
+      if (template.isSupported && template.templateId) {
         groups.push({
           controlId,
           controlLabel,
-          templateId: "three_way_1light",
-          switchType: "threeway",
+          templateId: template.templateId,
+          ...(template.switchType ? { switchType: template.switchType } : {}),
           devices: groupDevices,
         });
+        reasonCodes.push(`control:${controlId}:${template.reasonCode}`);
         return;
       }
-
+      unsupportedGroupCount += 1;
+      reasonCodes.push(`control:${controlId}:${template.reasonCode}`);
       warnings.push(`controlId=${controlId} の条件がテンプレに一致しません`);
     });
 
   if (!groups.length) warnings.push("グループ化結果なし");
-  return { groups, warnings };
+
+  const outletCount = devices.filter((d) => d.kind === "outlet").length;
+  const hasSingleTemplate = groups.some((group) => group.templateId !== "three_way_1light");
+
+  /** @type {DiagramCompatibilityLevel} */
+  let level = "normal";
+  if (!groups.length) {
+    level = "unsupported";
+    reasonCodes.push("diagram:no_renderable_groups");
+  } else if (unsupportedGroupCount > 0) {
+    level = "simplified";
+    reasonCodes.push("diagram:contains_unsupported_groups");
+  } else if (outletCount > 1 || (outletCount > 0 && !hasSingleTemplate)) {
+    level = "simplified";
+    reasonCodes.push("diagram:partial_outlet_rendering");
+  }
+
+  return { level, reasonCodes, groups, warnings };
+}
+
+/**
+ * @param {InputDevice[]} devices
+ * @param {DiagramMode} mode
+ */
+function groupDevicesByControlWithWarnings(devices, mode) {
+  const compatibility = resolveDiagramCompatibility(devices, mode);
+  return { groups: compatibility.groups, warnings: compatibility.warnings };
 }
 
 /**
