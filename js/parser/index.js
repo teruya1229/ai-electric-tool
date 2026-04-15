@@ -40,6 +40,11 @@ const PURPOSE_PATTERNS = [
   { purpose: "outlet", patterns: [/一般コンセント/, /ダブルコンセント/, /2口コンセント/, /二口コンセント/, /接地極付コンセント/, /コンセント/] },
 ];
 
+const PARSER_COMPAT_MESSAGES = {
+  compatError: "3路 + 複数照明は現行描画仕様で未対応です。",
+  compatWarning: "3路2灯以上は、図では1灯として扱います。残りは補助情報で確認してください。",
+};
+
 /**
  * @param {string} text
  * @returns {string}
@@ -113,6 +118,47 @@ function _calcParseConfidence(parsed) {
 }
 
 /**
+ * parser の意味づけ入口。既存の errors / warnings を壊さず後段参照用メタを返す。
+ * @param {{errors:string[],warnings:string[]}} parsed
+ */
+export function resolveParserResultMeta(parsed) {
+  const errors = Array.isArray(parsed?.errors) ? parsed.errors.filter(Boolean) : [];
+  const warnings = Array.isArray(parsed?.warnings) ? parsed.warnings.filter(Boolean) : [];
+  const hasCompatError = errors.includes(PARSER_COMPAT_MESSAGES.compatError);
+  const hasOtherErrors = errors.some((message) => message !== PARSER_COMPAT_MESSAGES.compatError && message !== "なし");
+  const hasCompatWarning = warnings.includes(PARSER_COMPAT_MESSAGES.compatWarning);
+  const canContinue = errors.length === 0 || (hasCompatError && !hasOtherErrors);
+
+  const codeList = {
+    errors: errors.map((message) => (message === PARSER_COMPAT_MESSAGES.compatError ? "compat.threeway_multi_light" : "parse.error")),
+    warnings: warnings.map((message) => {
+      if (message === PARSER_COMPAT_MESSAGES.compatWarning) return "compat.threeway_render_fallback";
+      if (/簡略表示|補助情報扱い/.test(message)) return "compat.partial_rendering";
+      return "parse.warning";
+    }),
+  };
+
+  let severity = "success";
+  if (errors.length > 0) severity = canContinue ? "compat-warning" : "error";
+  else if (hasCompatWarning) severity = "compat-warning";
+  else if (warnings.length > 0) severity = "warning";
+
+  let reasonCode = "parse.ok";
+  if (severity === "error") reasonCode = hasOtherErrors ? "parse.error" : "parse.error.unknown";
+  else if (severity === "compat-warning") reasonCode = hasCompatError ? "compat.error-allow-continue" : "compat.warning";
+  else if (severity === "warning") reasonCode = "parse.warning";
+
+  return {
+    severity,
+    reasonCode,
+    canContinue,
+    hasCompatError,
+    hasCompatWarning,
+    codeList,
+  };
+}
+
+/**
  * @param {string} text
  */
 export function parseProblemText(text) {
@@ -131,6 +177,7 @@ export function parseProblemText(text) {
     matchedRules: [],
     warnings: [],
     errors: [],
+    meta: null,
   };
 
   const addRule = (rule) => {
@@ -140,6 +187,7 @@ export function parseProblemText(text) {
   if (!normalized) {
     parsed.errors.push("問題文が空です。");
     parsed.confidence = _calcParseConfidence(parsed);
+    parsed.meta = resolveParserResultMeta(parsed);
     return parsed;
   }
 
@@ -187,6 +235,7 @@ export function parseProblemText(text) {
 
   parsed.devicesModel = toDiagramFormState(parsed);
   parsed.confidence = _calcParseConfidence(parsed);
+  parsed.meta = resolveParserResultMeta(parsed);
 
   return parsed;
 }
