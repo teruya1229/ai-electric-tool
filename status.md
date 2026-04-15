@@ -11,12 +11,13 @@
   - `wd-exec-script-head label=ui-init-timeout-snapshot-exec-probe`  
   - `finally cleanup phase=done`  
   - `repeat-run summary written`  
-- 当該 run の**リカバリ後** ChromeDriver ログを **`C:\dev\ai-electric-tool\cd.run-20260412-204940-810.log`** に確定した（前提ログ取得として利用可能）
+- 当該 run の**リカバリ後** ChromeDriver ログを **`C:\dev\ai-electric-tool\cd.run-20260412-204940-810.log`** に確定し、`Timed out receiving message from renderer` と `RESPONSE ExecuteScript ERROR script timeout` を確認した
+- 一方で、今回の同一証拠束では **9517 系失敗** と **`Render process gone.`** は揃わず、A/B/C 判定は引き続き **C 寄り**と整理した
 
 ### 現在の状態
 - **実行条件の問題**（repeat が 1/5 のまま等）は解消し、**分析に必要な完走形ログは取得済み**
-- **次の主題**は、**最初の 9517 系失敗** / **最初の renderer timeout・`RESPONSE ExecuteScript ERROR`** / **`Render process gone.` または同等終端**の前後関係を、**stability 側 `ts=`（UTC）と CD 側イベント時刻**で並べること
-- **コード修正フェーズには戻らず**、**時刻比較分析が主線**（直前まで A/B/C はログ不完全さゆえ **C 寄り**だったが、**比較対象が揃ったため**本分析に入れる段階になった）
+- **最低条件 6 点**を満たす run は取得済みだが、**「9517 系失敗 / renderer timeout / Render process gone.」の3点比較**は今回ログ束では未完成
+- **次の主題**は、今回の証拠束で言える範囲を固定したうえで、**どの証拠が未足かを前提化して観測方針を絞ること**
 
 ---
 

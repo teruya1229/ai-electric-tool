@@ -8,21 +8,23 @@ AI電気施工アシスタント / `C:\dev\ai-electric-tool` の作業メモ。
 
 ### 次にやるべき1手
 - **コード修正・実行依頼は混在させない**（本項は分析手順のメモ）
-- 次の **2 ファイル**を対にして、**最初の 9517 系失敗**・**最初の renderer timeout / `RESPONSE ExecuteScript ERROR script timeout`**・**`Render process gone.` または同等終端**の**前後関係**を、**時刻で比較**する  
+- 次の **2 ファイル**を対にし、`renderer timeout` / `RESPONSE ExecuteScript ERROR script timeout` は取得済み、`9517 系失敗` と `Render process gone.` は未取得または未一致、という前提を固定して次の観測条件を整理する  
   - `C:\dev\ai-electric-tool\.tmp_step5_run_146_timestamp_compare_final.txt`（最低条件 6 点が揃った stability ログ）  
   - `C:\dev\ai-electric-tool\cd.run-20260412-204940-810.log`（当該 run のリカバリ後 ChromeDriver ログ）
-- 必要なら同一 stability ログ内の**初期** `chromedriver-log=` と突き合わせるが、**主線は上記ペア**とする
+- 必要なら同一 stability ログ内の**初期** `chromedriver-log=` と突き合わせるが、**同一証拠束で未足な証拠の特定を優先**する
 
 ### 判断基準
 - stability 側の **`ts=`（UTC）** と、ChromeDriver 側の **`[...][INFO]` / `[...][SEVERE]` 等の時刻**を**同じテーブルに並べられる**こと
-- **A/B/C**（renderer 先行 vs 9517 不通先行 vs 近接で決め切れない）のうち、**ログ文字列だけで最有力を 1 つ**言える材料があること
-- 以前 **A/B/C が C 寄り**だった**理由がログ不完全**にあった場合は、**今回の完走ログ**で差分を確認できること
+- 同一証拠束で **9517 系失敗** が取れているか
+- 同一証拠束で **`Render process gone.`** が取れているか
+- 上記が取れていない場合は **A/B を断定せず C のまま扱う**
 
 ### 注意点
 - **`stability-test.ps1` は今回触らない**（観測・docs のみ）
 - **docs 更新と実行依頼を混在させない**
 - **最低条件が揃った run**（`.tmp_step5_run_146_timestamp_compare_final.txt`）を**優先**し、**不完全 run や `.work.txt` を主証拠にしない**
 - 現時点では **timeout が主因候補**のため、404 / no such window / invalid session id を主因として断定しない
+- **`Render process gone.` 未検出の run で無理に A/B を断定しない**
 
 ---
 
