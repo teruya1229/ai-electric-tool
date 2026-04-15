@@ -12,12 +12,15 @@ AI電気施工アシスタント / `C:\dev\ai-electric-tool` の作業メモ。
   - `C:\dev\ai-electric-tool\.tmp_step5_run_146_timestamp_compare_final.txt`（最低条件 6 点が揃った stability ログ）  
   - `C:\dev\ai-electric-tool\cd.run-20260412-204940-810.log`（当該 run のリカバリ後 ChromeDriver ログ）
 - 必要なら同一 stability ログ内の**初期** `chromedriver-log=` と突き合わせるが、**同一証拠束で未足な証拠の特定を優先**する
+- 現在の固定前提を崩さず、次回以降は **9517 系失敗** と **`Render process gone.`** が同一証拠束で揃うかを観測する
+- それまでは **renderer timeout / ExecuteScript timeout 系**を主因候補として扱う
 
 ### 判断基準
 - stability 側の **`ts=`（UTC）** と、ChromeDriver 側の **`[...][INFO]` / `[...][SEVERE]` 等の時刻**を**同じテーブルに並べられる**こと
 - 同一証拠束で **9517 系失敗** が取れているか
 - 同一証拠束で **`Render process gone.`** が取れているか
-- 上記が取れていない場合は **A/B を断定せず C のまま扱う**
+- 上記が取れていない限り **A/B を断定しない**
+- 終端イベントは **最後の `RESPONSE ExecuteScript ERROR script timeout`** を採用する
 
 ### 注意点
 - **`stability-test.ps1` は今回触らない**（観測・docs のみ）

@@ -11,13 +11,14 @@
   - `wd-exec-script-head label=ui-init-timeout-snapshot-exec-probe`  
   - `finally cleanup phase=done`  
   - `repeat-run summary written`  
-- 当該 run の**リカバリ後** ChromeDriver ログを **`C:\dev\ai-electric-tool\cd.run-20260412-204940-810.log`** に確定し、`Timed out receiving message from renderer` と `RESPONSE ExecuteScript ERROR script timeout` を確認した
-- 一方で、今回の同一証拠束では **9517 系失敗** と **`Render process gone.`** は揃わず、A/B/C 判定は引き続き **C 寄り**と整理した
+- 最新の完走ログ束（`.tmp_step5_run_146_timestamp_compare_final.txt` / `cd.run-20260412-204940-810.log`）で証拠表を作成し、取得済み証拠（renderer timeout / `RESPONSE ExecuteScript ERROR script timeout` / ui-init precheck・timeout-snapshot / cleanup done / summary written）と未取得証拠（9517 系失敗の強い比較材料 / `Render process gone.`）を整理した
+- 終端イベントは **最後の `RESPONSE ExecuteScript ERROR script timeout`** を最有力として固定した
 
 ### 現在の状態
 - **実行条件の問題**（repeat が 1/5 のまま等）は解消し、**分析に必要な完走形ログは取得済み**
-- **最低条件 6 点**を満たす run は取得済みだが、**「9517 系失敗 / renderer timeout / Render process gone.」の3点比較**は今回ログ束では未完成
-- **次の主題**は、今回の証拠束で言える範囲を固定したうえで、**どの証拠が未足かを前提化して観測方針を絞ること**
+- **repeat 1/1** と **最低条件 6 点**は達成済みで、主因候補は **renderer timeout / ExecuteScript timeout 系**として維持
+- **`Render process gone.`** と **9517 系失敗**は同一証拠束では未確定のため、**A/B は断定せず C 寄り**を維持
+- 今後の比較は、**終端イベント（最後の `RESPONSE ExecuteScript ERROR script timeout`）固定**を前提に進める
 
 ---
 
