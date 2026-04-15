@@ -3611,6 +3611,34 @@ const PARSE_UI_COMPAT = {
   warningText: "3路2灯以上は、図では1灯として扱います。残りは補助情報で確認してください。",
 };
 
+function getParsedMetaFromUiState() {
+  const globalMeta = window.__lastParsedMeta;
+  if (globalMeta && typeof globalMeta === "object") return globalMeta;
+
+  const panel = document.getElementById("parseResultPanel");
+  const panelMetaRaw = panel?.dataset?.parsedMeta;
+  if (panelMetaRaw) {
+    try {
+      const parsed = JSON.parse(panelMetaRaw);
+      if (parsed && typeof parsed === "object") return parsed;
+    } catch (_) {
+      // ignore invalid dataset payload and keep fallback behavior
+    }
+  }
+
+  const pre = panel?.querySelector("pre");
+  const preMetaRaw = pre?.dataset?.parsedMeta;
+  if (preMetaRaw) {
+    try {
+      const parsed = JSON.parse(preMetaRaw);
+      if (parsed && typeof parsed === "object") return parsed;
+    } catch (_) {
+      // ignore invalid dataset payload and keep fallback behavior
+    }
+  }
+  return null;
+}
+
 function extractParseErrorItems(parseResultText) {
   const lines = String(parseResultText || "").split(/\r?\n/);
   const errorHeaderIndex = lines.findIndex((line) => line.trim().startsWith("エラー:"));
@@ -3629,7 +3657,22 @@ function extractParseErrorItems(parseResultText) {
   return errorItems.filter(Boolean);
 }
 
-function resolveParseToRenderDecision(parseResultText) {
+function resolveParseToRenderDecision(parseResultText, parsedMeta) {
+  if (parsedMeta && typeof parsedMeta === "object") {
+    const severity = String(parsedMeta.severity || "");
+    const reasonCode = String(parsedMeta.reasonCode || "");
+    const canContinue = parsedMeta.canContinue === true;
+    const hasCompatSignal =
+      severity === "compat-warning" ||
+      reasonCode.startsWith("compat.") ||
+      parsedMeta.hasCompatError === true ||
+      parsedMeta.hasCompatWarning === true;
+    return {
+      shouldRender: canContinue,
+      useCompatWarning: canContinue && hasCompatSignal,
+    };
+  }
+
   const parseSucceeded = String(parseResultText || "").includes("判定結果: 解析成功");
   const parseErrors = extractParseErrorItems(parseResultText);
   const hasCompatError = parseErrors.includes(PARSE_UI_COMPAT.parserErrorText);
@@ -3727,7 +3770,8 @@ if (parseProblemButton instanceof HTMLButtonElement) {
       const parseResultPre = document.querySelector("#parseResultPanel pre");
       const parseResultText =
         parseResultPre instanceof HTMLElement ? String(parseResultPre.textContent || "") : "";
-      const decision = resolveParseToRenderDecision(parseResultText);
+      const parsedMeta = getParsedMetaFromUiState();
+      const decision = resolveParseToRenderDecision(parseResultText, parsedMeta);
       if (decision.shouldRender) {
         updateUiFromParseResult({ groups: parseGroupsFromDom().groups });
       } else {
