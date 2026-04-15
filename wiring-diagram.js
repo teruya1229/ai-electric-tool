@@ -3606,6 +3606,63 @@ function setupCircuitListAutoRender() {
   });
 }
 
+const PARSE_UI_COMPAT = {
+  parserErrorText: "3路 + 複数照明は現行描画仕様で未対応です。",
+  warningText: "3路2灯以上は、図では1灯として扱います。残りは補助情報で確認してください。",
+};
+
+function extractParseErrorItems(parseResultText) {
+  const lines = String(parseResultText || "").split(/\r?\n/);
+  const errorHeaderIndex = lines.findIndex((line) => line.trim().startsWith("エラー:"));
+  if (errorHeaderIndex < 0) return [];
+
+  const errorItems = [];
+  for (let i = errorHeaderIndex + 1; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith("- ")) {
+      errorItems.push(trimmed.slice(2).trim());
+      continue;
+    }
+    break;
+  }
+  return errorItems.filter(Boolean);
+}
+
+function resolveParseToRenderDecision(parseResultText) {
+  const parseSucceeded = String(parseResultText || "").includes("判定結果: 解析成功");
+  const parseErrors = extractParseErrorItems(parseResultText);
+  const hasCompatError = parseErrors.includes(PARSE_UI_COMPAT.parserErrorText);
+  const hasOtherErrors = parseErrors.some((item) => item !== PARSE_UI_COMPAT.parserErrorText && item !== "なし");
+  const allowCompatRender = hasCompatError && !hasOtherErrors;
+  return {
+    shouldRender: parseSucceeded || allowCompatRender,
+    useCompatWarning: allowCompatRender,
+  };
+}
+
+function syncParseCompatWarning(useCompatWarning) {
+  const warningEl = document.getElementById("warning-result");
+  if (!(warningEl instanceof HTMLElement)) return;
+  const currentWarning = String(warningEl.textContent || "");
+  const warningText = PARSE_UI_COMPAT.warningText;
+  const warningPattern = new RegExp(`(^|\\n)${warningText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\n|$)`, "g");
+
+  if (useCompatWarning) {
+    if (currentWarning.includes(warningText)) return;
+    if (!currentWarning || currentWarning === "警告なし") {
+      warningEl.textContent = warningText;
+      return;
+    }
+    warningEl.textContent = `${currentWarning}\n${warningText}`;
+    return;
+  }
+
+  if (!currentWarning.includes(warningText)) return;
+  const nextWarning = currentWarning.replace(warningPattern, "").replace(/\n{2,}/g, "\n").trim();
+  warningEl.textContent = nextWarning || "警告なし";
+}
+
 window.renderCircuitList = renderCircuitList;
 window.renderMaterialList = renderMaterialList;
 window.renderCircuitMaterialList = renderCircuitMaterialList;
@@ -3664,49 +3721,19 @@ setupCircuitListAutoRender();
 
 const parseProblemButton = document.getElementById("parseProblemButton");
 if (parseProblemButton instanceof HTMLButtonElement) {
-  // parse完了後は updateUiFromParseResult(...) を唯一のUI更新入口として使う
+  // parse完了後は parser結果の意味を保持したまま UI分岐のみ行う
   parseProblemButton.addEventListener("click", () => {
     queueMicrotask(() => {
       const parseResultPre = document.querySelector("#parseResultPanel pre");
       const parseResultText =
         parseResultPre instanceof HTMLElement ? String(parseResultPre.textContent || "") : "";
-      const parseSucceeded = parseResultText.includes("判定結果: 解析成功");
-      if (parseSucceeded) {
+      const decision = resolveParseToRenderDecision(parseResultText);
+      if (decision.shouldRender) {
         updateUiFromParseResult({ groups: parseGroupsFromDom().groups });
       } else {
         updateUiFromParseResult(null);
       }
+      syncParseCompatWarning(decision.useCompatWarning);
     });
-  });
-
-  parseProblemButton.addEventListener("click", () => {
-    const parseResultPre = document.querySelector("#parseResultPanel pre");
-    if (!(parseResultPre instanceof HTMLElement)) return;
-
-    const parserErrorText = "3路 + 複数照明は現行描画仕様で未対応です。";
-    const warningText = "3路2灯以上は、図では1灯として扱います。残りは補助情報で確認してください。";
-    const currentText = parseResultPre.textContent || "";
-    if (!currentText.includes(parserErrorText)) return;
-
-    let nextText = currentText.replace(`\n- ${parserErrorText}`, "");
-    nextText = nextText.replace("判定結果: 解析失敗（エラーあり）", "判定結果: 解析成功");
-    nextText = nextText.replace("エラー: \n- なし", "エラー: なし");
-    if (nextText.includes("エラー: \n- ")) {
-      nextText = nextText.replace("エラー: \n- ", "エラー: なし");
-    }
-    if (nextText.trimEnd().endsWith("エラー:")) {
-      nextText = `${nextText.trimEnd()} なし`;
-    }
-    parseResultPre.textContent = nextText;
-
-    const warningEl = document.getElementById("warning-result");
-    if (!(warningEl instanceof HTMLElement)) return;
-    const currentWarning = warningEl.textContent || "";
-    if (currentWarning.includes(warningText)) return;
-    if (!currentWarning || currentWarning === "警告なし") {
-      warningEl.textContent = warningText;
-      return;
-    }
-    warningEl.textContent = `${currentWarning}\n${warningText}`;
   });
 }
