@@ -388,7 +388,7 @@ function formatLastParseRenderUiDecisionSummary() {
         `renderMode: ${String(fr.renderMode || "-")}`,
         `parserReason: ${String(fr.parserReason || "-")}`,
         `diagramReason: ${String(fr.diagramReason || "-")}`,
-        `displayWarning: ${fr.displayWarning ? "yes" : "no"}`,
+        `displayWarning: ${readParseUiDisplayWarning(d) ? "yes" : "no"}`,
         "---",
       ]
     : [];
@@ -3840,7 +3840,7 @@ function buildParserUiTraceFromLegacyText(parseResultText, shouldRender, useComp
 }
 
 /**
- * parser / diagram / UI 吸収を統合した最終表示方針（内部入力は shouldRender / useCompatWarning。UI は finalRender を優先参照）。
+ * parser / diagram / UI 吸収を統合した最終表示方針（出力の正規形は返却オブジェクトの finalRender）。
  * @param {{ shouldRender: boolean, useCompatWarning: boolean, parser: object, diagramSummary: ReturnType<typeof summarizeDiagramCompatibility> }} input
  */
 function resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, diagramSummary }) {
@@ -3868,7 +3868,8 @@ function resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, di
 }
 
 /**
- * parser 判定 + diagram 互換を 1 オブジェクトに束ねる（表示は後段、ここは追跡用データ入口）。
+ * parse→UI の結合判定。正規の契約は finalRender。
+ * shouldRender は finalRender から写した互換エイリアス。useCompatWarning は parser 互換段落専用の互換値（全体注意は finalRender.displayWarning）。
  * @param {string} parseResultText
  * @param {object|null|undefined} parsedMeta
  * @param {ReturnType<typeof resolveDiagramCompatibility>|null|undefined} diagramCompatibilityRaw
@@ -3889,17 +3890,18 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
     const useCompatWarning = canContinue && hasCompatSignal;
     const parser = buildParserUiTraceFromMeta(parsedMeta, shouldRender, useCompatWarning);
     const finalRender = resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, diagramSummary });
+    const legacyShouldRender = finalRender.renderMode !== "blocked";
     return {
-      shouldRender,
-      useCompatWarning,
+      finalRender,
       parser,
       diagram: diagramSummary,
       diagramReasonCodes: diagramSummary ? diagramSummary.reasonCodes : [],
       parserReasonCode: parser.reasonCode,
-      canContinueParser: canContinue,
+      canContinueParser: legacyShouldRender,
       canContinueDiagram: diagramSummary ? diagramSummary.canRenderDiagram : null,
       isSimplifiedDiagram: diagramSummary ? diagramSummary.isSimplifiedDisplay : null,
-      finalRender,
+      shouldRender: legacyShouldRender,
+      useCompatWarning,
     };
   }
 
@@ -3912,28 +3914,29 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
   const useCompatWarning = allowCompatRender;
   const parser = buildParserUiTraceFromLegacyText(parseResultText, shouldRender, useCompatWarning);
   const finalRender = resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, diagramSummary });
+  const legacyShouldRender = finalRender.renderMode !== "blocked";
   return {
-    shouldRender,
-    useCompatWarning,
+    finalRender,
     parser,
     diagram: diagramSummary,
     diagramReasonCodes: diagramSummary ? diagramSummary.reasonCodes : [],
     parserReasonCode: parser.reasonCode,
-    canContinueParser: shouldRender,
+    canContinueParser: legacyShouldRender,
     canContinueDiagram: diagramSummary ? diagramSummary.canRenderDiagram : null,
     isSimplifiedDiagram: diagramSummary ? diagramSummary.isSimplifiedDisplay : null,
-    finalRender,
+    shouldRender: legacyShouldRender,
+    useCompatWarning,
   };
 }
 
 /**
- * finalRender を土台にユーザー向けの短い説明を組む（無い場合は shouldRender のみでフォールバック）。
+ * finalRender を土台にユーザー向けの短い説明を組む（無い場合は effectiveParseDrivenShouldRender でフォールバック）。
  * parserReason / diagramReason は括弧や補助文の方向づけにだけ使い、列挙はしない。
  */
 function buildUserFacingRenderGuidanceFromDecision(decision) {
   const fr = decision?.finalRender;
   if (!fr || typeof fr !== "object") {
-    const blocked = decision?.shouldRender !== true;
+    const blocked = !effectiveParseDrivenShouldRender(decision);
     return {
       stateLine: blocked ? "描画状態: 未対応（解析停止）" : "描画状態: 通常描画",
       supplement: blocked ? "この組み合わせでは自動表示を続けられません。" : "",
@@ -3987,19 +3990,8 @@ function syncParseRenderStateUserSummary(decision) {
   row.textContent = formatUserFacingRenderStateLineFromFinalRender(decision);
 }
 
-/** finalRender があれば renderMode から、無ければ shouldRender（重複判定の入口を一本化） */
-function effectiveParseDrivenShouldRender(decision) {
-  if (decision?.finalRender && typeof decision.finalRender === "object") {
-    return decision.finalRender.renderMode !== "blocked";
-  }
-  return decision?.shouldRender === true;
-}
-
-/**
- * 警告行同期の表示フラグ。finalRender.displayWarning を最優先、無ければ boolean または useCompatWarning。
- * @param {boolean|{ finalRender?: object, useCompatWarning?: boolean }} input
- */
-function effectiveParseCompatWarningDisplay(input) {
+/** 注意フラグの正規読み取り: finalRender.displayWarning。無いときのみ useCompatWarning（レガシー） */
+function readParseUiDisplayWarning(input) {
   if (typeof input === "boolean") return input;
   if (input && typeof input === "object") {
     if (input.finalRender && typeof input.finalRender === "object") {
@@ -4010,14 +4002,23 @@ function effectiveParseCompatWarningDisplay(input) {
   return false;
 }
 
-/** 従来の 3路互換段落（PARSE_UI_COMPAT.warningText）を差し込むか（finalRender があるときは parser 互換に限定） */
+/** 描画継続可否の正規読み取り: finalRender.renderMode。無いときのみ shouldRender（レガシー） */
+function effectiveParseDrivenShouldRender(decision) {
+  if (decision?.finalRender && typeof decision.finalRender === "object") {
+    return decision.finalRender.renderMode !== "blocked";
+  }
+  return decision?.shouldRender === true;
+}
+
+/** 3路互換段落: finalRender の parser 信号を優先し、無いときのみ useCompatWarning（レガシー） */
 function warrantsThreewayCompatWarningParagraph(input) {
   if (typeof input === "boolean") return input;
   if (!input || typeof input !== "object") return false;
-  if (input.useCompatWarning) return true;
   const fr = input.finalRender;
-  if (fr && typeof fr === "object") return finalRenderParserImpliesThreewayCompatParagraph(fr);
-  return false;
+  if (fr && typeof fr === "object" && finalRenderParserImpliesThreewayCompatParagraph(fr) && fr.renderMode !== "blocked") {
+    return true;
+  }
+  return Boolean(input.useCompatWarning);
 }
 
 function syncParseCompatWarning(input) {
