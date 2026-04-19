@@ -356,50 +356,63 @@ function detectGroupType(group) {
   return "unknown";
 }
 
-/** 開発者向け: __lastParseRenderUiDecision を短い行に整形（既存 parse-debug 先頭に表示） */
-function formatLastParseRenderUiDecisionSummary() {
-  const d = window.__lastParseRenderUiDecision;
-  if (!d || typeof d !== "object") {
-    return "互換サマリ: 未生成（問題文を解析すると更新）";
+/**
+ * 開発者確認用: parser / diagram / finalRender の3層を 1 箇所で組み立てる（表やバッジへ展開する際の土台）。
+ * @returns {{ fallbackText?: string, lines?: string[] }}
+ */
+function buildParseRenderDebugCompatibilitySummary(decision) {
+  if (!decision || typeof decision !== "object") {
+    return { fallbackText: "互換サマリ: 未生成（問題文を解析すると更新）" };
   }
-  const fr = d.finalRender && typeof d.finalRender === "object" ? d.finalRender : null;
-  const pSev = d.parser && typeof d.parser === "object" ? String(d.parser.severity || "-") : "-";
-  const pSrc = d.parser && typeof d.parser === "object" ? String(d.parser.source || "-") : "-";
-  const dLevel = d.diagram && typeof d.diagram === "object" ? String(d.diagram.level || "-") : "n/a";
-  const pCode = String(d.parserReasonCode || (d.parser && d.parser.reasonCode) || "-");
+  const fr = decision.finalRender && typeof decision.finalRender === "object" ? decision.finalRender : null;
+  const pSev = decision.parser && typeof decision.parser === "object" ? String(decision.parser.severity || "-") : "-";
+  const pSrc = decision.parser && typeof decision.parser === "object" ? String(decision.parser.source || "-") : "-";
+  const dLevel = decision.diagram && typeof decision.diagram === "object" ? String(decision.diagram.level || "-") : "n/a";
+  const pCode = String(decision.parserReasonCode || (decision.parser && decision.parser.reasonCode) || "-");
   const dCodes =
-    Array.isArray(d.diagramReasonCodes) && d.diagramReasonCodes.length
-      ? d.diagramReasonCodes.join(", ")
-      : d.diagram
+    Array.isArray(decision.diagramReasonCodes) && decision.diagramReasonCodes.length
+      ? decision.diagramReasonCodes.join(", ")
+      : decision.diagram
         ? "(none)"
         : "n/a";
-  const contP = d.canContinueParser === true ? "yes" : d.canContinueParser === false ? "no" : String(d.canContinueParser ?? "n/a");
+  const contP =
+    decision.canContinueParser === true ? "yes" : decision.canContinueParser === false ? "no" : String(decision.canContinueParser ?? "n/a");
   const contD =
-    d.canContinueDiagram === null || typeof d.canContinueDiagram === "undefined"
+    decision.canContinueDiagram === null || typeof decision.canContinueDiagram === "undefined"
       ? "n/a"
-      : d.canContinueDiagram
+      : decision.canContinueDiagram
         ? "yes"
         : "no";
   const simp =
-    d.isSimplifiedDiagram === true ? "yes" : d.isSimplifiedDiagram === false ? "no" : "n/a";
-  const head = fr
-    ? [
-        "最終表示方針 (resolveFinalRenderDecision)",
-        `renderMode: ${String(fr.renderMode || "-")}`,
-        `parserReason: ${String(fr.parserReason || "-")}`,
-        `diagramReason: ${String(fr.diagramReason || "-")}`,
-        `displayWarning: ${readParseUiDisplayWarning(d) ? "yes" : "no"}`,
-        "---",
-      ]
-    : [];
-  return [
-    ...head,
-    "互換サマリ（parser / diagram）",
-    `解析: ${pSev} [${pSrc}] | 継続(解析): ${contP}`,
-    `描画: ${dLevel} | 簡略表示: ${simp} | 継続(描画): ${contD}`,
-    `parser理由: ${pCode}`,
-    `diagram理由: ${dCodes}`,
-  ].join("\n");
+    decision.isSimplifiedDiagram === true ? "yes" : decision.isSimplifiedDiagram === false ? "no" : "n/a";
+
+  const lines = [];
+  lines.push("--- finalRender ---");
+  if (fr) {
+    lines.push(
+      `renderMode: ${String(fr.renderMode || "-")}`,
+      `parserReason: ${String(fr.parserReason || "-")}`,
+      `diagramReason: ${String(fr.diagramReason || "-")}`,
+      `displayWarning: ${readParseUiDisplayWarning(decision) ? "yes" : "no"}`,
+    );
+  } else {
+    lines.push("(finalRender なし)");
+  }
+
+  lines.push("--- parser ---");
+  lines.push(`severity: ${pSev} | source: ${pSrc} | canContinueParser: ${contP}`, `reasonCode: ${pCode}`);
+
+  lines.push("--- diagram ---");
+  lines.push(`level: ${dLevel} | isSimplifiedDiagram: ${simp} | canContinueDiagram: ${contD}`, `reasonCodes: ${dCodes}`);
+
+  return { lines };
+}
+
+/** parse-debug 先頭表示の唯一入口（中身は buildParseRenderDebugCompatibilitySummary） */
+function formatLastParseRenderUiDecisionSummary() {
+  const pack = buildParseRenderDebugCompatibilitySummary(window.__lastParseRenderUiDecision);
+  if (pack.fallbackText) return pack.fallbackText;
+  return pack.lines.join("\n");
 }
 
 function renderParseDebugResult(sceneModel) {
