@@ -3972,6 +3972,23 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
 }
 
 /**
+ * diagram の reasonCodes のうち、ユーザー向け短文に落とせるものだけを返す（列挙はしない）。
+ * @param {string[]|null|undefined} diagramReasonCodes
+ * @returns {string}
+ */
+function formatDiagramReasonCodesUserHint(diagramReasonCodes) {
+  if (!Array.isArray(diagramReasonCodes) || !diagramReasonCodes.length) return "";
+  const hints = [];
+  if (diagramReasonCodes.some((c) => String(c).includes("single_0light_outlet_bus"))) {
+    hints.push("照明がなくてもコンセントの常時給電は、単灯用の図の形で示しています。");
+  }
+  if (diagramReasonCodes.some((c) => String(c).includes("threeway_2lights_diagram_one"))) {
+    hints.push("3路で2灯の系統は、図では1灯としてまとめて示しています。");
+  }
+  return hints.join(" ");
+}
+
+/**
  * finalRender を土台にユーザー向けの短い説明を組む（無い場合は effectiveParseDrivenShouldRender でフォールバック）。
  * parserReason / diagramReason は括弧や補助文の方向づけにだけ使い、列挙はしない。
  */
@@ -4007,7 +4024,13 @@ function buildUserFacingRenderGuidanceFromDecision(decision) {
   else if (fr.displayWarning && parserCompat) supplement = "互換上の注意は警告欄の文言を参照してください。";
   else if (fr.displayWarning && diagramActive) supplement = "図の構成により表現が制限されている可能性があります。";
 
-  return { stateLine: `描画状態: ${main}${extra}`, supplement };
+  const diagramCodeHint = mode !== "blocked" ? formatDiagramReasonCodesUserHint(decision?.diagramReasonCodes) : "";
+  let supplementOut = supplement;
+  if (diagramCodeHint) {
+    supplementOut = supplementOut ? `${supplementOut}\n${diagramCodeHint}` : diagramCodeHint;
+  }
+
+  return { stateLine: `描画状態: ${main}${extra}`, supplement: supplementOut };
 }
 
 /** 解析結果パネル用: 状態行＋任意の補助行（finalRender 優先） */
