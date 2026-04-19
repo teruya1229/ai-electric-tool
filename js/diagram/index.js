@@ -123,6 +123,36 @@ function resolveGroupTemplate(groupDevices) {
 }
 
 /**
+ * 制御グループ単位のテンプレ。照明0でもコンセント常時給電のみの系統は既存の単灯テンプレと同一バス配線で描ける。
+ * @param {InputDevice[]} allDevices
+ * @param {InputDevice[]} groupDevices
+ */
+function effectiveGroupTemplate(allDevices, groupDevices) {
+  const base = resolveGroupTemplate(groupDevices);
+  if (base.isSupported) return base;
+
+  const switchSingleCount = groupDevices.filter((d) => d.kind === "switch_single").length;
+  const switch3wayCount = groupDevices.filter((d) => d.kind === "switch_3way").length;
+  const lightCount = groupDevices.filter((d) => d.kind === "light").length;
+  const outletInGroup = groupDevices.some((d) => d.kind === "outlet");
+
+  if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 0) {
+    const hasSupplyOutlet =
+      outletInGroup ||
+      allDevices.some((d) => d.kind === "outlet" && typeof d.controlId !== "number");
+    if (hasSupplyOutlet) {
+      return {
+        isSupported: true,
+        templateId: "single_switch_1light",
+        switchType: undefined,
+        reasonCode: "single_0light_outlet_bus",
+      };
+    }
+  }
+  return base;
+}
+
+/**
  * compatibility 判定の入口。通常描画 / 簡略表示 / 未対応 を reason code とともに返す。
  * @param {InputDevice[]} devices
  * @param {DiagramMode} mode
@@ -150,7 +180,7 @@ export function resolveDiagramCompatibility(devices, mode) {
     .sort((a, b) => a[0] - b[0])
     .forEach(([controlId, groupDevices]) => {
       const controlLabel = getControlLabel(controlId, mode);
-      const template = resolveGroupTemplate(groupDevices);
+      const template = effectiveGroupTemplate(devices, groupDevices);
       if (template.isSupported && template.templateId) {
         groups.push({
           controlId,
