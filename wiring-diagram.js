@@ -3674,6 +3674,13 @@ const PARSE_UI_COMPAT = {
   warningText: "3路2灯以上は、図では1灯として扱います。残りは補助情報で確認してください。",
 };
 
+/** finalRender.parserReason が 3路互換段落（warningText）に相当するかの粗い判定（全文は出さない） */
+function finalRenderParserImpliesThreewayCompatParagraph(fr) {
+  if (!fr || typeof fr !== "object") return false;
+  const pr = String(fr.parserReason || "");
+  return pr.startsWith("compat.") || pr.includes("compat.");
+}
+
 function getParsedMetaFromUiState() {
   const globalMeta = window.__lastParsedMeta;
   if (globalMeta && typeof globalMeta === "object") return globalMeta;
@@ -3919,18 +3926,49 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
   };
 }
 
-/** finalRender のみからユーザー向け 1 行（独自の再判定はしない） */
-function formatUserFacingRenderStateLineFromFinalRender(decision) {
+/**
+ * finalRender を土台にユーザー向けの短い説明を組む（無い場合は shouldRender のみでフォールバック）。
+ * parserReason / diagramReason は括弧や補助文の方向づけにだけ使い、列挙はしない。
+ */
+function buildUserFacingRenderGuidanceFromDecision(decision) {
   const fr = decision?.finalRender;
-  if (!fr || typeof fr !== "object") return "描画状態: —";
+  if (!fr || typeof fr !== "object") {
+    const blocked = decision?.shouldRender !== true;
+    return {
+      stateLine: blocked ? "描画状態: 未対応（解析停止）" : "描画状態: 通常描画",
+      supplement: blocked ? "この組み合わせでは自動表示を続けられません。" : "",
+    };
+  }
   const mode = fr.renderMode;
   let main = "通常描画";
   if (mode === "simplified") main = "簡略表示";
   else if (mode === "blocked") main = "未対応";
+
+  const pr = String(fr.parserReason || "");
+  const dr = String(fr.diagramReason || "");
+  const parserCompat = finalRenderParserImpliesThreewayCompatParagraph(fr);
+  const diagramActive = dr !== "n/a" && dr !== "(none)";
+
   let extra = "";
   if (mode === "blocked") extra = "（解析停止）";
+  else if (mode === "simplified") extra = "（図の簡略）";
+  else if (fr.displayWarning && parserCompat) extra = "（互換注意）";
+  else if (fr.displayWarning && diagramActive) extra = "（図の簡略）";
   else if (fr.displayWarning) extra = "（互換注意）";
-  return `描画状態: ${main}${extra}`;
+
+  let supplement = "";
+  if (mode === "blocked") supplement = "解析結果に合わせて表示を止めています。";
+  else if (mode === "simplified") supplement = "図は通常より省略された表現になります。";
+  else if (fr.displayWarning && parserCompat) supplement = "互換上の注意は警告欄の文言を参照してください。";
+  else if (fr.displayWarning && diagramActive) supplement = "図の構成により表現が制限されている可能性があります。";
+
+  return { stateLine: `描画状態: ${main}${extra}`, supplement };
+}
+
+/** 解析結果パネル用: 状態行＋任意の補助行（finalRender 優先） */
+function formatUserFacingRenderStateLineFromFinalRender(decision) {
+  const { stateLine, supplement } = buildUserFacingRenderGuidanceFromDecision(decision);
+  return supplement ? `${stateLine}\n${supplement}` : stateLine;
 }
 
 /** 解析結果パネルに描画状態を 1 行だけ出す（HTML 変更なし） */
@@ -3972,15 +4010,25 @@ function effectiveParseCompatWarningDisplay(input) {
   return false;
 }
 
+/** 従来の 3路互換段落（PARSE_UI_COMPAT.warningText）を差し込むか（finalRender があるときは parser 互換に限定） */
+function warrantsThreewayCompatWarningParagraph(input) {
+  if (typeof input === "boolean") return input;
+  if (!input || typeof input !== "object") return false;
+  if (input.useCompatWarning) return true;
+  const fr = input.finalRender;
+  if (fr && typeof fr === "object") return finalRenderParserImpliesThreewayCompatParagraph(fr);
+  return false;
+}
+
 function syncParseCompatWarning(input) {
-  const useCompatWarning = effectiveParseCompatWarningDisplay(input);
+  const injectThreewayCompat = warrantsThreewayCompatWarningParagraph(input);
   const warningEl = document.getElementById("warning-result");
   if (!(warningEl instanceof HTMLElement)) return;
   const currentWarning = String(warningEl.textContent || "");
   const warningText = PARSE_UI_COMPAT.warningText;
   const warningPattern = new RegExp(`(^|\\n)${warningText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\n|$)`, "g");
 
-  if (useCompatWarning) {
+  if (injectThreewayCompat) {
     if (currentWarning.includes(warningText)) return;
     if (!currentWarning || currentWarning === "警告なし") {
       warningEl.textContent = warningText;
@@ -3990,9 +4038,10 @@ function syncParseCompatWarning(input) {
     return;
   }
 
-  if (!currentWarning.includes(warningText)) return;
-  const nextWarning = currentWarning.replace(warningPattern, "").replace(/\n{2,}/g, "\n").trim();
-  warningEl.textContent = nextWarning || "警告なし";
+  if (currentWarning.includes(warningText)) {
+    const nextWarning = currentWarning.replace(warningPattern, "").replace(/\n{2,}/g, "\n").trim();
+    warningEl.textContent = nextWarning || "警告なし";
+  }
 }
 
 window.renderCircuitList = renderCircuitList;
