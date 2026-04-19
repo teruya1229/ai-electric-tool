@@ -356,6 +356,40 @@ function detectGroupType(group) {
   return "unknown";
 }
 
+/** 開発者向け: __lastParseRenderUiDecision を短い行に整形（既存 parse-debug 先頭に表示） */
+function formatLastParseRenderUiDecisionSummary() {
+  const d = window.__lastParseRenderUiDecision;
+  if (!d || typeof d !== "object") {
+    return "互換サマリ: 未生成（問題文を解析すると更新）";
+  }
+  const pSev = d.parser && typeof d.parser === "object" ? String(d.parser.severity || "-") : "-";
+  const pSrc = d.parser && typeof d.parser === "object" ? String(d.parser.source || "-") : "-";
+  const dLevel = d.diagram && typeof d.diagram === "object" ? String(d.diagram.level || "-") : "n/a";
+  const pCode = String(d.parserReasonCode || (d.parser && d.parser.reasonCode) || "-");
+  const dCodes =
+    Array.isArray(d.diagramReasonCodes) && d.diagramReasonCodes.length
+      ? d.diagramReasonCodes.join(", ")
+      : d.diagram
+        ? "(none)"
+        : "n/a";
+  const contP = d.canContinueParser === true ? "yes" : d.canContinueParser === false ? "no" : String(d.canContinueParser ?? "n/a");
+  const contD =
+    d.canContinueDiagram === null || typeof d.canContinueDiagram === "undefined"
+      ? "n/a"
+      : d.canContinueDiagram
+        ? "yes"
+        : "no";
+  const simp =
+    d.isSimplifiedDiagram === true ? "yes" : d.isSimplifiedDiagram === false ? "no" : "n/a";
+  return [
+    "互換サマリ（parser / diagram）",
+    `解析: ${pSev} [${pSrc}] | 継続(解析): ${contP}`,
+    `描画: ${dLevel} | 簡略表示: ${simp} | 継続(描画): ${contD}`,
+    `parser理由: ${pCode}`,
+    `diagram理由: ${dCodes}`,
+  ].join("\n");
+}
+
 function renderParseDebugResult(sceneModel) {
   const panel = document.getElementById("parse-debug-result");
   if (!panel) return;
@@ -369,8 +403,15 @@ function renderParseDebugResult(sceneModel) {
   }
 
   panel.innerHTML = "";
+  const summaryCard = document.createElement("article");
+  summaryCard.className = "parse-debug-item";
+  summaryCard.textContent = formatLastParseRenderUiDecisionSummary();
+  panel.appendChild(summaryCard);
+
   if (!groups.length) {
-    panel.textContent = "groupsなし";
+    const empty = document.createElement("div");
+    empty.textContent = "groupsなし";
+    panel.appendChild(empty);
     return;
   }
 
@@ -3931,6 +3972,7 @@ if (parseProblemButton instanceof HTMLButtonElement) {
         updateUiFromParseResult(null);
       }
       syncParseCompatWarning(decision.useCompatWarning);
+      renderParseDebugResult();
     });
   });
 }
