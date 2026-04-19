@@ -3919,6 +3919,36 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
   };
 }
 
+/** finalRender のみからユーザー向け 1 行（独自の再判定はしない） */
+function formatUserFacingRenderStateLineFromFinalRender(decision) {
+  const fr = decision?.finalRender;
+  if (!fr || typeof fr !== "object") return "描画状態: —";
+  const mode = fr.renderMode;
+  let main = "通常描画";
+  if (mode === "simplified") main = "簡略表示";
+  else if (mode === "blocked") main = "未対応";
+  let extra = "";
+  if (mode === "blocked") extra = "（解析停止）";
+  else if (fr.displayWarning) extra = "（互換注意）";
+  return `描画状態: ${main}${extra}`;
+}
+
+/** 解析結果パネルに描画状態を 1 行だけ出す（HTML 変更なし） */
+function syncParseRenderStateUserSummary(decision) {
+  const panel = document.getElementById("parseResultPanel");
+  if (!panel) return;
+  let row = document.getElementById("parse-render-state-summary");
+  if (!row) {
+    row = document.createElement("p");
+    row.id = "parse-render-state-summary";
+    row.setAttribute("style", "margin:6px 0 4px;font-size:0.95rem;");
+    const pre = panel.querySelector("pre");
+    if (pre) panel.insertBefore(row, pre);
+    else panel.appendChild(row);
+  }
+  row.textContent = formatUserFacingRenderStateLineFromFinalRender(decision);
+}
+
 function syncParseCompatWarning(useCompatWarning) {
   const warningEl = document.getElementById("warning-result");
   if (!(warningEl instanceof HTMLElement)) return;
@@ -4016,6 +4046,7 @@ if (parseProblemButton instanceof HTMLButtonElement) {
         updateUiFromParseResult(null);
       }
       syncParseCompatWarning(decision.useCompatWarning);
+      syncParseRenderStateUserSummary(decision);
       renderParseDebugResult();
     });
   });
