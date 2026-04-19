@@ -1,10 +1,12 @@
 import {
+  EXAM_LABELS,
   buildDevicesFromSelection,
   buildRequiredAndNotes,
   generateDiagram,
   groupDevicesByControl,
   judgeSleeve,
   renderDiagram,
+  resolveDiagramCompatibility,
 } from "./js/diagram/index.js";
 import {
   createCircuitsFromGroups,
@@ -88,11 +90,19 @@ function parseGroupsFromDom() {
     const parts = text.split("|").map((s) => s.trim());
     const switchLabel = parts[3] || "";
     const switchType = switchLabel === "3路" ? "threeway" : "single";
+    const lightMatch = (parts[4] || "").match(/照明\s*(\d+)/);
+    const outletMatch = (parts[5] || "").match(/コンセント\s*(\d+)/);
+    const lightCount = lightMatch ? Number(lightMatch[1]) : 0;
+    const outletCount = outletMatch ? Number(outletMatch[1]) : 0;
+    const sameTime = switchType === "single" && lightCount >= 2;
     return {
       controlId: parts[0] || "",
       label: parts[1] || "",
       purpose: parts[2] || "unknown",
       switchType,
+      lightCount,
+      outletCount,
+      sameTime,
     };
   });
   const activeIndex = buttons.findIndex((btn) => btn.classList.contains("active"));
@@ -3657,7 +3667,127 @@ function extractParseErrorItems(parseResultText) {
   return errorItems.filter(Boolean);
 }
 
-function resolveParseToRenderDecision(parseResultText, parsedMeta) {
+/** 試験 / 現場 / ガミ の表示モード（diagram 互換判定用） */
+function getDiagramModeFromPlaygroundDom() {
+  const field = document.getElementById("mode-field-btn");
+  const gami = document.getElementById("mode-gamidenki-btn");
+  if (field instanceof HTMLElement && field.classList.contains("active")) return "field";
+  if (gami instanceof HTMLElement && gami.classList.contains("active")) return "exam_gamidenki";
+  return "exam";
+}
+
+function examControlIndexFromLabel(label) {
+  const s = String(label || "").trim();
+  const i = EXAM_LABELS.indexOf(s);
+  if (i >= 0) return i + 1;
+  const n = Number.parseInt(s, 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/** buildDevicesFromSelection に渡す conditionId を灯数から推定（parser と同趣旨の最小分岐） */
+function inferConditionIdForDiagramBuild(circuitType, lightCount, outletCount, sameTime) {
+  if (circuitType === "threeway" && lightCount === 1 && outletCount === 0) return "threeway_1light";
+  if (circuitType !== "single") return null;
+  if (lightCount === 1 && outletCount === 0) return "single_1light";
+  if (lightCount === 2 && outletCount === 0 && sameTime) return "single_2lights_same";
+  if (lightCount === 1 && outletCount >= 1) return "single_1light_1outlet";
+  return null;
+}
+
+/**
+ * group-list の表示から InputDevice を束ね、resolveDiagramCompatibility に渡す。
+ * 推定不能な系統があれば null（呼び出し側は従来どおり parser のみで分岐可能）。
+ */
+function tryResolveDiagramCompatibilityFromDomGroups(groups) {
+  if (!Array.isArray(groups) || !groups.length) return null;
+  const mode = getDiagramModeFromPlaygroundDom();
+  const allDevices = [];
+  for (let i = 0; i < groups.length; i += 1) {
+    const g = groups[i];
+    const circuitType = g.switchType === "threeway" ? "threeway" : "single";
+    const lightCount = Number(g.lightCount || 0);
+    const outletCount = Number(g.outletCount || 0);
+    const sameTime = !!g.sameTime;
+    if (lightCount <= 0 && outletCount <= 0) continue;
+    const conditionId = inferConditionIdForDiagramBuild(circuitType, lightCount, outletCount, sameTime);
+    if (!conditionId) return null;
+    const built = buildDevicesFromSelection(circuitType, conditionId);
+    if (!Array.isArray(built) || !built.length) return null;
+    const controlNum = examControlIndexFromLabel(g.controlId);
+    for (let j = 0; j < built.length; j += 1) {
+      const d = built[j];
+      if (d && typeof d.controlId === "number") allDevices.push({ ...d, controlId: controlNum });
+      else if (d) allDevices.push(d);
+    }
+  }
+  if (!allDevices.length) return null;
+  return resolveDiagramCompatibility(allDevices, mode);
+}
+
+/** diagram 互換結果を UI 追跡用に軽量化（巨大な groups は保持しない） */
+function summarizeDiagramCompatibility(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const level = raw.level;
+  const reasonCodes = Array.isArray(raw.reasonCodes) ? raw.reasonCodes.slice() : [];
+  const warnings = Array.isArray(raw.warnings) ? raw.warnings.slice() : [];
+  return {
+    level,
+    reasonCodes,
+    warnings,
+    canRenderDiagram: level !== "unsupported",
+    isSimplifiedDisplay: level === "simplified",
+  };
+}
+
+function buildParserUiTraceFromMeta(parsedMeta, shouldRender, useCompatWarning) {
+  return {
+    source: "meta",
+    reasonCode: String(parsedMeta.reasonCode || ""),
+    severity: String(parsedMeta.severity || ""),
+    canContinue: parsedMeta.canContinue === true,
+    shouldRender,
+    useCompatWarning,
+    codeList: parsedMeta.codeList && typeof parsedMeta.codeList === "object" ? parsedMeta.codeList : null,
+  };
+}
+
+function buildParserUiTraceFromLegacyText(parseResultText, shouldRender, useCompatWarning) {
+  const parseSucceeded = String(parseResultText || "").includes("判定結果: 解析成功");
+  const parseErrors = extractParseErrorItems(parseResultText);
+  const hasCompatError = parseErrors.includes(PARSE_UI_COMPAT.parserErrorText);
+  const hasOtherErrors = parseErrors.some((item) => item !== PARSE_UI_COMPAT.parserErrorText && item !== "なし");
+  let reasonCode = "parse.ok";
+  if (!shouldRender) {
+    reasonCode = hasOtherErrors ? "parse.error" : hasCompatError ? "compat.error-blocked" : "parse.error";
+  } else if (useCompatWarning) {
+    reasonCode = "compat.error-allow-continue";
+  } else if (!parseSucceeded && parseErrors.length) {
+    reasonCode = "parse.warning-or-partial";
+  }
+  let severity = "success";
+  if (!shouldRender) severity = "error";
+  else if (useCompatWarning) severity = "compat-warning";
+  else if (!parseSucceeded) severity = "warning";
+  return {
+    source: "text-fallback",
+    reasonCode,
+    severity,
+    canContinue: shouldRender,
+    shouldRender,
+    useCompatWarning,
+    codeList: null,
+  };
+}
+
+/**
+ * parser 判定 + diagram 互換を 1 オブジェクトに束ねる（表示は後段、ここは追跡用データ入口）。
+ * @param {string} parseResultText
+ * @param {object|null|undefined} parsedMeta
+ * @param {ReturnType<typeof resolveDiagramCompatibility>|null|undefined} diagramCompatibilityRaw
+ */
+function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompatibilityRaw) {
+  const diagramSummary = summarizeDiagramCompatibility(diagramCompatibilityRaw);
+
   if (parsedMeta && typeof parsedMeta === "object") {
     const severity = String(parsedMeta.severity || "");
     const reasonCode = String(parsedMeta.reasonCode || "");
@@ -3667,9 +3797,19 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta) {
       reasonCode.startsWith("compat.") ||
       parsedMeta.hasCompatError === true ||
       parsedMeta.hasCompatWarning === true;
+    const shouldRender = canContinue;
+    const useCompatWarning = canContinue && hasCompatSignal;
+    const parser = buildParserUiTraceFromMeta(parsedMeta, shouldRender, useCompatWarning);
     return {
-      shouldRender: canContinue,
-      useCompatWarning: canContinue && hasCompatSignal,
+      shouldRender,
+      useCompatWarning,
+      parser,
+      diagram: diagramSummary,
+      diagramReasonCodes: diagramSummary ? diagramSummary.reasonCodes : [],
+      parserReasonCode: parser.reasonCode,
+      canContinueParser: canContinue,
+      canContinueDiagram: diagramSummary ? diagramSummary.canRenderDiagram : null,
+      isSimplifiedDiagram: diagramSummary ? diagramSummary.isSimplifiedDisplay : null,
     };
   }
 
@@ -3678,9 +3818,19 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta) {
   const hasCompatError = parseErrors.includes(PARSE_UI_COMPAT.parserErrorText);
   const hasOtherErrors = parseErrors.some((item) => item !== PARSE_UI_COMPAT.parserErrorText && item !== "なし");
   const allowCompatRender = hasCompatError && !hasOtherErrors;
+  const shouldRender = parseSucceeded || allowCompatRender;
+  const useCompatWarning = allowCompatRender;
+  const parser = buildParserUiTraceFromLegacyText(parseResultText, shouldRender, useCompatWarning);
   return {
-    shouldRender: parseSucceeded || allowCompatRender,
-    useCompatWarning: allowCompatRender,
+    shouldRender,
+    useCompatWarning,
+    parser,
+    diagram: diagramSummary,
+    diagramReasonCodes: diagramSummary ? diagramSummary.reasonCodes : [],
+    parserReasonCode: parser.reasonCode,
+    canContinueParser: shouldRender,
+    canContinueDiagram: diagramSummary ? diagramSummary.canRenderDiagram : null,
+    isSimplifiedDiagram: diagramSummary ? diagramSummary.isSimplifiedDisplay : null,
   };
 }
 
@@ -3771,9 +3921,12 @@ if (parseProblemButton instanceof HTMLButtonElement) {
       const parseResultText =
         parseResultPre instanceof HTMLElement ? String(parseResultPre.textContent || "") : "";
       const parsedMeta = getParsedMetaFromUiState();
-      const decision = resolveParseToRenderDecision(parseResultText, parsedMeta);
+      const parsedGroups = parseGroupsFromDom();
+      const diagramCompatibilityRaw = tryResolveDiagramCompatibilityFromDomGroups(parsedGroups.groups);
+      const decision = resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompatibilityRaw);
+      window.__lastParseRenderUiDecision = decision;
       if (decision.shouldRender) {
-        updateUiFromParseResult({ groups: parseGroupsFromDom().groups });
+        updateUiFromParseResult({ groups: parsedGroups.groups });
       } else {
         updateUiFromParseResult(null);
       }
