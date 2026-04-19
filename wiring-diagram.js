@@ -362,6 +362,7 @@ function formatLastParseRenderUiDecisionSummary() {
   if (!d || typeof d !== "object") {
     return "互換サマリ: 未生成（問題文を解析すると更新）";
   }
+  const fr = d.finalRender && typeof d.finalRender === "object" ? d.finalRender : null;
   const pSev = d.parser && typeof d.parser === "object" ? String(d.parser.severity || "-") : "-";
   const pSrc = d.parser && typeof d.parser === "object" ? String(d.parser.source || "-") : "-";
   const dLevel = d.diagram && typeof d.diagram === "object" ? String(d.diagram.level || "-") : "n/a";
@@ -381,7 +382,18 @@ function formatLastParseRenderUiDecisionSummary() {
         : "no";
   const simp =
     d.isSimplifiedDiagram === true ? "yes" : d.isSimplifiedDiagram === false ? "no" : "n/a";
+  const head = fr
+    ? [
+        "最終表示方針 (resolveFinalRenderDecision)",
+        `renderMode: ${String(fr.renderMode || "-")}`,
+        `parserReason: ${String(fr.parserReason || "-")}`,
+        `diagramReason: ${String(fr.diagramReason || "-")}`,
+        `displayWarning: ${fr.displayWarning ? "yes" : "no"}`,
+        "---",
+      ]
+    : [];
   return [
+    ...head,
     "互換サマリ（parser / diagram）",
     `解析: ${pSev} [${pSrc}] | 継続(解析): ${contP}`,
     `描画: ${dLevel} | 簡略表示: ${simp} | 継続(描画): ${contD}`,
@@ -3821,6 +3833,34 @@ function buildParserUiTraceFromLegacyText(parseResultText, shouldRender, useComp
 }
 
 /**
+ * parser / diagram / UI 吸収を統合した最終表示方針（ゲート shouldRender / useCompatWarning は従来どおり parser 主で不変）。
+ * @param {{ shouldRender: boolean, useCompatWarning: boolean, parser: object, diagramSummary: ReturnType<typeof summarizeDiagramCompatibility> }} input
+ */
+function resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, diagramSummary }) {
+  const parserReason = String(parser?.reasonCode || "");
+  const diagramReason =
+    diagramSummary && Array.isArray(diagramSummary.reasonCodes) && diagramSummary.reasonCodes.length
+      ? diagramSummary.reasonCodes.join(", ")
+      : diagramSummary
+        ? "(none)"
+        : "n/a";
+
+  let renderMode = "normal";
+  if (!shouldRender) {
+    renderMode = "blocked";
+  } else if (diagramSummary && (diagramSummary.level === "simplified" || diagramSummary.level === "unsupported")) {
+    renderMode = "simplified";
+  }
+
+  const displayWarning =
+    useCompatWarning === true ||
+    (diagramSummary && diagramSummary.level === "simplified") ||
+    (diagramSummary && diagramSummary.level === "unsupported");
+
+  return { renderMode, parserReason, diagramReason, displayWarning };
+}
+
+/**
  * parser 判定 + diagram 互換を 1 オブジェクトに束ねる（表示は後段、ここは追跡用データ入口）。
  * @param {string} parseResultText
  * @param {object|null|undefined} parsedMeta
@@ -3841,6 +3881,7 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
     const shouldRender = canContinue;
     const useCompatWarning = canContinue && hasCompatSignal;
     const parser = buildParserUiTraceFromMeta(parsedMeta, shouldRender, useCompatWarning);
+    const finalRender = resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, diagramSummary });
     return {
       shouldRender,
       useCompatWarning,
@@ -3851,6 +3892,7 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
       canContinueParser: canContinue,
       canContinueDiagram: diagramSummary ? diagramSummary.canRenderDiagram : null,
       isSimplifiedDiagram: diagramSummary ? diagramSummary.isSimplifiedDisplay : null,
+      finalRender,
     };
   }
 
@@ -3862,6 +3904,7 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
   const shouldRender = parseSucceeded || allowCompatRender;
   const useCompatWarning = allowCompatRender;
   const parser = buildParserUiTraceFromLegacyText(parseResultText, shouldRender, useCompatWarning);
+  const finalRender = resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, diagramSummary });
   return {
     shouldRender,
     useCompatWarning,
@@ -3872,6 +3915,7 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
     canContinueParser: shouldRender,
     canContinueDiagram: diagramSummary ? diagramSummary.canRenderDiagram : null,
     isSimplifiedDiagram: diagramSummary ? diagramSummary.isSimplifiedDisplay : null,
+    finalRender,
   };
 }
 
