@@ -4,6 +4,25 @@ AI電気施工アシスタント / `C:\dev\ai-electric-tool` の作業メモ。
 
 ---
 
+## 2026-04-19 次手・判断基準（diagram compatibility の 3 ケース目）
+
+### 次にやるべき1手
+- **`js/diagram/index.js` のみ**で、**既存テンプレにかなり近い** simplified / unsupported 系を**もう 1 ケース**減らす（**1 ケース前進**にとどめる）
+- **parser / `wiring-diagram.js` / `wiring-diagram.html` は触らない**（主線は diagram モジュール）
+
+### 判断基準
+- **既存テンプレ流用**で済むか（新規大規模配線モデルを増やさない）
+- **`js/diagram/index.js` 単体で 1 ファイル最小差分**に収まるか
+- **compatibility 判定の意味**（通常／簡略／未対応の意図）を壊さないか
+- **`generateDiagram` の既存分岐**をそのまま活かせるか
+
+### 注意点
+- **`wiring-diagram.js` は今回の主線ではない**（責務整理は一区切りついている）
+- **docs 更新と実行依頼を混在させない**
+- **大規模拡張ではなく「1 ケース前進」**を守る（多灯・多口の全面対応に広げない）
+
+---
+
 ## 2026-04-12 次手・判断基準（CD ログ終端と precheck / timeout-snapshot）
 
 ### 次にやるべき1手

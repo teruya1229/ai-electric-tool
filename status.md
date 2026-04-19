@@ -1,5 +1,24 @@
 # status
 
+## 2026-04-19 parse／図互換の責務整理完了と diagram compatibility 前進（正本・追記）
+
+### 今日やったこと
+- `wiring-diagram.js` 側の責務整理は一区切りついた
+  - **`finalRender` を正規契約**として維持
+  - **`shouldRender` / `useCompatWarning` は返却契約から切り離し**、結合ロジックは `resolveParseToRenderDecision` / `resolveFinalRenderDecision` 内のローカル導出に閉じた
+  - **`canContinueParser` / `canContinueDiagram`** は `resolveParseToRenderDecision` の戻りから外し、**開発者互換サマリ（debug view）導出**へ寄せ済み
+- `js/diagram/index.js` で **diagram compatibility をさらに 2 ケース前進**した（**`main` に push 済み**）
+  - **`single_0light_outlet_bus`**（片切1＋照明0＋コンセントありを単灯バス配線テンプレへ寄せる）— commit **`fcdeaebc51063c0ff206839d512de457be611eaa`**
+  - **`threeway_2lights_diagram_one`**（**3路スイッチ2個＋照明2個（同一 `controlId`）**を **`three_way_1light`** 系互換へ載せ、**既存図では1灯相当**で扱う）— commit **`27f920ee3e7075277b348a5efc6669326120a82c`**
+- `wiring-diagram.js` では **`diagramReasonCodes`** のうち上記に紐づく旨を、ユーザー向け補助文に**短文で一段だけ**反映（commit **`68fd5a7be2e0d76f57fd347f4ef3152c3d884c71`**）
+
+### 現在の状態
+- **`wiring-diagram.js` の責務整理**はいったん十分な深度に達した
+- 開発の主線は **「責務整理フェーズ」から「未対応ケースを 1 つずつ減らすフェーズ」へ移行済み**
+- **次の主線**は **`js/diagram/index.js` で 3 つ目の simplified / unsupported を 1 ケース減らす**こと（**1 ファイル最小差分・既存テンプレ流用優先**）
+
+---
+
 ## 2026-04-12 単発 run 固定と最低条件完走ログの取得（正本・追記）
 
 ### 今日やったこと
