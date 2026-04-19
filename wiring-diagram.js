@@ -3850,6 +3850,8 @@ function buildParserUiTraceFromMeta(parsedMeta, shouldRender, useCompatWarning) 
     canContinue: parsedMeta.canContinue === true,
     shouldRender,
     useCompatWarning,
+    metaHasCompatError: parsedMeta.hasCompatError === true,
+    metaHasCompatWarning: parsedMeta.hasCompatWarning === true,
     codeList: parsedMeta.codeList && typeof parsedMeta.codeList === "object" ? parsedMeta.codeList : null,
   };
 }
@@ -3882,11 +3884,29 @@ function buildParserUiTraceFromLegacyText(parseResultText, shouldRender, useComp
   };
 }
 
+/** finalRender.displayWarning 用: parser trace + diagram（useCompatWarning 引数は使わない）。 */
+function parserTraceIndicatesCompatAttentionForDisplay(parser) {
+  if (!parser || typeof parser !== "object") return false;
+  if (parser.source === "meta") {
+    return (
+      parser.canContinue === true &&
+      (String(parser.severity || "") === "compat-warning" ||
+        String(parser.reasonCode || "").startsWith("compat.") ||
+        parser.metaHasCompatError === true ||
+        parser.metaHasCompatWarning === true)
+    );
+  }
+  if (parser.source === "text-fallback") {
+    return String(parser.reasonCode || "") === "compat.error-allow-continue";
+  }
+  return false;
+}
+
 /**
  * parser / diagram / UI 吸収を統合した最終表示方針（出力の正規形は返却オブジェクトの finalRender）。
  * @param {{ shouldRender: boolean, useCompatWarning: boolean, parser: object, diagramSummary: ReturnType<typeof summarizeDiagramCompatibility> }} input
  */
-function resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, diagramSummary }) {
+function resolveFinalRenderDecision({ shouldRender, useCompatWarning: _legacyThreewayUnused, parser, diagramSummary }) {
   const parserReason = String(parser?.reasonCode || "");
   const diagramReason =
     diagramSummary && Array.isArray(diagramSummary.reasonCodes) && diagramSummary.reasonCodes.length
@@ -3903,7 +3923,7 @@ function resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, di
   }
 
   const displayWarning =
-    useCompatWarning === true ||
+    parserTraceIndicatesCompatAttentionForDisplay(parser) ||
     (diagramSummary && diagramSummary.level === "simplified") ||
     (diagramSummary && diagramSummary.level === "unsupported");
 
@@ -3912,7 +3932,7 @@ function resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, di
 
 /**
  * parse→UI の結合判定。正規の契約は finalRender。
- * shouldRender は finalRender から写した互換エイリアス。useCompatWarning は parser 互換段落専用の互換値（全体注意は finalRender.displayWarning）。
+ * shouldRender は finalRender から写した互換エイリアス。decision.useCompatWarning は 3路互換段落注入（warrantsThreeway…）専用の legacy。displayWarning は finalRender 組み立てのみ参照。
  * @param {string} parseResultText
  * @param {object|null|undefined} parsedMeta
  * @param {ReturnType<typeof resolveDiagramCompatibility>|null|undefined} diagramCompatibilityRaw
@@ -4033,14 +4053,14 @@ function syncParseRenderStateUserSummary(decision) {
   row.textContent = formatUserFacingRenderStateLineFromFinalRender(decision);
 }
 
-/** 注意フラグの正規読み取り: finalRender.displayWarning。無いときのみ useCompatWarning（レガシー） */
+/** 注意フラグは finalRender.displayWarning のみ（useCompatWarning は見ない。3路段落は warrantsThreeway…）。 */
 function readParseUiDisplayWarning(input) {
   if (typeof input === "boolean") return input;
   if (input && typeof input === "object") {
     if (input.finalRender && typeof input.finalRender === "object") {
       return Boolean(input.finalRender.displayWarning);
     }
-    return Boolean(input.useCompatWarning);
+    return false;
   }
   return false;
 }
@@ -4061,7 +4081,7 @@ function effectiveParseDrivenShouldRender(decision) {
   return resolveParseDrivenRenderSceneModel(decision, []) !== null;
 }
 
-/** 3路互換段落: finalRender の parser 信号を優先し、無いときのみ useCompatWarning（レガシー） */
+/** 3路互換段落のみ: decision.useCompatWarning を読む唯一の経路（finalRender で足りないときの legacy）。 */
 function warrantsThreewayCompatWarningParagraph(input) {
   if (typeof input === "boolean") return input;
   if (!input || typeof input !== "object") return false;
