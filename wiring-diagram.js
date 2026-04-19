@@ -357,62 +357,92 @@ function detectGroupType(group) {
 }
 
 /**
- * 開発者確認用: parser / diagram / finalRender の3層を 1 箇所で組み立てる（表やバッジへ展開する際の土台）。
- * @returns {{ fallbackText?: string, lines?: string[] }}
+ * 開発者確認用の互換サマリ正規形（parser → diagram → finalRender）。ユーザー向け表示も同じ view から出せる。
+ * @returns {null | { parser: object, diagram: object, finalRender: null | { renderMode: string, parserReason: string, diagramReason: string }, displayWarning: boolean }}
  */
-function buildParseRenderDebugCompatibilitySummary(decision) {
-  if (!decision || typeof decision !== "object") {
-    return { fallbackText: "互換サマリ: 未生成（問題文を解析すると更新）" };
-  }
+function buildParseRenderDebugCompatibilitySummaryView(decision) {
+  if (!decision || typeof decision !== "object") return null;
   const fr = decision.finalRender && typeof decision.finalRender === "object" ? decision.finalRender : null;
-  const pSev = decision.parser && typeof decision.parser === "object" ? String(decision.parser.severity || "-") : "-";
-  const pSrc = decision.parser && typeof decision.parser === "object" ? String(decision.parser.source || "-") : "-";
-  const dLevel = decision.diagram && typeof decision.diagram === "object" ? String(decision.diagram.level || "-") : "n/a";
-  const pCode = String(decision.parserReasonCode || (decision.parser && decision.parser.reasonCode) || "-");
-  const dCodes =
-    Array.isArray(decision.diagramReasonCodes) && decision.diagramReasonCodes.length
-      ? decision.diagramReasonCodes.join(", ")
-      : decision.diagram
-        ? "(none)"
-        : "n/a";
-  const contP =
-    decision.canContinueParser === true ? "yes" : decision.canContinueParser === false ? "no" : String(decision.canContinueParser ?? "n/a");
+  const parserObj = decision.parser && typeof decision.parser === "object" ? decision.parser : null;
+  const diagramObj = decision.diagram && typeof decision.diagram === "object" ? decision.diagram : null;
+  const pSev = parserObj ? String(parserObj.severity || "-") : "-";
+  const pSrc = parserObj ? String(parserObj.source || "-") : "-";
+  const pCode = String(decision.parserReasonCode || (parserObj && parserObj.reasonCode) || "-");
+  const dLevel = diagramObj ? String(diagramObj.level || "-") : "n/a";
+  const reasonCodes = Array.isArray(decision.diagramReasonCodes) ? decision.diagramReasonCodes.slice() : [];
+  return {
+    parser: { severity: pSev, source: pSrc, reasonCode: pCode, canContinueParser: decision.canContinueParser },
+    diagram: {
+      level: dLevel,
+      hasDiagram: !!decision.diagram,
+      isSimplifiedDiagram: decision.isSimplifiedDiagram,
+      canContinueDiagram: decision.canContinueDiagram,
+      reasonCodes,
+    },
+    finalRender: fr
+      ? {
+          renderMode: String(fr.renderMode || "-"),
+          parserReason: String(fr.parserReason || "-"),
+          diagramReason: String(fr.diagramReason || "-"),
+        }
+      : null,
+    displayWarning: readParseUiDisplayWarning(decision),
+  };
+}
+
+function formatDebugSummaryYesNoUnknown(value) {
+  if (value === true) return "yes";
+  if (value === false) return "no";
+  return String(value ?? "n/a");
+}
+
+/** 開発者互換サマリの文字列出力はこの関数のみ（view は buildParseRenderDebugCompatibilitySummaryView）。 */
+function formatParseRenderDebugCompatibilitySummaryText(view) {
+  const lines = [];
+  const contP = formatDebugSummaryYesNoUnknown(view.parser.canContinueParser);
+  const simp =
+    view.diagram.isSimplifiedDiagram === true ? "yes" : view.diagram.isSimplifiedDiagram === false ? "no" : "n/a";
   const contD =
-    decision.canContinueDiagram === null || typeof decision.canContinueDiagram === "undefined"
+    view.diagram.canContinueDiagram === null || typeof view.diagram.canContinueDiagram === "undefined"
       ? "n/a"
-      : decision.canContinueDiagram
+      : view.diagram.canContinueDiagram
         ? "yes"
         : "no";
-  const simp =
-    decision.isSimplifiedDiagram === true ? "yes" : decision.isSimplifiedDiagram === false ? "no" : "n/a";
+  const dCodes = view.diagram.reasonCodes.length
+    ? view.diagram.reasonCodes.join(", ")
+    : view.diagram.hasDiagram
+      ? "(none)"
+      : "n/a";
 
-  const lines = [];
+  lines.push("--- parser ---");
+  lines.push(
+    `severity: ${view.parser.severity} | source: ${view.parser.source} | canContinueParser: ${contP}`,
+    `reasonCode: ${view.parser.reasonCode}`,
+  );
+  lines.push("--- diagram ---");
+  lines.push(
+    `level: ${view.diagram.level} | isSimplifiedDiagram: ${simp} | canContinueDiagram: ${contD}`,
+    `reasonCodes: ${dCodes}`,
+  );
   lines.push("--- finalRender ---");
-  if (fr) {
+  if (view.finalRender) {
     lines.push(
-      `renderMode: ${String(fr.renderMode || "-")}`,
-      `parserReason: ${String(fr.parserReason || "-")}`,
-      `diagramReason: ${String(fr.diagramReason || "-")}`,
-      `displayWarning: ${readParseUiDisplayWarning(decision) ? "yes" : "no"}`,
+      `renderMode: ${view.finalRender.renderMode}`,
+      `parserReason: ${view.finalRender.parserReason}`,
+      `diagramReason: ${view.finalRender.diagramReason}`,
+      `displayWarning: ${view.displayWarning ? "yes" : "no"}`,
     );
   } else {
     lines.push("(finalRender なし)");
   }
-
-  lines.push("--- parser ---");
-  lines.push(`severity: ${pSev} | source: ${pSrc} | canContinueParser: ${contP}`, `reasonCode: ${pCode}`);
-
-  lines.push("--- diagram ---");
-  lines.push(`level: ${dLevel} | isSimplifiedDiagram: ${simp} | canContinueDiagram: ${contD}`, `reasonCodes: ${dCodes}`);
-
-  return { lines };
+  return lines.join("\n");
 }
 
-/** parse-debug 先頭表示の唯一入口（中身は buildParseRenderDebugCompatibilitySummary） */
+/** parse-debug 先頭の互換サマリ文字列の唯一入口 */
 function formatLastParseRenderUiDecisionSummary() {
-  const pack = buildParseRenderDebugCompatibilitySummary(window.__lastParseRenderUiDecision);
-  if (pack.fallbackText) return pack.fallbackText;
-  return pack.lines.join("\n");
+  const view = buildParseRenderDebugCompatibilitySummaryView(window.__lastParseRenderUiDecision);
+  if (!view) return "互換サマリ: 未生成（問題文を解析すると更新）";
+  return formatParseRenderDebugCompatibilitySummaryText(view);
 }
 
 function renderParseDebugResult(sceneModel) {
