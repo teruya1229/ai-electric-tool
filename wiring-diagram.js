@@ -3842,14 +3842,12 @@ function summarizeDiagramCompatibility(raw) {
   };
 }
 
-function buildParserUiTraceFromMeta(parsedMeta, shouldRender, useCompatWarning) {
+function buildParserUiTraceFromMeta(parsedMeta) {
   return {
     source: "meta",
     reasonCode: String(parsedMeta.reasonCode || ""),
     severity: String(parsedMeta.severity || ""),
     canContinue: parsedMeta.canContinue === true,
-    shouldRender,
-    useCompatWarning,
     metaHasCompatError: parsedMeta.hasCompatError === true,
     metaHasCompatWarning: parsedMeta.hasCompatWarning === true,
     codeList: parsedMeta.codeList && typeof parsedMeta.codeList === "object" ? parsedMeta.codeList : null,
@@ -3878,13 +3876,11 @@ function buildParserUiTraceFromLegacyText(parseResultText, shouldRender, useComp
     reasonCode,
     severity,
     canContinue: shouldRender,
-    shouldRender,
-    useCompatWarning,
     codeList: null,
   };
 }
 
-/** finalRender.displayWarning 用: parser trace + diagram（useCompatWarning 引数は使わない）。 */
+/** finalRender.displayWarning 用: parser trace + diagram。 */
 function parserTraceIndicatesCompatAttentionForDisplay(parser) {
   if (!parser || typeof parser !== "object") return false;
   if (parser.source === "meta") {
@@ -3904,9 +3900,9 @@ function parserTraceIndicatesCompatAttentionForDisplay(parser) {
 
 /**
  * parser / diagram / UI 吸収を統合した最終表示方針（出力の正規形は返却オブジェクトの finalRender）。
- * @param {{ shouldRender: boolean, useCompatWarning: boolean, parser: object, diagramSummary: ReturnType<typeof summarizeDiagramCompatibility> }} input
+ * @param {{ shouldRender: boolean, parser: object, diagramSummary: ReturnType<typeof summarizeDiagramCompatibility> }} input
  */
-function resolveFinalRenderDecision({ shouldRender, useCompatWarning: _legacyThreewayUnused, parser, diagramSummary }) {
+function resolveFinalRenderDecision({ shouldRender, parser, diagramSummary }) {
   const parserReason = String(parser?.reasonCode || "");
   const diagramReason =
     diagramSummary && Array.isArray(diagramSummary.reasonCodes) && diagramSummary.reasonCodes.length
@@ -3932,7 +3928,6 @@ function resolveFinalRenderDecision({ shouldRender, useCompatWarning: _legacyThr
 
 /**
  * parse→UI の結合判定。正規の契約は finalRender。
- * shouldRender は finalRender から写した互換エイリアス。decision.useCompatWarning は 3路互換段落注入（warrantsThreeway…）専用の legacy。displayWarning は finalRender 組み立てのみ参照。
  * @param {string} parseResultText
  * @param {object|null|undefined} parsedMeta
  * @param {ReturnType<typeof resolveDiagramCompatibility>|null|undefined} diagramCompatibilityRaw
@@ -3941,18 +3936,10 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
   const diagramSummary = summarizeDiagramCompatibility(diagramCompatibilityRaw);
 
   if (parsedMeta && typeof parsedMeta === "object") {
-    const severity = String(parsedMeta.severity || "");
-    const reasonCode = String(parsedMeta.reasonCode || "");
     const canContinue = parsedMeta.canContinue === true;
-    const hasCompatSignal =
-      severity === "compat-warning" ||
-      reasonCode.startsWith("compat.") ||
-      parsedMeta.hasCompatError === true ||
-      parsedMeta.hasCompatWarning === true;
     const shouldRender = canContinue;
-    const useCompatWarning = canContinue && hasCompatSignal;
-    const parser = buildParserUiTraceFromMeta(parsedMeta, shouldRender, useCompatWarning);
-    const finalRender = resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, diagramSummary });
+    const parser = buildParserUiTraceFromMeta(parsedMeta);
+    const finalRender = resolveFinalRenderDecision({ shouldRender, parser, diagramSummary });
     const legacyShouldRender = finalRender.renderMode !== "blocked";
     return {
       finalRender,
@@ -3963,8 +3950,6 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
       canContinueParser: legacyShouldRender,
       canContinueDiagram: diagramSummary ? diagramSummary.canRenderDiagram : null,
       isSimplifiedDiagram: diagramSummary ? diagramSummary.isSimplifiedDisplay : null,
-      shouldRender: legacyShouldRender,
-      useCompatWarning,
     };
   }
 
@@ -3976,7 +3961,7 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
   const shouldRender = parseSucceeded || allowCompatRender;
   const useCompatWarning = allowCompatRender;
   const parser = buildParserUiTraceFromLegacyText(parseResultText, shouldRender, useCompatWarning);
-  const finalRender = resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, diagramSummary });
+  const finalRender = resolveFinalRenderDecision({ shouldRender, parser, diagramSummary });
   const legacyShouldRender = finalRender.renderMode !== "blocked";
   return {
     finalRender,
@@ -3987,8 +3972,6 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
     canContinueParser: legacyShouldRender,
     canContinueDiagram: diagramSummary ? diagramSummary.canRenderDiagram : null,
     isSimplifiedDiagram: diagramSummary ? diagramSummary.isSimplifiedDisplay : null,
-    shouldRender: legacyShouldRender,
-    useCompatWarning,
   };
 }
 
@@ -4053,7 +4036,7 @@ function syncParseRenderStateUserSummary(decision) {
   row.textContent = formatUserFacingRenderStateLineFromFinalRender(decision);
 }
 
-/** 注意フラグは finalRender.displayWarning のみ（useCompatWarning は見ない。3路段落は warrantsThreeway…）。 */
+/** 注意フラグは finalRender.displayWarning のみ。 */
 function readParseUiDisplayWarning(input) {
   if (typeof input === "boolean") return input;
   if (input && typeof input === "object") {
@@ -4067,7 +4050,7 @@ function readParseUiDisplayWarning(input) {
 
 /**
  * parse ボタン経路の描画入口。finalRender.renderMode のみ参照（blocked=停止 / それ以外は継続）。
- * finalRender が無い・非オブジェクトのときは描画しない（shouldRender は参照しない）。
+ * finalRender が無い・非オブジェクトのときは描画しない。
  */
 function resolveParseDrivenRenderSceneModel(decision, groups) {
   const fr = decision?.finalRender;
@@ -4081,7 +4064,7 @@ function effectiveParseDrivenShouldRender(decision) {
   return resolveParseDrivenRenderSceneModel(decision, []) !== null;
 }
 
-/** 3路互換段落のみ: decision.useCompatWarning を読む唯一の経路（finalRender で足りないときの legacy）。 */
+/** 3路互換段落: finalRender を優先し、足りないときは parser trace の互換信号で補う。 */
 function warrantsThreewayCompatWarningParagraph(input) {
   if (typeof input === "boolean") return input;
   if (!input || typeof input !== "object") return false;
@@ -4089,7 +4072,7 @@ function warrantsThreewayCompatWarningParagraph(input) {
   if (fr && typeof fr === "object" && finalRenderParserImpliesThreewayCompatParagraph(fr) && fr.renderMode !== "blocked") {
     return true;
   }
-  return Boolean(input.useCompatWarning);
+  return parserTraceIndicatesCompatAttentionForDisplay(input.parser);
 }
 
 function syncParseCompatWarning(input) {
