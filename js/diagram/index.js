@@ -149,6 +149,16 @@ function effectiveGroupTemplate(allDevices, groupDevices) {
       };
     }
   }
+
+  if (switchSingleCount === 0 && switch3wayCount === 2 && lightCount === 2) {
+    return {
+      isSupported: true,
+      templateId: "three_way_1light",
+      switchType: "threeway",
+      reasonCode: "threeway_2lights_diagram_one",
+    };
+  }
+
   return base;
 }
 
