@@ -3833,7 +3833,7 @@ function buildParserUiTraceFromLegacyText(parseResultText, shouldRender, useComp
 }
 
 /**
- * parser / diagram / UI 吸収を統合した最終表示方針（ゲート shouldRender / useCompatWarning は従来どおり parser 主で不変）。
+ * parser / diagram / UI 吸収を統合した最終表示方針（内部入力は shouldRender / useCompatWarning。UI は finalRender を優先参照）。
  * @param {{ shouldRender: boolean, useCompatWarning: boolean, parser: object, diagramSummary: ReturnType<typeof summarizeDiagramCompatibility> }} input
  */
 function resolveFinalRenderDecision({ shouldRender, useCompatWarning, parser, diagramSummary }) {
@@ -3949,7 +3949,31 @@ function syncParseRenderStateUserSummary(decision) {
   row.textContent = formatUserFacingRenderStateLineFromFinalRender(decision);
 }
 
-function syncParseCompatWarning(useCompatWarning) {
+/** finalRender があれば renderMode から、無ければ shouldRender（重複判定の入口を一本化） */
+function effectiveParseDrivenShouldRender(decision) {
+  if (decision?.finalRender && typeof decision.finalRender === "object") {
+    return decision.finalRender.renderMode !== "blocked";
+  }
+  return decision?.shouldRender === true;
+}
+
+/**
+ * 警告行同期の表示フラグ。finalRender.displayWarning を最優先、無ければ boolean または useCompatWarning。
+ * @param {boolean|{ finalRender?: object, useCompatWarning?: boolean }} input
+ */
+function effectiveParseCompatWarningDisplay(input) {
+  if (typeof input === "boolean") return input;
+  if (input && typeof input === "object") {
+    if (input.finalRender && typeof input.finalRender === "object") {
+      return Boolean(input.finalRender.displayWarning);
+    }
+    return Boolean(input.useCompatWarning);
+  }
+  return false;
+}
+
+function syncParseCompatWarning(input) {
+  const useCompatWarning = effectiveParseCompatWarningDisplay(input);
   const warningEl = document.getElementById("warning-result");
   if (!(warningEl instanceof HTMLElement)) return;
   const currentWarning = String(warningEl.textContent || "");
@@ -4040,12 +4064,12 @@ if (parseProblemButton instanceof HTMLButtonElement) {
       const diagramCompatibilityRaw = tryResolveDiagramCompatibilityFromDomGroups(parsedGroups.groups);
       const decision = resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompatibilityRaw);
       window.__lastParseRenderUiDecision = decision;
-      if (decision.shouldRender) {
+      if (effectiveParseDrivenShouldRender(decision)) {
         updateUiFromParseResult({ groups: parsedGroups.groups });
       } else {
         updateUiFromParseResult(null);
       }
-      syncParseCompatWarning(decision.useCompatWarning);
+      syncParseCompatWarning(decision);
       syncParseRenderStateUserSummary(decision);
       renderParseDebugResult();
     });
