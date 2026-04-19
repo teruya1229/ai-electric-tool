@@ -4002,12 +4002,22 @@ function readParseUiDisplayWarning(input) {
   return false;
 }
 
-/** 描画継続可否の正規読み取り: finalRender.renderMode。無いときのみ shouldRender（レガシー） */
-function effectiveParseDrivenShouldRender(decision) {
-  if (decision?.finalRender && typeof decision.finalRender === "object") {
-    return decision.finalRender.renderMode !== "blocked";
+/**
+ * parse ボタン経路の描画入口。正規は finalRender.renderMode（blocked=停止 / simplified・normal=継続）。
+ * finalRender が無いときのみ shouldRender でフォールバック。
+ */
+function resolveParseDrivenRenderSceneModel(decision, groups) {
+  const fr = decision?.finalRender;
+  if (fr && typeof fr === "object") {
+    if (fr.renderMode === "blocked") return null;
+    return { groups };
   }
-  return decision?.shouldRender === true;
+  return decision?.shouldRender === true ? { groups } : null;
+}
+
+/** 描画継続可否（resolveParseDrivenRenderSceneModel の真偽と同値。他箇所の窓口用） */
+function effectiveParseDrivenShouldRender(decision) {
+  return resolveParseDrivenRenderSceneModel(decision, []) !== null;
 }
 
 /** 3路互換段落: finalRender の parser 信号を優先し、無いときのみ useCompatWarning（レガシー） */
@@ -4114,11 +4124,7 @@ if (parseProblemButton instanceof HTMLButtonElement) {
       const diagramCompatibilityRaw = tryResolveDiagramCompatibilityFromDomGroups(parsedGroups.groups);
       const decision = resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompatibilityRaw);
       window.__lastParseRenderUiDecision = decision;
-      if (effectiveParseDrivenShouldRender(decision)) {
-        updateUiFromParseResult({ groups: parsedGroups.groups });
-      } else {
-        updateUiFromParseResult(null);
-      }
+      updateUiFromParseResult(resolveParseDrivenRenderSceneModel(decision, parsedGroups.groups));
       syncParseCompatWarning(decision);
       syncParseRenderStateUserSummary(decision);
       renderParseDebugResult();
