@@ -370,13 +370,15 @@ function buildParseRenderDebugCompatibilitySummaryView(decision) {
   const pCode = String(decision.parserReasonCode || (parserObj && parserObj.reasonCode) || "-");
   const dLevel = diagramObj ? String(diagramObj.level || "-") : "n/a";
   const reasonCodes = Array.isArray(decision.diagramReasonCodes) ? decision.diagramReasonCodes.slice() : [];
+  const canContinueParser = fr ? String(fr.renderMode || "") !== "blocked" : null;
+  const canContinueDiagram = diagramObj ? diagramObj.canRenderDiagram : null;
   return {
-    parser: { severity: pSev, source: pSrc, reasonCode: pCode, canContinueParser: decision.canContinueParser },
+    parser: { severity: pSev, source: pSrc, reasonCode: pCode, canContinueParser },
     diagram: {
       level: dLevel,
       hasDiagram: !!decision.diagram,
       isSimplifiedDiagram: decision.isSimplifiedDiagram,
-      canContinueDiagram: decision.canContinueDiagram,
+      canContinueDiagram,
       reasonCodes,
     },
     finalRender: fr
@@ -3940,15 +3942,12 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
     const shouldRender = canContinue;
     const parser = buildParserUiTraceFromMeta(parsedMeta);
     const finalRender = resolveFinalRenderDecision({ shouldRender, parser, diagramSummary });
-    const legacyShouldRender = finalRender.renderMode !== "blocked";
     return {
       finalRender,
       parser,
       diagram: diagramSummary,
       diagramReasonCodes: diagramSummary ? diagramSummary.reasonCodes : [],
       parserReasonCode: parser.reasonCode,
-      canContinueParser: legacyShouldRender,
-      canContinueDiagram: diagramSummary ? diagramSummary.canRenderDiagram : null,
       isSimplifiedDiagram: diagramSummary ? diagramSummary.isSimplifiedDisplay : null,
     };
   }
@@ -3962,15 +3961,12 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
   const useCompatWarning = allowCompatRender;
   const parser = buildParserUiTraceFromLegacyText(parseResultText, shouldRender, useCompatWarning);
   const finalRender = resolveFinalRenderDecision({ shouldRender, parser, diagramSummary });
-  const legacyShouldRender = finalRender.renderMode !== "blocked";
   return {
     finalRender,
     parser,
     diagram: diagramSummary,
     diagramReasonCodes: diagramSummary ? diagramSummary.reasonCodes : [],
     parserReasonCode: parser.reasonCode,
-    canContinueParser: legacyShouldRender,
-    canContinueDiagram: diagramSummary ? diagramSummary.canRenderDiagram : null,
     isSimplifiedDiagram: diagramSummary ? diagramSummary.isSimplifiedDisplay : null,
   };
 }
