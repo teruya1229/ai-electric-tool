@@ -4046,16 +4046,14 @@ function readParseUiDisplayWarning(input) {
 }
 
 /**
- * parse ボタン経路の描画入口。正規は finalRender.renderMode（blocked=停止 / simplified・normal=継続）。
- * finalRender が無いときのみ shouldRender でフォールバック。
+ * parse ボタン経路の描画入口。finalRender.renderMode のみ参照（blocked=停止 / それ以外は継続）。
+ * finalRender が無い・非オブジェクトのときは描画しない（shouldRender は参照しない）。
  */
 function resolveParseDrivenRenderSceneModel(decision, groups) {
   const fr = decision?.finalRender;
-  if (fr && typeof fr === "object") {
-    if (fr.renderMode === "blocked") return null;
-    return { groups };
-  }
-  return decision?.shouldRender === true ? { groups } : null;
+  if (!fr || typeof fr !== "object") return null;
+  if (fr.renderMode === "blocked") return null;
+  return { groups };
 }
 
 /** 描画継続可否（resolveParseDrivenRenderSceneModel の真偽と同値。他箇所の窓口用） */
