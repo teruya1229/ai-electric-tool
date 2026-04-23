@@ -1,5 +1,31 @@
 # status
 
+## 2026-04-23 diagram compatibility 拡張の反映（正本・追記）
+
+### 今日やったこと
+- `js/diagram/index.js` で **`three_way_1light` 系 + コンセント1個**を通常描画側へ寄せる互換拡張を反映した（commit **`94a66a8070c0212c7b9e75cd82f608b52aef636c`**、`main` push 済み）
+- `wiring-diagram.js` で上記の意味をユーザー向け補助文へ**1行だけ**反映した（commit **`d2409dbd1a3ad307dea3b7ae5036818b88a8a824`**、`main` push 済み）
+- `wiring-diagram.js` 側の責務整理は一区切りで維持
+  - **`finalRender` を正規契約**として維持
+  - **`shouldRender` / `useCompatWarning` は返却契約から切り離し**済み
+  - **`canContinueParser` / `canContinueDiagram`** は debug view 導出へ移行済み
+- `js/diagram/index.js` 側の compatibility 拡張を継続し、既存の前進ケースとして
+  - **`single_0light_outlet_bus`**
+  - **`threeway_2lights_diagram_one`**
+  - **`threeway_3lights_diagram_one`**
+  - **`threeway_4lights_diagram_one`**
+  - **`three_way_1light` 系 + コンセント1個の通常描画寄せ**
+  を反映済み
+
+### 現在の状態
+- **`wiring-diagram.js` の責務整理**はいったん一区切り
+- 開発の主線は **「責務整理フェーズ」から「diagram で未対応ケースを 1 つずつ減らすフェーズ」へ移行済み**
+- 主線は **`js/diagram/index.js` で未対応ケースを 1 つずつ減らすこと**
+- **3路多灯だけでなく別系統への横展開**も開始済み
+- **次の主線**は **another diagram family で 1 ケース前進**（**1 ファイル最小差分・既存テンプレ流用優先**）
+
+---
+
 ## 2026-04-19 parse／図互換の責務整理完了と diagram compatibility 前進（正本・追記）
 
 ### 今日やったこと
