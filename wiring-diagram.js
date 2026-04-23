@@ -3985,6 +3985,9 @@ function formatDiagramReasonCodesUserHint(diagramReasonCodes) {
   if (diagramReasonCodes.some((c) => String(c).includes("threeway_2lights_diagram_one"))) {
     hints.push("3路で2灯の系統は、図では1灯としてまとめて示しています。");
   }
+  if (diagramReasonCodes.some((c) => String(c).includes("threeway_3lights_diagram_one"))) {
+    hints.push("3路で3灯の系統は、図では1灯としてまとめて示しています。");
+  }
   return hints.join(" ");
 }
 
