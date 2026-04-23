@@ -116,6 +116,14 @@ function resolveGroupTemplate(groupDevices) {
       reasonCode: "single_2lights_same_time",
     };
   }
+  if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 3) {
+    return {
+      isSupported: true,
+      templateId: "single_switch_2lights_same_time",
+      switchType: undefined,
+      reasonCode: "single_3lights_diagram_two",
+    };
+  }
   if (switchSingleCount === 0 && switch3wayCount === 2 && lightCount === 1) {
     return { isSupported: true, templateId: "three_way_1light", switchType: "threeway", reasonCode: "threeway_1light" };
   }
