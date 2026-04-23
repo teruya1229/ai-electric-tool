@@ -3990,6 +3990,9 @@ function formatDiagramReasonCodesUserHint(diagramReasonCodes) {
   if (diagramReasonCodes.some((c) => String(c).includes("single_0light_outlet_bus"))) {
     hints.push("照明がなくてもコンセントの常時給電は、単灯用の図の形で示しています。");
   }
+  if (diagramReasonCodes.some((c) => String(c).includes("single_3lights_diagram_two"))) {
+    hints.push("片切で3灯の系統は、図では2灯の形にまとめて示しています。");
+  }
   if (diagramReasonCodes.some((c) => String(c).includes("threeway_2lights_diagram_one"))) {
     hints.push("3路で2灯の系統は、図では1灯としてまとめて示しています。");
   }
