@@ -3979,6 +3979,14 @@ function resolveParseToRenderDecision(parseResultText, parsedMeta, diagramCompat
 function formatDiagramReasonCodesUserHint(diagramReasonCodes) {
   if (!Array.isArray(diagramReasonCodes) || !diagramReasonCodes.length) return "";
   const hints = [];
+  if (
+    diagramReasonCodes.some((c) => String(c).includes("threeway_1light")) &&
+    !diagramReasonCodes.some((c) => String(c).includes("threeway_2lights_diagram_one")) &&
+    !diagramReasonCodes.some((c) => String(c).includes("threeway_3lights_diagram_one")) &&
+    !diagramReasonCodes.some((c) => String(c).includes("threeway_4lights_diagram_one"))
+  ) {
+    hints.push("3路1灯系では、コンセントがある場合は既存の3路1灯図に加えて示します。");
+  }
   if (diagramReasonCodes.some((c) => String(c).includes("single_0light_outlet_bus"))) {
     hints.push("照明がなくてもコンセントの常時給電は、単灯用の図の形で示しています。");
   }
