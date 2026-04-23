@@ -229,6 +229,7 @@ export function resolveDiagramCompatibility(devices, mode) {
 
   const outletCount = devices.filter((d) => d.kind === "outlet").length;
   const hasSingleTemplate = groups.some((group) => group.templateId !== "three_way_1light");
+  const canRenderThreewayOutlet = !hasSingleTemplate && outletCount === 1;
 
   /** @type {DiagramCompatibilityLevel} */
   let level = "normal";
@@ -238,7 +239,7 @@ export function resolveDiagramCompatibility(devices, mode) {
   } else if (unsupportedGroupCount > 0) {
     level = "simplified";
     reasonCodes.push("diagram:contains_unsupported_groups");
-  } else if (outletCount > 1 || (outletCount > 0 && !hasSingleTemplate)) {
+  } else if (outletCount > 1 || (outletCount > 0 && !hasSingleTemplate && !canRenderThreewayOutlet)) {
     level = "simplified";
     reasonCodes.push("diagram:partial_outlet_rendering");
   }
@@ -365,6 +366,15 @@ export function generateDiagram(devices, mode) {
 
     joints.push(makeJoint(`joint-l-3-${index}`, sw1X, yL, 2, 0, 0));
     joints.push(makeJoint(`joint-n-3-${index}`, lightX, yN, 2, 0, 0));
+
+    if (outlets.length) {
+      const outlet = outlets[0];
+      const outletX = 835;
+      const outletY = baseY + 136;
+      diagramDevices.push({ id: `outlet-${index}`, kind: "outlet", label: outlet.name || "C1", x: outletX, y: outletY });
+      wires.push({ id: `l-outlet-${index}`, conductor: "L", points: [{ x: outletX, y: yL }, { x: outletX, y: outletY - 18 }] });
+      wires.push({ id: `n-outlet-${index}`, conductor: "N", points: [{ x: outletX + 14, y: yN }, { x: outletX + 14, y: outletY + 18 }] });
+    }
   });
 
   return { mode, groups: grouped.groups, devices: diagramDevices, wires, joints, warnings };
