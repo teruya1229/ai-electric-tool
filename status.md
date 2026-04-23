@@ -1,5 +1,31 @@
 # status
 
+## 2026-04-23 single multi-light compatibility 拡張の反映（正本・追記）
+
+### 今日やったこと
+- `js/diagram/index.js` で **`single_3lights_diagram_two`** を追加し、**片切1 + 照明3灯**を既存の **`single_switch_2lights_same_time`** テンプレ互換へ寄せた（commit **`9f326d19e978846d9f2aa9151279446454dd7a09`**、`main` push 済み）
+- `wiring-diagram.js` で上記の意味をユーザー向け補助文へ**1行だけ**反映した（commit **`3390f1a0998a4c85b51979aaaf54eb1dd0605dca`**、`main` push 済み）
+- `wiring-diagram.js` 側の責務整理は一区切りで維持
+  - **`finalRender` を正規契約**として維持
+  - **`shouldRender` / `useCompatWarning` は返却契約から切り離し**済み
+  - **`canContinueParser` / `canContinueDiagram`** は debug view 導出へ移行済み
+- `js/diagram/index.js` 側の compatibility 拡張を継続し、既存の前進ケースとして
+  - **`single_0light_outlet_bus`**
+  - **`threeway_2lights_diagram_one`**
+  - **`threeway_3lights_diagram_one`**
+  - **`threeway_4lights_diagram_one`**
+  - **`three_way_1light` 系 + コンセント1個**
+  - **`single_3lights_diagram_two`**
+  を反映済み
+
+### 現在の状態
+- **`wiring-diagram.js` の責務整理**はいったん一区切り
+- 開発の主線は **`js/diagram/index.js` で未対応ケースを 1 つずつ削減**するフェーズを継続中
+- **3路多灯だけでなく別ファミリーへの横展開**も進行中
+- **次の主線**は **another non-threeway family で 1 ケース前進**（**1 ファイル最小差分・既存テンプレ流用優先**）
+
+---
+
 ## 2026-04-23 diagram compatibility 拡張の反映（正本・追記）
 
 ### 今日やったこと
