@@ -1,5 +1,28 @@
 # status
 
+## 2026-04-24 parser→sceneModel 反映経路の切り分け（正本・追記）
+
+### 今日わかったこと
+- 自然文3入力（片切スイッチ2個 + 複数コンセント系）は **`parse.ok`** になるが、diagram 側の reasonCode は期待した `*_multi_outlet_partial` に到達しない
+- `#parseResultPanel pre` には parser 認識値（例: `コンセント数: 2` / `灯数: 2` / `同時点灯: あり`）が表示される
+- 一方で `#debug-result` / `#group-list` / diagram 入力は **`switch_single=1, light=1, outlet=0`** 相当に収束し、`diagramReasonCodes` はほぼ `control:1:single_1light` になる
+- つまり、**parser 表示値**と**sceneModel/groups/devices の実体**に不一致がある
+- 主因は `wiring-diagram.js` / `js/diagram/index.js` ではなく、**`js/ui/index.js` の `parseAndApplyProblemText` 経路**にある
+- `parseAndApplyProblemText` は `parsed.lightCount` / `parsed.outletCount` を select に一時反映するが、active group の `devices` へ `_setGroupQuantity(...)` で反映していない
+- その後 `renderAll` / `generateAndRender` が走るため、初期 `group.devices`（`light=1` / `outlet=0`）で再同期される
+- switch 数 / controlCount については parser 側でも `controlCount` が実質固定 1 で、自然文から「スイッチ2個」を 2 switch device として保持する設計は未対応
+
+### 現在の状態
+- diagram 側では 2スイッチ系 multi-outlet partial reasonCode 群の追加は完了済み
+- `resolveDiagramCompatibility` 側でも `*_multi_outlet_partial` → `diagram:single_multi_outlet_partial` の整理は完了済み
+- `wiring-diagram.js` 側でも以下3 reasonCode のユーザー向け短文表示は追加済み
+  - `single_2switches_0light_multi_outlet_partial`
+  - `single_2switches_1light_multi_outlet_partial`
+  - `single_2switches_2lights_multi_outlet_partial`
+- ただし現状の自然文入力経路では、`js/ui/index.js` 側で値が潰れるため、上記 reasonCode まで到達できない
+
+---
+
 ## 2026-04-23 single multi-light compatibility 拡張の反映（正本・追記）
 
 ### 今日やったこと

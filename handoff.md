@@ -4,6 +4,34 @@ AI電気施工アシスタント / `C:\dev\ai-electric-tool` の作業メモ。
 
 ---
 
+## 2026-04-24 次手・判断基準（parser認識値→sceneModel反映の整合）
+
+### 次にやるべき1手
+- **`js/ui/index.js` のみ**を最小差分で修正し、`parseAndApplyProblemText` で parser の `lightCount` / `outletCount` を active group の `devices` に直接反映する
+- 反映方針（最小）:
+  - `_setGroupQuantity(group, "light", parsed.lightCount || 0)`
+  - `_setGroupQuantity(group, "outlet", parsed.outletCount || 0)`
+  - `group.switchType` / `group.sameTime` は既存方針を維持
+  - その後 `renderAll` / `generateAndRender`
+- 目的は **`group-list` → `parseGroupsFromDom` → diagram 入力**までの照明数・コンセント数整合を先に回復すること
+
+### 判断基準
+- `#parseResultPanel pre` の認識値（灯数/コンセント数）と、`#group-list` / `#debug-result` の値が一致するか
+- `#debug-result` の devices 内訳が入力に応じて変わるか（`outlet=0` 固定が解消されるか）
+- `parseGroupsFromDom` が再構築した group の `lightCount` / `outletCount` が入力意図に一致するか
+- `diagramReasonCodes` が `control:1:single_1light` 固定から外れるか
+- 変更を **1ファイル最小差分**で閉じられているか
+
+### 注意点
+- 次のコード修正対象は **`js/ui/index.js` のみ**
+- parser 本体（`js/parser/index.js`）はこのステップでは触らない
+- `wiring-diagram.js` / `js/diagram/index.js` はこのステップでは触らない
+- `stability-test.ps1` は触らない
+- docs 更新とコード実行依頼を混在させない
+- **「スイッチ2個 → switch device 2個」対応は別ステップ**（parser/controlCount 設計）として分離する
+
+---
+
 ## 2026-04-23 次手・判断基準（another non-threeway family）
 
 ### 次にやるべき1手
