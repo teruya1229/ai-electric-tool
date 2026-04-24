@@ -326,6 +326,7 @@ export function resolveDiagramCompatibility(devices, mode) {
   const outletCount = devices.filter((d) => d.kind === "outlet").length;
   const hasSingleTemplate = groups.some((group) => group.templateId !== "three_way_1light");
   const canRenderThreewayOutlet = !hasSingleTemplate && outletCount === 1;
+  const hasControlMultiOutletPartial = reasonCodes.some((code) => /_multi_outlet_partial$/.test(String(code)));
 
   /** @type {DiagramCompatibilityLevel} */
   let level = "normal";
@@ -335,9 +336,9 @@ export function resolveDiagramCompatibility(devices, mode) {
   } else if (unsupportedGroupCount > 0) {
     level = "simplified";
     reasonCodes.push("diagram:contains_unsupported_groups");
-  } else if (outletCount > 1 && hasSingleTemplate) {
+  } else if (hasControlMultiOutletPartial || (outletCount > 1 && hasSingleTemplate)) {
     level = "simplified";
-    reasonCodes.push("diagram:single_multi_outlet_partial");
+    if (!reasonCodes.includes("diagram:single_multi_outlet_partial")) reasonCodes.push("diagram:single_multi_outlet_partial");
   } else if (outletCount > 1 || (outletCount > 0 && !hasSingleTemplate && !canRenderThreewayOutlet)) {
     level = "simplified";
     reasonCodes.push("diagram:partial_outlet_rendering");
