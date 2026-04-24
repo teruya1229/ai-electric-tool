@@ -186,6 +186,20 @@ function effectiveGroupTemplate(allDevices, groupDevices) {
   }
 
   if (switchSingleCount === 2 && switch3wayCount === 0 && lightCount === 1) {
+    const supplyOutletCount =
+      groupDevices.filter((d) => d.kind === "outlet").length +
+      allDevices.filter((d) => d.kind === "outlet" && typeof d.controlId !== "number").length;
+    if (supplyOutletCount > 1) {
+      return {
+        isSupported: true,
+        templateId: "single_switch_1light",
+        switchType: undefined,
+        reasonCode: "single_2switches_1light_multi_outlet_partial",
+      };
+    }
+  }
+
+  if (switchSingleCount === 2 && switch3wayCount === 0 && lightCount === 1) {
     return {
       isSupported: true,
       templateId: "single_switch_1light",
