@@ -247,6 +247,9 @@ export function resolveDiagramCompatibility(devices, mode) {
   } else if (unsupportedGroupCount > 0) {
     level = "simplified";
     reasonCodes.push("diagram:contains_unsupported_groups");
+  } else if (outletCount > 1 && hasSingleTemplate) {
+    level = "simplified";
+    reasonCodes.push("diagram:single_multi_outlet_partial");
   } else if (outletCount > 1 || (outletCount > 0 && !hasSingleTemplate && !canRenderThreewayOutlet)) {
     level = "simplified";
     reasonCodes.push("diagram:partial_outlet_rendering");
