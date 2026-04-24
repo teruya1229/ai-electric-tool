@@ -195,6 +195,20 @@ function effectiveGroupTemplate(allDevices, groupDevices) {
   }
 
   if (switchSingleCount === 2 && switch3wayCount === 0 && lightCount === 2) {
+    const hasSupplyOutlet =
+      outletInGroup ||
+      allDevices.some((d) => d.kind === "outlet" && typeof d.controlId !== "number");
+    if (hasSupplyOutlet) {
+      return {
+        isSupported: true,
+        templateId: "single_switch_2lights_same_time",
+        switchType: undefined,
+        reasonCode: "single_2switches_2lights_1outlet_diagram_one",
+      };
+    }
+  }
+
+  if (switchSingleCount === 2 && switch3wayCount === 0 && lightCount === 2) {
     return {
       isSupported: true,
       templateId: "single_switch_2lights_same_time",
