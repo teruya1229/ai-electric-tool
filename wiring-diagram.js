@@ -3993,6 +3993,17 @@ function formatDiagramReasonCodesUserHint(diagramReasonCodes) {
   if (diagramReasonCodes.some((c) => String(c).includes("single_3lights_diagram_two"))) {
     hints.push("片切で3灯の系統は、図では2灯の形にまとめて示しています。");
   }
+  if (
+    diagramReasonCodes.some((c) =>
+      [
+        "single_2switches_0light_multi_outlet_partial",
+        "single_2switches_1light_multi_outlet_partial",
+        "single_2switches_2lights_multi_outlet_partial",
+      ].includes(String(c)),
+    )
+  ) {
+    hints.push("片切スイッチ2個 + 複数コンセントは、図では代表形にまとめて表示しています");
+  }
   if (diagramReasonCodes.some((c) => String(c).includes("threeway_2lights_diagram_one"))) {
     hints.push("3路で2灯の系統は、図では1灯としてまとめて示しています。");
   }
