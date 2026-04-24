@@ -185,6 +185,15 @@ function effectiveGroupTemplate(allDevices, groupDevices) {
     };
   }
 
+  if (switchSingleCount === 2 && switch3wayCount === 0 && lightCount === 1) {
+    return {
+      isSupported: true,
+      templateId: "single_switch_1light",
+      switchType: undefined,
+      reasonCode: "single_2switches_1light_diagram_one",
+    };
+  }
+
   return base;
 }
 
