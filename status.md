@@ -1,5 +1,34 @@
 # status
 
+## 2026-04-26 2スイッチ+複数コンセント partial 完了
+
+### 完了したこと
+- 片切スイッチ2個 + 複数コンセント系は、parser → UI → diagram reason → ユーザー向け警告表示まで接続完了
+- 実ブラウザで以下3入力を確認済み
+  1. 片切スイッチ2個、コンセント2個
+  2. 片切スイッチ2個、照明1灯、コンセント2個
+  3. 片切スイッチ2個、照明2灯同時点灯、コンセント2個
+- 3ケースとも `controlCount: 2` / `コンセント数: 2個` / `エラー: なし` を確認
+- 3ケースとも期待短文が警告欄に1回だけ表示されることを確認
+  - `片切スイッチ2個 + 複数コンセントは、図では代表形にまとめて表示しています`
+- 既存警告（コンセント補助情報2文）と、3ケース目の多灯コンセント簡略表示警告は維持
+- 代表図 outlet 1個表示の方針を維持し、複数コンセント完全描画は意図的にスコープ外
+
+### 主な到達コミット
+- `1b17a4e`: parsed light/outlet count を active group に反映
+- `2a32ed0`: parsed controlCount を switch_single 数量へ反映し図入力へ補正
+- `d47b571`: parser で片切スイッチ数を controlCount に反映
+- `9c59de6`: multi-outlet count を compatibility reasoning に保持
+- `0ff0d25`: 接頭辞付き multi-outlet reason を短文判定で拾う
+- `d2ce1d5` / `9d18e68` / `ddb1b90` / `6805e3e`: warning 表示経路の調整
+- `976a98f`: `renderParseResult` 側で2スイッチ+複数コンセント短文を安定表示
+- `976a98f` 反映後の実ブラウザ確認で3ケース合格
+
+### 現在の状態
+- 2スイッチ + 複数コンセント partial 対応は完了扱い
+- `stability-test.ps1` は今回未実施
+- `PROJECT_STATE.md` の既存変更と多数未追跡ファイルは継続して残っている
+
 ## 2026-04-26 parser→UI→diagramReasonCodes→wiring短文 到達点
 
 ### 今日やったこと
