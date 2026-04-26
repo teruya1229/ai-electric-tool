@@ -198,6 +198,16 @@ export function parseProblemText(text) {
     parsed.circuitType = circuitPicked.hit.value;
     addRule(circuitPicked.hit.rule);
   }
+  if (parsed.circuitType === "single") {
+    const controlMatch = normalized.match(/片切(?:スイッチ)?(?:が|は)?\s*([1-9][0-9]*)\s*(?:個|箇所|つ)?(?=$|[\s、,。])/);
+    if (controlMatch) {
+      const controlCount = Number(controlMatch[1]);
+      if (Number.isFinite(controlCount) && controlCount >= 1) {
+        parsed.controlCount = Math.min(Math.max(controlCount, 1), 4);
+        addRule("control:single_switch_count");
+      }
+    }
+  }
 
   const lightPicked = _pickSingleByRule(PARSE_RULES.lightCount, normalized);
   if (lightPicked.hitCount > 1) {
