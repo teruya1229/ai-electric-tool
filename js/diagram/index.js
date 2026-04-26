@@ -245,6 +245,15 @@ function effectiveGroupTemplate(allDevices, groupDevices) {
     };
   }
 
+  if (switchSingleCount === 2 && switch3wayCount === 0 && lightCount === 3) {
+    return {
+      isSupported: true,
+      templateId: "single_switch_2lights_same_time",
+      switchType: undefined,
+      reasonCode: "single_2switches_3lights_diagram_two",
+    };
+  }
+
   if (switchSingleCount === 2 && switch3wayCount === 0 && lightCount === 0) {
     const supplyOutletCount =
       groupDevices.filter((d) => d.kind === "outlet").length +
