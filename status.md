@@ -1,5 +1,32 @@
 # status
 
+## 2026-04-26 parser→UI→diagramReasonCodes→wiring短文 到達点
+
+### 今日やったこと
+- `js/ui/index.js` で `parsed.lightCount` / `parsed.outletCount` を active `group.devices` に反映する修正を反映済み
+- `js/ui/index.js` で `parsed.controlCount` を `switch_single` 数量へ反映し、図入力へ `sw2...` を差し込める修正を反映済み
+- `js/parser/index.js` で「片切スイッチ2個」「片切2」「片切スイッチが2つ」などを `parsed.controlCount=2` として返す修正を反映済み
+- `js/ui/index.js` で group 側 `outlet>=2` 情報を compatibility 判定まで保持する修正を反映済み
+- `wiring-diagram.js` で `control:1:` 接頭辞付き `*_multi_outlet_partial` reasonCode でも短文判定に入る修正を反映済み
+
+### 現在の状態
+- 片切スイッチ2個 + コンセント2個系は Node/同等経路で次へ到達確認済み
+  - `control:1:single_2switches_1light_multi_outlet_partial`
+  - `control:1:single_2switches_2lights_multi_outlet_partial`
+  - `diagram:single_multi_outlet_partial`
+- ユーザー向け短文 `片切スイッチ2個 + 複数コンセントは、図では代表形にまとめて表示しています` は接頭辞付き reasonCode でも出る条件になった
+- 代表図は outlet 1個表示のまま
+- 複数コンセント完全描画は未対応で、意図的にスコープ外
+- `stability-test.ps1` は今回未実施
+- `PROJECT_STATE.md` の既存変更と多数未追跡ファイルは継続して残っている
+
+### 直近コミット
+- `1b17a4e`: parsed light/outlet count を active group に反映
+- `2a32ed0`: parsed controlCount を switch_single 数量へ反映し図入力へ補正
+- `d47b571`: parser で片切スイッチ数を controlCount に反映
+- `9c59de6`: multi-outlet count を compatibility reasoning に保持
+- `0ff0d25`: 接頭辞付き multi-outlet reason を短文判定で拾う
+
 ## 2026-04-24 parser→sceneModel 反映経路の切り分け（正本・追記）
 
 ### 今日わかったこと

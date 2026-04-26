@@ -4,6 +4,32 @@ AI電気施工アシスタント / `C:\dev\ai-electric-tool` の作業メモ。
 
 ---
 
+## 2026-04-26 次手・判断基準（2スイッチ+複数コンセント partial 最終目視）
+
+### 次にやるべき1手
+- 実ブラウザで `wiring-diagram.html` を開き、次の3入力を流して最終目視確認する
+  1. 片切スイッチ2個、コンセント2個
+  2. 片切スイッチ2個、照明1灯、コンセント2個
+  3. 片切スイッチ2個、照明2灯同時点灯、コンセント2個
+
+### 判断基準
+- `parse.ok` になる
+- `group-list` が「片切 / 照明1 or 2 / コンセント2」になる
+- `#debug-result devices` に `switch_single=2` / `outlet=2` が出る
+- `diagramReasonCodes` に `control:1:single_2switches_*_multi_outlet_partial` と `diagram:single_multi_outlet_partial` が出る
+- ユーザー向け短文が1回だけ表示される
+- 図が崩れていない
+- outlet は代表図として1個表示のままでよい
+
+### 注意点
+- 次は確認のみで、コード修正を混ぜない
+- `stability-test.ps1` は触らない
+- 完全な複数コンセント描画には進めない
+- 「代表表示 + partial reason」の方針を維持する
+- 実ブラウザ確認で問題なければ、この multi-outlet partial 対応は完了扱いにする
+
+---
+
 ## 2026-04-24 次手・判断基準（parser認識値→sceneModel反映の整合）
 
 ### 次にやるべき1手
