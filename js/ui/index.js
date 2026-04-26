@@ -170,6 +170,15 @@ function renderActiveGroupDiagram(sceneModel) {
         devicesForDiagram = built.devices.slice(0, swIdx + 1).concat(extras, built.devices.slice(swIdx + 1));
       }
     }
+    const outletQty = _getGroupQuantity(active, "outlet");
+    const renderedOutletCount = devicesForDiagram.filter((d) => d.kind === "outlet").length;
+    if (outletQty > renderedOutletCount && renderedOutletCount > 0) {
+      const outletExtras = [];
+      for (let i = renderedOutletCount + 1; i <= outletQty; i += 1) {
+        outletExtras.push({ id: `outlet-extra-${i}`, kind: "outlet", name: `C${i}` });
+      }
+      devicesForDiagram = devicesForDiagram.concat(outletExtras);
+    }
   }
   result.devices = devicesForDiagram;
 
