@@ -3718,6 +3718,8 @@ const PARSE_UI_COMPAT = {
   parserErrorText: "3路 + 複数照明は現行描画仕様で未対応です。",
   warningText: "3路2灯以上は、図では1灯として扱います。残りは補助情報で確認してください。",
 };
+const TWO_SWITCH_MULTI_OUTLET_USER_HINT =
+  "片切スイッチ2個 + 複数コンセントは、図では代表形にまとめて表示しています";
 
 /** finalRender.parserReason が 3路互換段落（warningText）に相当するかの粗い判定（全文は出さない） */
 function finalRenderParserImpliesThreewayCompatParagraph(fr) {
@@ -4123,27 +4125,58 @@ function warrantsThreewayCompatWarningParagraph(input) {
   return parserTraceIndicatesCompatAttentionForDisplay(input.parser);
 }
 
+function hasTwoSwitchMultiOutletPartialReasonCode(diagramReasonCodes) {
+  if (!Array.isArray(diagramReasonCodes) || !diagramReasonCodes.length) return false;
+  return diagramReasonCodes.some((c) => {
+    const code = String(c);
+    return (
+      code.includes("single_2switches_0light_multi_outlet_partial") ||
+      code.includes("single_2switches_1light_multi_outlet_partial") ||
+      code.includes("single_2switches_2lights_multi_outlet_partial")
+    );
+  });
+}
+
+function parserCodeListIndicatesTwoSwitchMultiOutlet(codeList) {
+  if (!codeList || typeof codeList !== "object") return false;
+  const controlCount = Number(codeList.controlCount || 0);
+  const outletCount = Number(codeList.outletCount || 0);
+  return controlCount === 2 && outletCount >= 2;
+}
+
 function syncParseCompatWarning(input) {
   const injectThreewayCompat = warrantsThreewayCompatWarningParagraph(input);
+  const injectTwoSwitchMultiOutletHint =
+    hasTwoSwitchMultiOutletPartialReasonCode(input?.diagramReasonCodes) ||
+    parserCodeListIndicatesTwoSwitchMultiOutlet(input?.parser?.codeList);
   const warningEl = document.getElementById("warning-result");
   if (!(warningEl instanceof HTMLElement)) return;
-  const currentWarning = String(warningEl.textContent || "");
+  let currentWarning = String(warningEl.textContent || "");
   const warningText = PARSE_UI_COMPAT.warningText;
-  const warningPattern = new RegExp(`(^|\\n)${warningText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\n|$)`, "g");
-
-  if (injectThreewayCompat) {
-    if (currentWarning.includes(warningText)) return;
+  const ensureWarningLine = (text) => {
+    if (currentWarning.includes(text)) return;
     if (!currentWarning || currentWarning === "警告なし") {
-      warningEl.textContent = warningText;
+      currentWarning = text;
       return;
     }
-    warningEl.textContent = `${currentWarning}\n${warningText}`;
-    return;
-  }
+    currentWarning = `${currentWarning}\n${text}`;
+  };
+  const removeWarningLine = (text) => {
+    if (!currentWarning.includes(text)) return;
+    const textPattern = new RegExp(`(^|\\n)${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\n|$)`, "g");
+    currentWarning = currentWarning.replace(textPattern, "").replace(/\n{2,}/g, "\n").trim();
+    if (!currentWarning) currentWarning = "警告なし";
+  };
 
-  if (currentWarning.includes(warningText)) {
-    const nextWarning = currentWarning.replace(warningPattern, "").replace(/\n{2,}/g, "\n").trim();
-    warningEl.textContent = nextWarning || "警告なし";
+  if (injectThreewayCompat) ensureWarningLine(warningText);
+  else removeWarningLine(warningText);
+
+  if (injectTwoSwitchMultiOutletHint) ensureWarningLine(TWO_SWITCH_MULTI_OUTLET_USER_HINT);
+  else removeWarningLine(TWO_SWITCH_MULTI_OUTLET_USER_HINT);
+
+  if (!currentWarning) currentWarning = "警告なし";
+  if (warningEl.textContent !== currentWarning) {
+    warningEl.textContent = currentWarning;
   }
 }
 
