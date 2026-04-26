@@ -138,6 +138,7 @@ function renderActiveGroupDiagram(sceneModel) {
     conditionId: null,
     devices: [],
     resolved: { lightCount: 0, outletCount: 0 },
+    compatibility: { originalLightCount: 0, renderLightCount: 0 },
   };
   if (!sceneModel.groups.length) {
     result.error = "系統がありません";
@@ -161,6 +162,7 @@ function renderActiveGroupDiagram(sceneModel) {
   result.errors.push(...built.errors);
   result.conditionId = built.conditionId;
   result.resolved = built.resolved;
+  result.compatibility = built.compatibility || result.compatibility;
   if (built.errors.length) {
     result.error = built.errors.join(" / ");
     result.devices = built.devices;
@@ -194,7 +196,11 @@ function renderActiveGroupDiagram(sceneModel) {
 
   try {
     const generationMode = sceneModel.mode === "exam_gamidenki" ? "exam" : sceneModel.mode;
-    result.diagram = { ...generateDiagram(devicesForDiagram, generationMode), mode: sceneModel.mode };
+    const diagramInput = {
+      devices: devicesForDiagram,
+      compatibility: result.compatibility,
+    };
+    result.diagram = { ...generateDiagram(diagramInput, generationMode), mode: sceneModel.mode };
   } catch (_error) {
     result.error = "複線図生成に失敗しました";
   }
@@ -280,6 +286,7 @@ export function initPlayground() {
     sceneParseWarnings: [],
     sceneParseErrors: [],
     simplified: { lightCount: 0, outletCount: 0 },
+    compatibility: { originalLightCount: 0, renderLightCount: 0 },
     diagram: EMPTY_DIAGRAM,
     error: "",
   };
@@ -450,6 +457,7 @@ export function initPlayground() {
     state.inputErrors = rendered.errors;
     state.selectedCondition = rendered.conditionId;
     state.simplified = rendered.resolved;
+    state.compatibility = rendered.compatibility;
 
     groupEl.textContent = state.diagram.groups.length ? JSON.stringify(state.diagram.groups, null, 2) : "グループ化結果なし";
     const allWarnings = [
@@ -495,6 +503,7 @@ export function initPlayground() {
           activeGroupIndex: state.sceneModel.activeGroupIndex,
         },
         devices: state.devices,
+        compatibility: state.compatibility,
         formState: state.formState,
         sceneParseWarnings: state.sceneParseWarnings,
         sceneParseErrors: state.sceneParseErrors,
