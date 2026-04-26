@@ -1,5 +1,35 @@
 # status
 
+## 2026-04-26 片切1+4灯 compatibility 完了
+
+### 完了したこと
+- 片切スイッチ1個 + 照明4灯を、既存の2灯代表図へ寄せる compatibility 対応を完了（実ブラウザ確認まで実施）
+- `js/diagram/index.js` に `single_4lights_diagram_two` を追加済み
+- `js/parser/index.js` で `compatibility.originalLightCount` / `compatibility.renderLightCount` を保持
+- `js/ui/index.js` で `built.compatibility` を `generateDiagram` に渡す導線を追加
+- `wiring-diagram.js` で `single_4lights_diagram_two` のユーザー向け短文を追加済み
+- 実ブラウザで入力「片切スイッチ1個、照明4灯同時点灯」を確認済み
+  - 判定結果: 解析成功 / 回路種別: 片切 / 灯数: 4灯 / 同時点灯: あり / `controlCount: 1` / エラー: なし
+  - `matchedRules` に `light:4` / `sameTime:true` が出る
+  - `reasonCode`: `control:1:single_4lights_diagram_two`
+  - 短文「片切1 + 照明4灯は、図では2灯の形にまとめて表示しています」が表示される
+- 既存の代表表示説明も維持（現行SVGは照明2灯まで／3灯以上は2灯まで図示し残りは補助情報）
+- 完全な4灯描画は未対応で意図的にスコープ外
+- `stability-test.ps1` は今回一切触っていない
+
+### 主な到達コミット
+- `d61b2ba`: `single_4lights_diagram_two` を diagram 側に追加
+- `fbccc46`: `single_4lights_diagram_two` のユーザー向け短文を追加
+- `a4313ca`: parser 側で `originalLightCount` / `renderLightCount` を保持
+- `e82704c`: diagram 側で `compatibility.originalLightCount` を参照
+- `daac944`: UI 経路で compatibility メタデータを `generateDiagram` に渡す
+
+### 現在の状態
+- 片切1 + 4灯 compatibility 対応は完了扱い
+- 2スイッチ + 複数コンセント partial 対応も完了扱い（前セクション）
+- 代表表示 + partial / compatibility reason の方針を維持
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは引き続き残っている
+
 ## 2026-04-26 2スイッチ+複数コンセント partial 完了
 
 ### 完了したこと
