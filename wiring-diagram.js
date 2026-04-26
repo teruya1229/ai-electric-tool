@@ -4190,6 +4190,41 @@ function syncParseCompatWarning(input) {
   }
 }
 
+function syncTwoSwitchMultiOutletParsePanelHint() {
+  const pre = document.querySelector("#parseResultPanel pre");
+  if (!(pre instanceof HTMLElement)) return;
+  const text = String(pre.textContent || "");
+  if (!text) return;
+  const hasTwoSwitches = /controlCount:\s*2/.test(text);
+  const outletMatch = text.match(/コンセント数:\s*(\d+)個/);
+  const hasMultiOutlet = Boolean(outletMatch && Number(outletMatch[1]) >= 2);
+  const shouldInject = hasTwoSwitches && hasMultiOutlet;
+  const hintLine = `- ${TWO_SWITCH_MULTI_OUTLET_USER_HINT}`;
+
+  const lines = text.split(/\r?\n/);
+  const warningIdx = lines.findIndex((line) => line.trim().startsWith("警告:"));
+  if (warningIdx < 0) return;
+  const errorIdx = lines.findIndex((line, idx) => idx > warningIdx && line.trim().startsWith("エラー:"));
+  const warningEndIdx = errorIdx >= 0 ? errorIdx : lines.length;
+
+  const removeHintLine = () => {
+    for (let i = warningEndIdx - 1; i > warningIdx; i -= 1) {
+      if (lines[i].trim() === hintLine) lines.splice(i, 1);
+    }
+  };
+  removeHintLine();
+
+  if (shouldInject) {
+    if (/^警告:\s*なし\s*$/.test(lines[warningIdx].trim())) {
+      lines[warningIdx] = "警告:";
+    }
+    lines.splice(warningIdx + 1, 0, hintLine);
+  }
+
+  const nextText = lines.join("\n");
+  if (nextText !== text) pre.textContent = nextText;
+}
+
 window.renderCircuitList = renderCircuitList;
 window.renderMaterialList = renderMaterialList;
 window.renderCircuitMaterialList = renderCircuitMaterialList;
@@ -4261,11 +4296,13 @@ if (parseProblemButton instanceof HTMLButtonElement) {
       window.__lastParseRenderUiDecision = decision;
       updateUiFromParseResult(resolveParseDrivenRenderSceneModel(decision, parsedGroups.groups));
       syncParseCompatWarning(decision);
+      syncTwoSwitchMultiOutletParsePanelHint();
       syncParseRenderStateUserSummary(decision);
       renderParseDebugResult();
       window.setTimeout(() => {
         const latestDecision = window.__lastParseRenderUiDecision || decision;
         syncParseCompatWarning(latestDecision);
+        syncTwoSwitchMultiOutletParsePanelHint();
       }, 0);
     });
   });
