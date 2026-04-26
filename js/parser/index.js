@@ -351,6 +351,7 @@ export function buildDiagramInputFromDevices(model) {
     warnings: [],
     errors: [],
     resolved: { lightCount: 0, outletCount: 0 },
+    compatibility: { originalLightCount: 0, renderLightCount: 0 },
   };
 
   if (!model || !model.groups?.length) {
@@ -398,6 +399,9 @@ export function buildDiagramInputFromDevices(model) {
     renderOutletCount = 1;
     result.warnings.push("コンセント2個以上は1個まで図示し、残りは補助情報として扱います。");
   }
+
+  result.compatibility.originalLightCount = lightCount;
+  result.compatibility.renderLightCount = renderLightCount;
 
   result.conditionId = _inferConditionIdFromCounts(model.circuitType, lightCount, outletCount, model.sameTime);
   result.devices.push({ id: "power", kind: "power", name: "電源" });
@@ -472,6 +476,7 @@ export function buildDiagramInputFromGroup(group) {
     warnings: [],
     errors: [],
     resolved: { lightCount: 0, outletCount: 0 },
+    compatibility: { originalLightCount: 0, renderLightCount: 0 },
   };
   if (!group) {
     result.errors.push("系統が選択されていません。");
@@ -511,6 +516,7 @@ export function buildDiagramInputFromGroup(group) {
   result.warnings.push(...built.warnings);
   result.errors.push(...built.errors);
   result.resolved = built.resolved;
+  result.compatibility = built.compatibility || result.compatibility;
   return result;
 }
 
