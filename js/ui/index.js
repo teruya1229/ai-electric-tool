@@ -31,23 +31,30 @@ function renderParseResult(parsed) {
   const circuitMap = { single: "片切", threeway: "3路" };
   const twoSwitchMultiOutletHint = "片切スイッチ2個 + 複数コンセントは、図では代表形にまとめて表示しています";
   const threeSwitchOneLightHint = "片切スイッチ3個 + 照明1灯は、図では1灯の形にまとめて表示しています";
-  const warnings = Array.isArray(parsed.warnings) ? parsed.warnings.slice() : [];
+  if (!Array.isArray(parsed.warnings)) parsed.warnings = [];
+  const warnings = [...parsed.warnings];
+  const isSingleCircuit = parsed.circuitType === "single";
+  const controlN = Number(parsed.controlCount);
+  const lightN = Number(parsed.lightCount);
+  const outletN = Number(parsed.outletCount ?? 0);
   if (
-    parsed.circuitType === "single" &&
+    isSingleCircuit &&
+    controlN === 3 &&
+    lightN === 1 &&
+    outletN === 0 &&
+    !warnings.includes(threeSwitchOneLightHint)
+  ) {
+    warnings.push(threeSwitchOneLightHint);
+    if (!parsed.warnings.includes(threeSwitchOneLightHint)) parsed.warnings.push(threeSwitchOneLightHint);
+  }
+  if (
+    isSingleCircuit &&
     Number(parsed.controlCount) === 2 &&
     Number(parsed.outletCount) >= 2 &&
     !warnings.includes(twoSwitchMultiOutletHint)
   ) {
     warnings.push(twoSwitchMultiOutletHint);
-  }
-  if (
-    parsed.circuitType === "single" &&
-    Number(parsed.controlCount) === 3 &&
-    Number(parsed.lightCount) === 1 &&
-    Number(parsed.outletCount || 0) === 0 &&
-    !warnings.includes(threeSwitchOneLightHint)
-  ) {
-    warnings.push(threeSwitchOneLightHint);
+    if (!parsed.warnings.includes(twoSwitchMultiOutletHint)) parsed.warnings.push(twoSwitchMultiOutletHint);
   }
   const lightText = parsed.lightCount ? `${parsed.lightCount}灯` : "未判定";
   const modeText = parsed.sameTime ? "あり" : "なし";
