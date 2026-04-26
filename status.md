@@ -1,5 +1,31 @@
 # status
 
+## 2026-04-26 片切3+照明1 compatibility 完了
+
+### 完了したこと
+- 片切スイッチ3個 + 照明1灯を、既存の1灯代表図へ寄せる compatibility 対応を完了（実ブラウザ確認まで実施）
+- `js/diagram/index.js` に `single_3switches_1light_diagram_one` を追加済み
+- `wiring-diagram.js` に同 reasonCode のユーザー向け短文を追加済み
+- `js/ui/index.js` の `renderParseResult` で、黒い解析結果欄（`#parseResultPanel pre`）の「警告:」にも同短文が出るよう対応済み
+- 実ブラウザで入力「片切スイッチ3個、照明1灯」を確認済み
+  - 判定結果: 解析成功 / 回路種別: 片切 / 灯数: 1灯 / `controlCount: 3` / エラー: なし
+  - `reasonCode`: `control:1:single_3switches_1light_diagram_one`
+  - 短文「片切スイッチ3個 + 照明1灯は、図では1灯の形にまとめて表示しています」が表示される
+- 完全な3スイッチ描画は未対応で意図的にスコープ外
+- 代表表示 + compatibility reason + ユーザー向け短文の方針を維持
+- `stability-test.ps1` は今回一切触っていない
+
+### 主な到達コミット
+- `99f12d9`: 片切3+照明1を1灯代表図へ寄せる diagram compatibility を追加
+- `ade91da`: 片切3+照明1の解析結果パネル向け短文追加
+- `a0917c8`: `renderParseResult` の `warnings` / `parsed.warnings` 同期を整理し、警告表示を安定化
+
+### 現在の状態
+- 片切3 + 照明1 compatibility 対応は完了扱い
+- 片切1 + 4灯 compatibility 対応も完了扱い（次セクション）
+- 2スイッチ + 複数コンセント partial 対応も完了扱い
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは引き続き残っている
+
 ## 2026-04-26 片切1+4灯 compatibility 完了
 
 ### 完了したこと
