@@ -525,6 +525,12 @@ export function initPlayground() {
     }
     const group = getActiveGroup();
     if (!group) return;
+    if (typeof parsed.lightCount === "number" && Number.isFinite(parsed.lightCount)) {
+      _setGroupQuantity(group, "light", parsed.lightCount);
+    }
+    if (typeof parsed.outletCount === "number" && Number.isFinite(parsed.outletCount)) {
+      _setGroupQuantity(group, "outlet", parsed.outletCount);
+    }
     if (parsed.lightCount) lightCountSelect.value = String(parsed.lightCount);
     outletCountSelect.value = String(parsed.outletCount || 0);
     group.switchType = applied.circuitType === "threeway" ? "threeway" : "single";
