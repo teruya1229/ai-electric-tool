@@ -150,15 +150,32 @@ function renderActiveGroupDiagram(sceneModel) {
   result.warnings.push(...built.warnings);
   result.errors.push(...built.errors);
   result.conditionId = built.conditionId;
-  result.devices = built.devices;
   result.resolved = built.resolved;
   if (built.errors.length) {
     result.error = built.errors.join(" / ");
+    result.devices = built.devices;
     return result;
   }
+
+  let devicesForDiagram = built.devices;
+  if (active.switchType !== "threeway") {
+    const switchSingleQty = _getGroupQuantity(active, "switch_single");
+    if (switchSingleQty > 1) {
+      const swIdx = built.devices.findIndex((d) => d.kind === "switch_single");
+      if (swIdx !== -1) {
+        const extras = [];
+        for (let i = 2; i <= switchSingleQty; i += 1) {
+          extras.push({ id: `sw${i}`, kind: "switch_single", name: `SW${i}`, controlId: 1 });
+        }
+        devicesForDiagram = built.devices.slice(0, swIdx + 1).concat(extras, built.devices.slice(swIdx + 1));
+      }
+    }
+  }
+  result.devices = devicesForDiagram;
+
   try {
     const generationMode = sceneModel.mode === "exam_gamidenki" ? "exam" : sceneModel.mode;
-    result.diagram = { ...generateDiagram(built.devices, generationMode), mode: sceneModel.mode };
+    result.diagram = { ...generateDiagram(devicesForDiagram, generationMode), mode: sceneModel.mode };
   } catch (_error) {
     result.error = "複線図生成に失敗しました";
   }
@@ -530,6 +547,11 @@ export function initPlayground() {
     }
     if (typeof parsed.outletCount === "number" && Number.isFinite(parsed.outletCount)) {
       _setGroupQuantity(group, "outlet", parsed.outletCount);
+    }
+    if (applied.circuitType === "single") {
+      if (typeof parsed.controlCount === "number" && Number.isFinite(parsed.controlCount)) {
+        _setGroupQuantity(group, "switch_single", parsed.controlCount);
+      }
     }
     if (parsed.lightCount) lightCountSelect.value = String(parsed.lightCount);
     outletCountSelect.value = String(parsed.outletCount || 0);
