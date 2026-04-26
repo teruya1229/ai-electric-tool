@@ -3998,6 +3998,9 @@ function formatDiagramReasonCodesUserHint(diagramReasonCodes) {
   if (diagramReasonCodes.some((c) => String(c).includes("single_4lights_diagram_two"))) {
     hints.push("片切1 + 照明4灯は、図では2灯の形にまとめて表示しています");
   }
+  if (diagramReasonCodes.some((c) => String(c).includes("single_3switches_1light_diagram_one"))) {
+    hints.push("片切スイッチ3個 + 照明1灯は、図では代表形にまとめて表示しています");
+  }
   if (
     diagramReasonCodes.some((c) => {
       const code = String(c);
