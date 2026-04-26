@@ -100,13 +100,22 @@ export function buildDevicesFromSelection(circuitType, condition) {
  * @param {InputDevice[]} devices
  * @param {DiagramMode} mode
  */
-function resolveGroupTemplate(groupDevices) {
+function resolveGroupTemplate(groupDevices, compatibility) {
   const switchSingleCount = groupDevices.filter((d) => d.kind === "switch_single").length;
   const switch3wayCount = groupDevices.filter((d) => d.kind === "switch_3way").length;
   const lightCount = groupDevices.filter((d) => d.kind === "light").length;
+  const originalLightCount = Number(compatibility?.originalLightCount || 0);
 
   if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 1) {
     return { isSupported: true, templateId: "single_switch_1light", switchType: undefined, reasonCode: "single_1light" };
+  }
+  if (switchSingleCount === 1 && switch3wayCount === 0 && (lightCount === 4 || originalLightCount === 4)) {
+    return {
+      isSupported: true,
+      templateId: "single_switch_2lights_same_time",
+      switchType: undefined,
+      reasonCode: "single_4lights_diagram_two",
+    };
   }
   if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 2) {
     return {
@@ -124,14 +133,6 @@ function resolveGroupTemplate(groupDevices) {
       reasonCode: "single_3lights_diagram_two",
     };
   }
-  if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 4) {
-    return {
-      isSupported: true,
-      templateId: "single_switch_2lights_same_time",
-      switchType: undefined,
-      reasonCode: "single_4lights_diagram_two",
-    };
-  }
   if (switchSingleCount === 0 && switch3wayCount === 2 && lightCount === 1) {
     return { isSupported: true, templateId: "three_way_1light", switchType: "threeway", reasonCode: "threeway_1light" };
   }
@@ -143,8 +144,8 @@ function resolveGroupTemplate(groupDevices) {
  * @param {InputDevice[]} allDevices
  * @param {InputDevice[]} groupDevices
  */
-function effectiveGroupTemplate(allDevices, groupDevices) {
-  const base = resolveGroupTemplate(groupDevices);
+function effectiveGroupTemplate(allDevices, groupDevices, compatibility) {
+  const base = resolveGroupTemplate(groupDevices, compatibility);
   if (base.isSupported) return base;
 
   const switchSingleCount = groupDevices.filter((d) => d.kind === "switch_single").length;
@@ -294,11 +295,36 @@ function effectiveGroupTemplate(allDevices, groupDevices) {
 }
 
 /**
+ * @param {InputDevice[] | {devices?: InputDevice[], compatibility?: {originalLightCount?: number, renderLightCount?: number}, group?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}, model?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}, context?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}}} input
+ */
+function normalizeDiagramInput(input) {
+  if (Array.isArray(input)) {
+    return {
+      devices: input,
+      compatibility: input.compatibility || null,
+    };
+  }
+  if (input && typeof input === "object") {
+    return {
+      devices: Array.isArray(input.devices) ? input.devices : [],
+      compatibility:
+        input.compatibility ||
+        input.group?.compatibility ||
+        input.model?.compatibility ||
+        input.context?.compatibility ||
+        null,
+    };
+  }
+  return { devices: [], compatibility: null };
+}
+
+/**
  * compatibility 判定の入口。通常描画 / 簡略表示 / 未対応 を reason code とともに返す。
- * @param {InputDevice[]} devices
+ * @param {InputDevice[] | {devices?: InputDevice[], compatibility?: {originalLightCount?: number, renderLightCount?: number}, group?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}, model?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}, context?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}}} input
  * @param {DiagramMode} mode
  */
-export function resolveDiagramCompatibility(devices, mode) {
+export function resolveDiagramCompatibility(input, mode) {
+  const { devices, compatibility } = normalizeDiagramInput(input);
   /** @type {Map<number, InputDevice[]>} */
   const byControl = new Map();
   /** @type {string[]} */
@@ -321,7 +347,7 @@ export function resolveDiagramCompatibility(devices, mode) {
     .sort((a, b) => a[0] - b[0])
     .forEach(([controlId, groupDevices]) => {
       const controlLabel = getControlLabel(controlId, mode);
-      const template = effectiveGroupTemplate(devices, groupDevices);
+      const template = effectiveGroupTemplate(devices, groupDevices, compatibility);
       if (template.isSupported && template.templateId) {
         groups.push({
           controlId,
@@ -365,28 +391,29 @@ export function resolveDiagramCompatibility(devices, mode) {
 }
 
 /**
- * @param {InputDevice[]} devices
+ * @param {InputDevice[] | {devices?: InputDevice[], compatibility?: {originalLightCount?: number, renderLightCount?: number}, group?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}, model?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}, context?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}}} input
  * @param {DiagramMode} mode
  */
-function groupDevicesByControlWithWarnings(devices, mode) {
-  const compatibility = resolveDiagramCompatibility(devices, mode);
+function groupDevicesByControlWithWarnings(input, mode) {
+  const compatibility = resolveDiagramCompatibility(input, mode);
   return { groups: compatibility.groups, warnings: compatibility.warnings };
 }
 
 /**
- * @param {InputDevice[]} devices
+ * @param {InputDevice[] | {devices?: InputDevice[], compatibility?: {originalLightCount?: number, renderLightCount?: number}, group?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}, model?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}, context?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}}} input
  * @param {DiagramMode} mode
  */
-export function groupDevicesByControl(devices, mode) {
-  return groupDevicesByControlWithWarnings(devices, mode).groups;
+export function groupDevicesByControl(input, mode) {
+  return groupDevicesByControlWithWarnings(input, mode).groups;
 }
 
 /**
- * @param {InputDevice[]} devices
+ * @param {InputDevice[] | {devices?: InputDevice[], compatibility?: {originalLightCount?: number, renderLightCount?: number}, group?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}, model?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}, context?: {compatibility?: {originalLightCount?: number, renderLightCount?: number}}}} input
  * @param {DiagramMode} mode
  * @returns {GeneratedDiagram}
  */
-export function generateDiagram(devices, mode) {
+export function generateDiagram(input, mode) {
+  const { devices } = normalizeDiagramInput(input);
   /** @type {string[]} */
   const warnings = [];
   /** @type {DiagramDevice[]} */
@@ -396,7 +423,7 @@ export function generateDiagram(devices, mode) {
   /** @type {DiagramJoint[]} */
   const joints = [];
 
-  const grouped = groupDevicesByControlWithWarnings(devices, mode);
+  const grouped = groupDevicesByControlWithWarnings(input, mode);
   warnings.push(...grouped.warnings);
   const outlets = devices.filter((d) => d.kind === "outlet");
 
