@@ -29,10 +29,20 @@ function renderParseResult(parsed) {
   if (!panel) return;
 
   const circuitMap = { single: "片切", threeway: "3路" };
+  const twoSwitchMultiOutletHint = "片切スイッチ2個 + 複数コンセントは、図では代表形にまとめて表示しています";
+  const warnings = Array.isArray(parsed.warnings) ? parsed.warnings.slice() : [];
+  if (
+    parsed.circuitType === "single" &&
+    Number(parsed.controlCount) === 2 &&
+    Number(parsed.outletCount) >= 2 &&
+    !warnings.includes(twoSwitchMultiOutletHint)
+  ) {
+    warnings.push(twoSwitchMultiOutletHint);
+  }
   const lightText = parsed.lightCount ? `${parsed.lightCount}灯` : "未判定";
   const modeText = parsed.sameTime ? "あり" : "なし";
   const outletText = parsed.outletCount ? `${parsed.outletCount}個` : "なし";
-  const warningText = parsed.warnings.length ? parsed.warnings.join("\n- ") : "なし";
+  const warningText = warnings.length ? warnings.join("\n- ") : "なし";
   const errorText = parsed.errors.length ? parsed.errors.join("\n- ") : "なし";
   const summary = parsed.errors.length ? "解析失敗（エラーあり）" : "解析成功";
 
