@@ -30,6 +30,7 @@ function renderParseResult(parsed) {
 
   const circuitMap = { single: "片切", threeway: "3路" };
   const twoSwitchMultiOutletHint = "片切スイッチ2個 + 複数コンセントは、図では代表形にまとめて表示しています";
+  const threeSwitchOneLightHint = "片切スイッチ3個 + 照明1灯は、図では1灯の形にまとめて表示しています";
   const warnings = Array.isArray(parsed.warnings) ? parsed.warnings.slice() : [];
   if (
     parsed.circuitType === "single" &&
@@ -38,6 +39,15 @@ function renderParseResult(parsed) {
     !warnings.includes(twoSwitchMultiOutletHint)
   ) {
     warnings.push(twoSwitchMultiOutletHint);
+  }
+  if (
+    parsed.circuitType === "single" &&
+    Number(parsed.controlCount) === 3 &&
+    Number(parsed.lightCount) === 1 &&
+    Number(parsed.outletCount || 0) === 0 &&
+    !warnings.includes(threeSwitchOneLightHint)
+  ) {
+    warnings.push(threeSwitchOneLightHint);
   }
   const lightText = parsed.lightCount ? `${parsed.lightCount}灯` : "未判定";
   const modeText = parsed.sameTime ? "あり" : "なし";
