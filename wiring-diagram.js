@@ -4144,11 +4144,21 @@ function parserCodeListIndicatesTwoSwitchMultiOutlet(codeList) {
   return controlCount === 2 && outletCount >= 2;
 }
 
+function parseResultTextIndicatesTwoSwitchMultiOutlet() {
+  const parseText = String(document.querySelector("#parseResultPanel pre")?.textContent || "");
+  if (!parseText) return false;
+  const hasTwoSwitchesFromParseText = /controlCount:\s*2/.test(parseText);
+  const outletMatch = parseText.match(/コンセント数:\s*(\d+)個/);
+  const hasMultiOutletFromParseText = Boolean(outletMatch && Number(outletMatch[1]) >= 2);
+  return hasTwoSwitchesFromParseText && hasMultiOutletFromParseText;
+}
+
 function syncParseCompatWarning(input) {
   const injectThreewayCompat = warrantsThreewayCompatWarningParagraph(input);
   const injectTwoSwitchMultiOutletHint =
     hasTwoSwitchMultiOutletPartialReasonCode(input?.diagramReasonCodes) ||
-    parserCodeListIndicatesTwoSwitchMultiOutlet(input?.parser?.codeList);
+    parserCodeListIndicatesTwoSwitchMultiOutlet(input?.parser?.codeList) ||
+    parseResultTextIndicatesTwoSwitchMultiOutlet();
   const warningEl = document.getElementById("warning-result");
   if (!(warningEl instanceof HTMLElement)) return;
   let currentWarning = String(warningEl.textContent || "");
