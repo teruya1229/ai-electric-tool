@@ -4263,6 +4263,10 @@ if (parseProblemButton instanceof HTMLButtonElement) {
       syncParseCompatWarning(decision);
       syncParseRenderStateUserSummary(decision);
       renderParseDebugResult();
+      window.setTimeout(() => {
+        const latestDecision = window.__lastParseRenderUiDecision || decision;
+        syncParseCompatWarning(latestDecision);
+      }, 0);
     });
   });
 }
