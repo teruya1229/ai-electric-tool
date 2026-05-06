@@ -235,6 +235,15 @@ function effectiveGroupTemplate(allDevices, groupDevices, compatibility) {
     };
   }
 
+  if (switchSingleCount === 3 && switch3wayCount === 0 && lightCount === 3) {
+    return {
+      isSupported: true,
+      templateId: "single_switch_2lights_same_time",
+      switchType: undefined,
+      reasonCode: "single_3switches_3lights_diagram_two",
+    };
+  }
+
   if (switchSingleCount === 3 && switch3wayCount === 0 && lightCount === 0) {
     const hasSupplyOutlet =
       outletInGroup ||
