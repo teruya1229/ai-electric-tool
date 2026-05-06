@@ -8,6 +8,30 @@ AI電気施工アシスタント / `C:\dev\ai-electric-tool` の作業メモ。
 
 ---
 
+## 2026-05-06 片切3+照明2灯 compatibility 完了・次手
+
+### 次にやるべき1手
+- 次回は `control_template_unmatched` / `simplified` / `unsupported` の残件から、新しい1ケースを選ぶ
+- 候補は既存テンプレ流用で済み、`js/diagram/index.js` の1ファイル最小差分で前進できるものを優先する
+- docs 更新後は `status.md` / `handoff.md` だけを commit / push し、その後に次の compatibility 残件候補を1件選定する
+
+### 今回完了したこと
+- `js/diagram/index.js` のみを変更して、片切スイッチ3個 + 照明2灯の compatibility を追加
+- 追加した reasonCode は `single_3switches_2lights_diagram_one`
+- 使用テンプレートは `single_switch_2lights_same_time`
+- `node --check js/diagram/index.js` は成功済み
+- commit は `48190e3a0cbb79e84469b1d3745c571c6980929e`
+- push は成功済み（`main -> main`）
+
+### 注意点
+- `PROJECT_STATE.md` の既存変更は今回の commit に含めていない
+- 大量の未追跡ファイル群も今回の commit に含めていない
+- `stability-test.ps1` は今回も触っていない
+- `js/parser/index.js` / `js/ui/index.js` / `wiring-diagram.js` は今回触っていない
+- 完全な3スイッチ描画、完全な4灯描画、完全な複数コンセント描画には進めていない
+
+---
+
 ## 2026-05-06 片切3+コンセントあり+照明0灯 compatibility 完了・次手
 
 ### 次にやるべき1手
