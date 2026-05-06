@@ -226,6 +226,20 @@ function effectiveGroupTemplate(allDevices, groupDevices, compatibility) {
     };
   }
 
+  if (switchSingleCount === 3 && switch3wayCount === 0 && lightCount === 0) {
+    const hasSupplyOutlet =
+      outletInGroup ||
+      allDevices.some((d) => d.kind === "outlet" && typeof d.controlId !== "number");
+    if (hasSupplyOutlet) {
+      return {
+        isSupported: true,
+        templateId: "single_switch_1light",
+        switchType: undefined,
+        reasonCode: "single_3switches_0light_outlet_bus",
+      };
+    }
+  }
+
   if (switchSingleCount === 2 && switch3wayCount === 0 && lightCount === 2) {
     const supplyOutletCount =
       groupDevices.filter((d) => d.kind === "outlet").length +
