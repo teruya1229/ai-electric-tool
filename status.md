@@ -1,5 +1,29 @@
 # status
 
+## 2026-05-06 片切3+コンセントあり+照明0灯 compatibility 完了
+
+### 完了したこと
+- `js/diagram/index.js` のみを変更し、片切スイッチ3個 + コンセントあり + 照明0灯を既存代表テンプレートへ寄せる compatibility 分岐を追加
+- 追加した reasonCode は `single_3switches_0light_outlet_bus`
+- 使用テンプレートは既存の `single_switch_1light`
+- 条件は「片切スイッチ数3 / 3路スイッチ数0 / 照明数0 / コンセント1以上」
+- 既存の `single_3switches_1light_diagram_one`、`single_4lights_diagram_two`、`single_2switches_0light_outlet_bus` が残っていることを確認
+- `node --check js/diagram/index.js` で構文エラーがないことを確認
+
+### 主な到達コミット
+- `46155e3`: `single_3switches_0light_outlet_bus` を追加
+- `46155e309717822ab4e2edb537a55a905bfa1f14`: `main` へ push 済み
+
+### 現在の状態
+- 今回の commit / push 対象は `js/diagram/index.js` のみ
+- `PROJECT_STATE.md` の既存変更は今回の commit に含めていない
+- 大量の未追跡ファイル群も今回の commit に含めていない
+- 次回は `control_template_unmatched` / `simplified` / `unsupported` の残件から、既存テンプレ流用で済む1ケースを再び選ぶ
+
+### 文字コード注意
+- `status.md` / `handoff.md` は UTF-8（BOMなし）
+- PowerShell 5.1 では既定読み取りで文字化けするため、確認時は必ず `Get-Content -Encoding UTF8` を使う
+
 ## 2026-04-26 片切3+照明1 compatibility 完了
 
 ### 完了したこと
@@ -1139,4 +1163,3 @@ parser / UI / engine 層の�?��?ではな�?
   - probeFileExists: False
   - stdoutTail: step=page open phase=done / e2e-only mode: skip diagnostics and use minimal session / check window handle
   - stderrTail: (empty)
-

@@ -2,6 +2,33 @@
 
 AI電気施工アシスタント / `C:\dev\ai-electric-tool` の作業メモ。
 
+### 文字コード注意
+- `status.md` / `handoff.md` は UTF-8（BOMなし）
+- PowerShell 5.1 では既定読み取りで文字化けするため、確認時は必ず `Get-Content -Encoding UTF8` を使う
+
+---
+
+## 2026-05-06 片切3+コンセントあり+照明0灯 compatibility 完了・次手
+
+### 次にやるべき1手
+- 次回は `control_template_unmatched` / `simplified` / `unsupported` の残件から、新しい1ケースを選ぶ
+- 候補は既存テンプレ流用で済み、`js/diagram/index.js` の1ファイル最小差分で前進できるものを優先する
+- docs 更新後は `status.md` / `handoff.md` だけを commit / push し、その後に次の compatibility 残件候補を1件選定する
+
+### 今回完了したこと
+- `js/diagram/index.js` のみを変更して、片切スイッチ3個 + コンセントあり + 照明0灯の compatibility を追加
+- 追加した reasonCode は `single_3switches_0light_outlet_bus`
+- 使用テンプレートは `single_switch_1light`
+- commit は `46155e309717822ab4e2edb537a55a905bfa1f14`
+- push は成功済み（`main -> main`）
+
+### 注意点
+- `PROJECT_STATE.md` の既存変更は今回の commit に含めていない
+- 大量の未追跡ファイル群も今回の commit に含めていない
+- `stability-test.ps1` は今回も触っていない
+- `js/parser/index.js` / `js/ui/index.js` / `wiring-diagram.js` は今回触っていない
+- 完全な3スイッチ描画、完全な4灯描画、完全な複数コンセント描画には進めていない
+
 ---
 
 ## 2026-04-26 片切3+照明1 compatibility 完了・次手
@@ -1349,4 +1376,3 @@ run-window-handles-only.ps1 ?� stability-test.ps1 ?�?n?�?�?�?ϐ??�?g
 - git��?̏�?� / Claude Code ?� worktree / Windows ?��[?J???�?t?@?C?? ?�?Y???���?�?�?�?�?�
 - Windows ?��[?J?? git ?͐���AClaude Code push ?� 403 ?�?�?�
 - PowerShell ?�?�?�?͍ŏ�?�?�?�?�?�?�
-
