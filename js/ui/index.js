@@ -31,6 +31,7 @@ function renderParseResult(parsed) {
   const circuitMap = { single: "片切", threeway: "3路" };
   const twoSwitchMultiOutletHint = "片切スイッチ2個 + 複数コンセントは、図では代表形にまとめて表示しています";
   const threeSwitchOneLightHint = "片切スイッチ3個 + 照明1灯は、図では1灯の形にまとめて表示しています";
+  const fourSwitchOneLightHint = "片切スイッチ4個 + 照明1灯は、図では1灯の形にまとめて表示しています";
   if (!Array.isArray(parsed.warnings)) parsed.warnings = [];
   const warnings = [...parsed.warnings];
   const isSingleCircuit = parsed.circuitType === "single";
@@ -46,6 +47,16 @@ function renderParseResult(parsed) {
   ) {
     warnings.push(threeSwitchOneLightHint);
     if (!parsed.warnings.includes(threeSwitchOneLightHint)) parsed.warnings.push(threeSwitchOneLightHint);
+  }
+  if (
+    isSingleCircuit &&
+    controlN === 4 &&
+    lightN === 1 &&
+    outletN === 0 &&
+    !warnings.includes(fourSwitchOneLightHint)
+  ) {
+    warnings.push(fourSwitchOneLightHint);
+    if (!parsed.warnings.includes(fourSwitchOneLightHint)) parsed.warnings.push(fourSwitchOneLightHint);
   }
   if (
     isSingleCircuit &&
