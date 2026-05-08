@@ -1,5 +1,35 @@
 # status
 
+## 2026-05-08 片切4+照明4灯 compatibility 完了
+
+### 完了したこと
+- 片切スイッチ4個 + 照明4灯を、既存の2灯代表図へ寄せる compatibility 対応として完了扱いにした。
+- `js/diagram/index.js` には reasonCode `single_4switches_4lights_diagram_two` が追加済み。
+- 実ブラウザで「片切スイッチ4個、照明4灯同時点灯」を確認済み。結果は解析成功、回路種別は片切、灯数は4灯、同時点灯あり、`controlCount: 4`、エラーなし。
+- 既存警告として「現行SVGは照明2灯まで描画対応。残り照明は補助情報扱いです。」と「照明3灯以上は2灯まで図示し、残りは補助情報として扱います。」が表示されることを確認済み。
+- 図は2灯代表図として崩れなし。補助情報 JSON で `templateId: "single_switch_2lights_same_time"` と `compatibility: { originalLightCount: 4, renderLightCount: 2 }` を確認済み。
+- UIデバッグ欄では `reasonCodes: n/a` のままだが、問題文入力フローの debug 表示が compatibility 推定に未接続なためで、今回は追わない。
+- 完全な4スイッチ描画・完全な4灯描画は未対応で、意図的にスコープ外。
+- `stability-test.ps1` は今回一切触っていない。
+
+### 主な到達コミット
+- `43faeff`: 片切4 + 照明4灯を2灯代表図へ寄せる diagram compatibility を追加
+
+### 現在の状態
+- 片切4 + 照明4灯 compatibility 対応は完了扱い。
+- 片切4 + 照明3灯 compatibility 対応も完了扱い。
+- 片切4 + 照明2灯 compatibility 対応も完了扱い。
+- 片切4 + 照明1灯 compatibility 対応も完了扱い。
+- 片切3 + 照明1灯 compatibility 対応も完了扱い。
+- 片切1 + 4灯 compatibility 対応も完了扱い。
+- 2スイッチ + 複数コンセント partial 対応も完了扱い。
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは引き続き残っている。
+
+### 主な注意点
+- UIデバッグ欄の `reasonCodes: n/a` 問題は、必要になったら別タスクで扱う。
+- 完全な4スイッチ描画、完全な3灯/4灯描画、完全な複数コンセント描画には進めない。
+- 代表表示 + compatibility reason + ユーザー向け短文/警告の整合を維持する。
+
 ## 2026-05-08 片切4+照明3灯 compatibility 完了
 
 ### 完了したこと
