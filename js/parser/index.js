@@ -247,6 +247,15 @@ export function parseProblemText(text) {
     const warning = "片切スイッチ4個 + 照明1灯は、図では1灯の形にまとめて表示しています";
     if (!parsed.warnings.includes(warning)) parsed.warnings.push(warning);
   }
+  if (
+    parsed.circuitType === "single" &&
+    Number(parsed.controlCount) === 4 &&
+    Number(parsed.lightCount) === 2 &&
+    Number(parsed.outletCount || 0) === 0
+  ) {
+    const warning = "片切スイッチ4個 + 照明2灯は、図では2灯の形にまとめて表示しています";
+    if (!parsed.warnings.includes(warning)) parsed.warnings.push(warning);
+  }
 
   const validated = validateParsedCombination(parsed);
   parsed.warnings.push(...validated.warnings);
