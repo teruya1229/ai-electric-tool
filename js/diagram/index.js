@@ -289,6 +289,20 @@ function effectiveGroupTemplate(allDevices, groupDevices, compatibility) {
     };
   }
 
+  if (switchSingleCount === 4 && switch3wayCount === 0 && lightCount === 0) {
+    const hasSupplyOutlet =
+      outletInGroup ||
+      allDevices.some((d) => d.kind === "outlet" && typeof d.controlId !== "number");
+    if (hasSupplyOutlet) {
+      return {
+        isSupported: true,
+        templateId: "single_switch_1light",
+        switchType: undefined,
+        reasonCode: "single_4switches_0light_outlet_bus",
+      };
+    }
+  }
+
   if (switchSingleCount === 3 && switch3wayCount === 0 && lightCount === 0) {
     const hasSupplyOutlet =
       outletInGroup ||
