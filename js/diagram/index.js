@@ -226,6 +226,15 @@ function effectiveGroupTemplate(allDevices, groupDevices, compatibility) {
     };
   }
 
+  if (switchSingleCount === 4 && switch3wayCount === 0 && lightCount === 1) {
+    return {
+      isSupported: true,
+      templateId: "single_switch_1light",
+      switchType: undefined,
+      reasonCode: "single_4switches_1light_diagram_one",
+    };
+  }
+
   if (switchSingleCount === 3 && switch3wayCount === 0 && lightCount === 2) {
     return {
       isSupported: true,
