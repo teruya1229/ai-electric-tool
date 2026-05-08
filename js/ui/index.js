@@ -35,9 +35,15 @@ function renderParseResult(parsed) {
   if (!Array.isArray(parsed.warnings)) parsed.warnings = [];
   const warnings = [...parsed.warnings];
   const isSingleCircuit = parsed.circuitType === "single";
-  const controlN = Number(parsed.controlCount);
-  const lightN = Number(parsed.lightCount);
-  const outletN = Number(parsed.outletCount ?? 0);
+  const readCount = (value, fallback = 0) => {
+    const direct = Number(value);
+    if (Number.isFinite(direct)) return direct;
+    const match = String(value ?? "").match(/\d+/);
+    return match ? Number(match[0]) : fallback;
+  };
+  const controlN = readCount(parsed.controlCount);
+  const lightN = readCount(parsed.lightCount);
+  const outletN = readCount(parsed.outletCount, 0);
   if (
     isSingleCircuit &&
     controlN === 3 &&
@@ -60,8 +66,8 @@ function renderParseResult(parsed) {
   }
   if (
     isSingleCircuit &&
-    Number(parsed.controlCount) === 2 &&
-    Number(parsed.outletCount) >= 2 &&
+    controlN === 2 &&
+    outletN >= 2 &&
     !warnings.includes(twoSwitchMultiOutletHint)
   ) {
     warnings.push(twoSwitchMultiOutletHint);
