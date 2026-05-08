@@ -1,5 +1,36 @@
 # status
 
+## 2026-05-08 片切4+照明なし+複数コンセント partial compatibility 完了
+
+### 完了したこと
+- 片切スイッチ4個 + 照明なし + 複数コンセントを、既存の1灯代表図へ寄せる partial compatibility 対応として完了扱いにした。
+- `js/diagram/index.js` には reasonCode `single_4switches_0light_multi_outlet_partial` が追加済み。
+- 実ブラウザで「片切スイッチ4個、コンセント2個」を確認済み。結果は解析成功、回路種別は片切、灯数は1灯（灯数未指定のため補完）、コンセント数は2個、`controlCount: 4`、エラーなし。
+- 警告に「灯数未指定のため1灯として扱います。」、「現行SVGはコンセント1個まで描画対応。残りコンセントは補助情報扱いです。」、「コンセント2個以上は1個まで図示し、残りは補助情報として扱います。」が表示されることを確認済み。
+- 図は1灯代表図 + コンセント1個代表表示で崩れなし。2個目のコンセントは補助情報扱いで、図には描画しない設計どおり。
+- UIデバッグ欄では reasonCode が `control:1:single_1light` になるが、自然文入力フローで `lightCount=0` ではなく `lightCount=1` 補完として扱われるため。`single_4switches_0light_multi_outlet_partial` の実装はソースに存在し、今回の合格判定は実表示・既存警告・描画・エラーなしを優先する。
+- 完全な4スイッチ描画・完全な複数コンセント描画は未対応で、意図的にスコープ外。
+- `stability-test.ps1` は今回一切触っていない。
+
+### 主な到達コミット
+- `8400ef6`: 片切4 + 照明なし + 複数コンセントを `single_4switches_0light_multi_outlet_partial` へ寄せる diagram compatibility を追加
+
+### 現在の状態
+- 片切4 + 照明なし + 複数コンセント partial 対応は完了扱い。
+- 片切3 + 照明なし + 複数コンセント partial 対応も完了扱い。
+- 片切4 + 照明なし + コンセントあり compatibility 対応も完了扱い。
+- 片切4 + 照明1〜4灯 compatibility 対応も完了扱い。
+- 片切3 + 照明1灯 compatibility 対応も完了扱い。
+- 片切1 + 4灯 compatibility 対応も完了扱い。
+- 2スイッチ + 複数コンセント partial 対応も完了扱い。
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは引き続き残っている。
+
+### 主な注意点
+- UIデバッグ欄の reasonCodes 表示差分は、必要になったら別タスクで扱う。
+- 完全な4スイッチ描画、完全な複数コンセント描画、完全な3灯/4灯描画には進めない。
+- 代表表示 + compatibility reason + ユーザー向け短文/警告の整合を維持する。
+- 実ブラウザ確認済みの合格状態を壊さない。
+
 ## 2026-05-08 片切3+照明なし+複数コンセント partial compatibility 完了
 
 ### 完了したこと
