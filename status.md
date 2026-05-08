@@ -1,5 +1,29 @@
 # status
 
+## 2026-05-08 片切4+照明2灯 compatibility 完了
+
+### 完了したこと
+- 片切スイッチ4個 + 照明2灯を、既存の2灯代表図へ寄せる compatibility 対応として完了扱いにした。
+- `js/diagram/index.js` には reasonCode `single_4switches_2lights_diagram_two` が追加済み。
+- `js/parser/index.js` 側で、黒い解析結果欄の「警告:」に補助文が出るよう対応済み。
+- 実ブラウザで「片切スイッチ4個、照明2灯同時点灯」を確認済み。結果は解析成功、回路種別は片切、灯数は2灯、同時点灯あり、コンセント数なし、`controlCount: 4`、エラーなし。
+- 警告に「片切スイッチ4個 + 照明2灯は、図では2灯の形にまとめて表示しています」が表示されることを確認済み。
+- 5504 で最新版読み込みを確認し合格。
+- 完全な4スイッチ描画は未対応で、意図的にスコープ外。代表表示 + compatibility reason + ユーザー向け短文の方針を維持。
+- `stability-test.ps1` は今回一切触っていない。
+
+### 主な到達コミット
+- `976dbf5`: 片切4 + 照明2灯を2灯代表図へ寄せる diagram compatibility を追加
+- `40980c1`: parser warnings に片切4 + 照明2灯の補助文を直接追加
+
+### 現在の状態
+- 片切4 + 照明2灯 compatibility 対応は完了扱い。
+- 片切4 + 照明1 compatibility 対応も完了扱い。
+- 片切3 + 照明1 compatibility 対応も完了扱い。
+- 片切1 + 4灯 compatibility 対応も完了扱い。
+- 2スイッチ + 複数コンセント partial 対応も完了扱い。
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは引き続き残っている。
+
 ## 2026-05-08 片切4+照明1 compatibility 完了
 
 ### 完了したこと
