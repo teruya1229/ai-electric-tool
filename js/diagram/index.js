@@ -191,6 +191,19 @@ function effectiveGroupTemplate(allDevices, groupDevices, compatibility) {
         };
       }
     }
+    if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 4) {
+      const supplyOutletCount =
+        groupDevices.filter((d) => d.kind === "outlet").length +
+        allDevices.filter((d) => d.kind === "outlet" && typeof d.controlId !== "number").length;
+      if (supplyOutletCount > 1) {
+        return {
+          isSupported: true,
+          templateId: "single_switch_2lights_same_time",
+          switchType: undefined,
+          reasonCode: "single_4lights_multi_outlet_partial",
+        };
+      }
+    }
     return base;
   }
 
