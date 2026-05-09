@@ -383,6 +383,20 @@ function effectiveGroupTemplate(allDevices, groupDevices, compatibility) {
   }
 
   if (switchSingleCount === 2 && switch3wayCount === 0 && lightCount === 3) {
+    const supplyOutletCount =
+      groupDevices.filter((d) => d.kind === "outlet").length +
+      allDevices.filter((d) => d.kind === "outlet" && typeof d.controlId !== "number").length;
+    if (supplyOutletCount > 1) {
+      return {
+        isSupported: true,
+        templateId: "single_switch_2lights_same_time",
+        switchType: undefined,
+        reasonCode: "single_2switches_3lights_multi_outlet_partial",
+      };
+    }
+  }
+
+  if (switchSingleCount === 2 && switch3wayCount === 0 && lightCount === 3) {
     return {
       isSupported: true,
       templateId: "single_switch_2lights_same_time",
