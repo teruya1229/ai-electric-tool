@@ -146,12 +146,27 @@ function resolveGroupTemplate(groupDevices, compatibility) {
  */
 function effectiveGroupTemplate(allDevices, groupDevices, compatibility) {
   const base = resolveGroupTemplate(groupDevices, compatibility);
-  if (base.isSupported) return base;
-
   const switchSingleCount = groupDevices.filter((d) => d.kind === "switch_single").length;
   const switch3wayCount = groupDevices.filter((d) => d.kind === "switch_3way").length;
   const lightCount = groupDevices.filter((d) => d.kind === "light").length;
   const outletInGroup = groupDevices.some((d) => d.kind === "outlet");
+
+  if (base.isSupported) {
+    if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 3) {
+      const supplyOutletCount =
+        groupDevices.filter((d) => d.kind === "outlet").length +
+        allDevices.filter((d) => d.kind === "outlet" && typeof d.controlId !== "number").length;
+      if (supplyOutletCount > 1) {
+        return {
+          isSupported: true,
+          templateId: "single_switch_2lights_same_time",
+          switchType: undefined,
+          reasonCode: "single_3lights_multi_outlet_partial",
+        };
+      }
+    }
+    return base;
+  }
 
   if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 0) {
     const supplyOutletCount =
