@@ -1,5 +1,25 @@
 # status
 
+## 2026-05-24 調査メモ: 3路+コンセントは現状 compatibility 横展開対象外
+
+### 調査したこと
+- 確認入力: 「3路スイッチ2個、照明1灯、コンセント2個」
+- 実ブラウザ結果は解析失敗で、図描画は停止。
+- 判定詳細は 回路種別: 3路 / 灯数: 1灯 / コンセント数: 2個 / `controlCount: 1` / `confidence: 70` / `matchedRules: circuit:threeway, light:1, outlet:2`。
+- エラーは「3路 + コンセントは現行描画仕様で未対応です。」が2件表示。
+- 図エリアは「複線図を表示できません / 回路情報が不足しています」を表示。
+- `templateId` は `single_switch_1light` のフォールバック値、`reasonCodes` は `control:1:single_1light` / `renderMode: blocked` / `parserReason: parse.error` を確認。
+- `threeway_1light_multi_outlet_partial` は未実装扱い、`outlet-extra-2` 記録なし、`sceneParseErrors: []`。
+
+### 判断
+- 3路+コンセントは parser 側の未対応エラーで止まっており、`js/diagram/index.js` の compatibility 分岐追加だけでは解決しない。
+- 今回の「1ファイル最小差分（diagramのみ）」対象外として扱い、別タスク化する。
+
+### 主な注意点
+- 3路+コンセントを `js/diagram/index.js` だけで無理に直さない。
+- parser / UI / warning / `wiring-diagram.js` に広がるため、今は追わない。
+- 片切 multi-outlet 系の完了済み合格状態は維持する。
+
 ## 2026-05-09 片切2系 1灯/2灯 + 複数コンセント partial 回帰確認完了
 
 ### 完了したこと

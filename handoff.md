@@ -1,3 +1,30 @@
+## 2026-05-24 docs区切り: 3路+コンセント調査結果（対象外）と次手
+
+### 次にやるべき1手
+- 次回は `control_template_unmatched` / `simplified` / `unsupported` の残件から、3路+コンセント以外の新規1ケースを選ぶ。
+- 3路+コンセントは parser 側エラーで描画停止するため、今の「`js/diagram/index.js` 1ファイル最小差分」では扱わない。
+- 片切 multi-outlet 系の完了済みケース再修正には戻らない。
+
+### 今回記録した調査結果
+- 入力「3路スイッチ2個、照明1灯、コンセント2個」は実ブラウザで解析失敗。
+- エラー「3路 + コンセントは現行描画仕様で未対応です。」が2件表示され、図は「複線図を表示できません / 回路情報が不足しています」で停止。
+- `matchedRules` は `circuit:threeway, light:1, outlet:2`、`reasonCodes` は `control:1:single_1light` / `renderMode: blocked` / `parserReason: parse.error`。
+- `templateId` は `single_switch_1light` フォールバックで、`outlet-extra-2` 記録なし。
+- このため 3路+コンセントは別タスク（parser/UI/wiring連携）として扱う。
+
+### 判断基準
+- 既存テンプレ流用で済むこと。
+- `js/diagram/index.js` の1ファイル最小差分で済むこと。
+- 完全描画に進まず、代表表示 + compatibility reason の整合を維持すること。
+- parser / UI / warning / `wiring-diagram.js` まで広がる場合は、実装せず調査止まりにすること。
+
+### 注意点
+- 3路+コンセントは今は追わない。
+- `stability-test.ps1` は触らない。
+- 完全な複数コンセント描画には進めない。
+- UIデバッグ欄 reasonCodes 表示差分は今は追わない。
+- `PROJECT_STATE.md` の既存変更と未追跡ファイル群は触らない。
+
 ## 2026-05-09 docs区切り: 片切2系 1灯/2灯 + 複数コンセント partial 回帰確認完了後の次手
 
 ### 次にやるべき1手
