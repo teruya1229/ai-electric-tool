@@ -204,6 +204,19 @@ function effectiveGroupTemplate(allDevices, groupDevices, compatibility) {
         };
       }
     }
+    if (switchSingleCount === 0 && switch3wayCount === 2 && lightCount === 1) {
+      const supplyOutletCount =
+        groupDevices.filter((d) => d.kind === "outlet").length +
+        allDevices.filter((d) => d.kind === "outlet" && typeof d.controlId !== "number").length;
+      if (supplyOutletCount > 1) {
+        return {
+          isSupported: true,
+          templateId: "three_way_1light",
+          switchType: "threeway",
+          reasonCode: "threeway_1light_multi_outlet_partial",
+        };
+      }
+    }
     if (switchSingleCount === 4 && switch3wayCount === 0 && lightCount === 2) {
       const supplyOutletCount =
         groupDevices.filter((d) => d.kind === "outlet").length +
