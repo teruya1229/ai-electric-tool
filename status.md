@@ -1,5 +1,33 @@
 # status
 
+## 2026-05-24 docs区切り: 片切3+照明3灯+複数コンセント partial compatibility 完了確認
+
+### 完了したこと
+- 片切スイッチ3個 + 照明3灯 + 複数コンセントを、既存の2灯代表図 + コンセント1個代表表示へ寄せる partial compatibility を完了扱いにした。
+- `js/diagram/index.js` の reasonCode `single_3switches_3lights_multi_outlet_partial` は実装済みで、実ブラウザ入力「片切スイッチ3個、照明3灯同時点灯、コンセント2個」で合格を確認済み。
+- 実ブラウザ確認では、解析成功 / 回路種別: 片切 / 灯数: 3灯 / 同時点灯: あり / コンセント数: 2個 / `controlCount: 3` / エラーなしを確認済み。
+- 警告は簡略表示方針どおりに表示され、図は2灯代表 + コンセント1個代表表示で崩れないことを確認済み。
+- 内部JSONで `templateId: "single_switch_2lights_same_time"`、`compatibility.originalLightCount: 3` / `compatibility.renderLightCount: 2`、`sw1/sw2/sw3`、`outlet-extra-2`、`sceneParseErrors: []` を確認済み。
+- UIデバッグ欄の `reasonCodes: n/a` は既知の表示未接続差分として今回は追わず、`stability-test.ps1` も未実施。
+
+### 主な到達コミット
+- `40177a4`: `single_3switches_3lights_multi_outlet_partial` を追加した実装コミット
+
+### 現在の状態
+- 片切3 + 照明3灯/2灯/1灯/なし + 複数コンセント partial は完了扱い。
+- 片切1個系の複数コンセント partial（0灯補完/1灯/2灯/3灯/4灯）は完了扱い。
+- 片切2 + 照明3灯/4灯 + 複数コンセント partial は完了扱い。
+- 片切4 + 照明なし + 複数コンセント partial、片切4 + 照明なし + コンセントあり、片切4 + 照明1〜4灯は完了扱い。
+- 片切1 + 4灯、および2スイッチ + 複数コンセント partial も完了扱い。
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは継続して残っている。
+
+### 主な注意点
+- `stability-test.ps1` は触らない。
+- 完全な複数コンセント描画、完全な3灯/4灯/5灯/6灯描画、完全な3スイッチ/4スイッチ描画には進めない。
+- 代表表示 + compatibility reason + ユーザー向け短文/警告の整合を維持する。
+- 実ブラウザ確認済みの合格状態を壊さない。
+- 次回も1ファイル最小差分を基本にする。
+
 ## 2026-05-09 片切3+照明3灯+複数コンセント partial compatibility 完了
 
 ### 完了したこと
