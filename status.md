@@ -1,5 +1,52 @@
 # status
 
+## 2026-05-24 docs区切り: 片切4+照明3灯+複数コンセント partial compatibility 完了確認
+
+### 完了したこと
+- 片切スイッチ4個 + 照明3灯 + 複数コンセントを、既存の2灯代表図 + コンセント1個代表表示へ寄せる partial compatibility 対応を完了扱いにした。
+- `js/diagram/index.js` に reasonCode `single_4switches_3lights_multi_outlet_partial` を追加済み。
+- 実ブラウザ入力「片切スイッチ4個、照明3灯同時点灯、コンセント2個」で確認済み。
+- 判定結果は、解析成功 / 回路種別: 片切 / 灯数: 3灯 / 同時点灯: あり / コンセント数: 2個 / `controlCount: 4` / エラーなし / `confidence: 85`。
+- `matchedRules` は `circuit:single`, `control:single_switch_count`, `light:3`, `outlet:2`, `sameTime:true` を確認済み。
+- 警告は「片切の多灯+コンセントは図を簡略表示します。」「現行SVGは照明2灯まで描画対応。残り照明は補助情報扱いです。」「現行SVGはコンセント1個まで描画対応。残りコンセントは補助情報扱いです。」「照明3灯以上は2灯まで図示し、残りは補助情報として扱います。」「コンセント2個以上は1個まで図示し、残りは補助情報として扱います。」を確認済み。
+- 図は2灯代表図 + コンセント1個代表表示で崩れなし。完全な4スイッチ描画・完全な3灯描画・完全な複数コンセント描画には進めていない。
+- 内部JSONで `templateId: "single_switch_2lights_same_time"`、`compatibility.originalLightCount: 3` / `compatibility.renderLightCount: 2`、`sw1/sw2/sw3/sw4`、`outlet-extra-2`、`sceneParseErrors: []` を確認済み。
+- UIデバッグ欄の `reasonCodes: n/a` は既知の問題文入力フローの debug 表示未接続として、今回は追わない。
+- `stability-test.ps1` は今回一切触っていない。
+
+### スモーク確認
+- 入力「片切スイッチ4個、照明2灯同時点灯、コンセント2個」で解析成功を確認済み。
+- `templateId: "single_switch_2lights_same_time"` を確認済み。
+- `compatibility.originalLightCount: 2` / `compatibility.renderLightCount: 2` を確認済み。
+- `sw4` 記録あり、`outlet-extra-2` 補助記録あり、`sceneParseErrors: []`、エラーなし、退行なしを確認済み。
+
+### 主な到達コミット
+- `7e5c273`: `single_4switches_3lights_multi_outlet_partial` を追加した実装コミット
+
+### 現在の状態
+- 片切4 + 照明3灯 + 複数コンセント partial 対応は完了扱い。
+- 片切4 + 照明2灯 + 複数コンセント partial 対応も退行なし確認済み。
+- 片切4 + 照明1灯 + 複数コンセント partial 対応も完了扱い。
+- 片切3 + 照明1灯/2灯/3灯/4灯 + 複数コンセント partial 対応も完了扱い。
+- 片切3 + 照明なし + 複数コンセント partial 対応も完了扱い。
+- 片切1個系の複数コンセント partial 全般は完了扱い。
+- 片切2 + 照明3灯/4灯 + 複数コンセント partial 対応も完了扱い。
+- 片切4 + 照明なし + 複数コンセント partial 対応も完了扱い。
+- 片切4 + 照明なし + コンセントあり対応も完了扱い。
+- 片切4 + 照明1〜4灯対応も完了扱い。
+- 片切1 + 4灯対応も完了扱い。
+- 2スイッチ + 複数コンセント partial 対応も完了扱い。
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは継続して残っている。
+
+### 主な注意点
+- `stability-test.ps1` は触らない。
+- 完全な複数コンセント描画には進めない。
+- 完全な3灯/4灯/5灯/6灯描画には進めない。
+- 完全な3スイッチ/4スイッチ描画には進めない。
+- 代表表示 + compatibility reason + ユーザー向け短文/警告の整合を維持する。
+- 実ブラウザ確認済みの合格状態を壊さない。
+- 次回も1ファイル最小差分を基本にする。
+
 ## 2026-05-24 docs区切り: 片切4+照明2灯+複数コンセント partial compatibility 完了確認
 
 ### 完了したこと

@@ -1,3 +1,36 @@
+## 2026-05-24 docs区切り: 片切4+照明3灯+複数コンセント partial compatibility 完了後の次手
+
+### 次にやるべき1手
+- 次回は `control_template_unmatched` / `simplified` / `unsupported` の残件から、新しい1ケースを選ぶ。
+- 今回完了した以下は再修正しない。片切4 + 照明3灯 + 複数コンセント partial、片切4 + 照明2灯 + 複数コンセント partial、片切4 + 照明1灯 + 複数コンセント partial、片切3 + 照明1灯/2灯/3灯/4灯 + 複数コンセント partial、片切3 + 照明なし + 複数コンセント partial、片切1個系の複数コンセント partial 全般、片切2 + 照明3灯/4灯 + 複数コンセント partial、片切4系（照明なし複数コンセント / 照明なしコンセントあり / 照明1〜4灯）、片切1 + 4灯、2スイッチ + 複数コンセント partial。
+- 次候補は、片切4 + 照明4灯 + 複数コンセント partial など、既存テンプレ流用で1ファイル最小差分にできるものを優先する。
+- UIデバッグ欄の reasonCodes 表示差分は今は追わない。
+- 5灯/6灯など灯数バリエーション拡張も今は追わない。
+- `PROJECT_STATE.md` 更新やシリーズ全体のリグレッション確認は必要になったら別タスクで扱う。
+
+### 今回完了したこと
+- 片切スイッチ4個 + 照明3灯 + 複数コンセントを、既存の2灯代表図 + コンセント1個代表表示へ寄せる partial compatibility 対応を完了扱いにした。
+- `js/diagram/index.js` に reasonCode `single_4switches_3lights_multi_outlet_partial` を追加済み。
+- 実ブラウザ入力「片切スイッチ4個、照明3灯同時点灯、コンセント2個」で、解析成功 / 回路種別: 片切 / 灯数: 3灯 / 同時点灯: あり / コンセント数: 2個 / `controlCount: 4` / エラーなし / `confidence: 85` を確認済み。
+- 図は2灯代表図 + コンセント1個代表表示で崩れなし。完全な4スイッチ描画・完全な3灯描画・完全な複数コンセント描画には進めていない。
+- 内部JSONで `templateId: "single_switch_2lights_same_time"`、`compatibility.originalLightCount: 3` / `compatibility.renderLightCount: 2`、`sw1/sw2/sw3/sw4`、`outlet-extra-2`、`sceneParseErrors: []` を確認済み。
+- スモーク確認（片切スイッチ4個、照明2灯同時点灯、コンセント2個）で、`templateId: "single_switch_2lights_same_time"`、`compatibility.originalLightCount: 2` / `compatibility.renderLightCount: 2`、`sw4` 記録、`outlet-extra-2` 記録、`sceneParseErrors: []`、エラーなし、退行なしを確認済み。
+- 実装コミットは `7e5c273`。
+
+### 判断基準
+- 既存テンプレ流用で済むこと。
+- `js/diagram/index.js` の1ファイル最小差分で済むこと。
+- 代表表示 + compatibility reason + ユーザー向け短文/警告の整合を維持できること。
+- parser / UI / warning / `wiring-diagram.js` まで広がる場合は、実装せず調査報告で止めること。
+
+### 注意点
+- `stability-test.ps1` は触らない。
+- 完全な複数コンセント描画には進めない。
+- 完全な3灯/4灯/5灯/6灯描画には進めない。
+- 完全な3スイッチ/4スイッチ描画には進めない。
+- 実ブラウザ確認済みの合格状態を壊さない。
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは引き続き残っている。
+
 ## 2026-05-24 docs区切り: 片切4+照明2灯+複数コンセント partial compatibility 完了後の次手
 
 ### 次にやるべき1手
