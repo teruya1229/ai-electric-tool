@@ -288,9 +288,18 @@ function effectiveGroupTemplate(allDevices, groupDevices, compatibility) {
   }
 
   if (switchSingleCount === 1 && switch3wayCount === 0 && lightCount === 5) {
-    const hasSupplyOutlet =
-      outletInGroup ||
-      allDevices.some((d) => d.kind === "outlet" && typeof d.controlId !== "number");
+    const supplyOutletCount =
+      groupDevices.filter((d) => d.kind === "outlet").length +
+      allDevices.filter((d) => d.kind === "outlet" && typeof d.controlId !== "number").length;
+    const hasSupplyOutlet = supplyOutletCount > 0;
+    if (hasSupplyOutlet && supplyOutletCount === 1) {
+      return {
+        isSupported: true,
+        templateId: "single_switch_2lights_same_time",
+        switchType: undefined,
+        reasonCode: "single_5lights_1outlet_diagram_two",
+      };
+    }
     if (!hasSupplyOutlet) {
       return {
         isSupported: true,
