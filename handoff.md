@@ -1,3 +1,56 @@
+## 2026-05-25 docs区切り: 片切1+照明6灯同時点灯 representative compatibility 完了後の次手
+
+### 次にやるべき1手
+- 次回は `control_template_unmatched` / `simplified` / `unsupported` の残件から、新しい1ケースを選ぶ。
+- 6灯をさらに広げる場合は、必ず1ケース限定で明示承認してから進める。
+- 次候補にするなら「片切2 + 6灯同時点灯」などを別タスクとして検討する。
+- 複数コンセント付き6灯・複数コンセント付き5灯・3路+コンセントは今は追わない。
+- UIデバッグ欄の reasonCodes 表示差分も今は追わない。
+- `PROJECT_STATE.md` 更新やシリーズ全体のリグレッション確認は必要になったら別タスクで扱う。
+
+### 今回完了したこと
+- 片切スイッチ1個 + 照明6灯同時点灯を、既存の2灯代表図へ寄せる限定 compatibility 対応を完了扱いにした。
+- `js/diagram/index.js` に reasonCode `single_6lights_diagram_two` を追加済み。
+- 今回は 6灯全体解禁ではなく、「片切1 + 6灯同時点灯」1ケース限定で対応した。
+- 片切2/3/4 + 6灯には広げていない。
+- 複数コンセント付き6灯には広げていない。
+- 実ブラウザ入力「片切スイッチ1個、照明6灯同時点灯」を確認済み。
+- 実装コミットは `47e426d`。
+
+### 実ブラウザ確認結果
+- 判定結果: 解析成功
+- 回路種別: 片切 / 灯数: 6灯 / 同時点灯: あり / コンセント数: なし / `controlCount: 1`
+- エラー: なし
+- `confidence: 85`、`matchedRules: circuit:single, control:single_switch_count, light:6, sameTime:true` を確認済み。
+- `templateId: "single_switch_2lights_same_time"` を確認済み。
+- `compatibility.originalLightCount: 6` / `compatibility.renderLightCount: 2` を確認済み。
+- devices は `sw1/light1/light2` の2灯代表として記録、`light3〜light6` は補助情報扱い。
+- `outlet-extra-2` はコンセントなしのため存在しない。
+- `sceneParseErrors: []` を確認済み。
+- UIデバッグ欄の `reasonCodes: n/a`、DOM上で `single_6lights_diagram_two` が表示されない件は既知差分として今回は追わない。
+- 警告は「現行SVGは照明2灯まで描画対応。残り照明は補助情報扱いです。」「照明3灯以上は2灯まで図示し、残りは補助情報として扱います。」を確認済み。
+- 図は2灯代表図で崩れなし。完全な6灯描画には進んでいない。
+- 5灯テストと同一レイアウト・同一構造で合格。
+- `stability-test.ps1` は今回一切触っていない。
+
+### 判断基準
+- 代表表示 + compatibility reason + ユーザー向け短文/警告の整合を維持できるものを選ぶ。
+- 完全描画に進まず、既存テンプレ流用または reason 具体化で前進できるものを選ぶ。
+- parser / UI / warning / `wiring-diagram.js` まで広がる場合は、実装せず調査報告で止める。
+- 次回も `js/diagram/index.js` の1ファイル最小差分を優先する。
+
+### 注意点
+- `stability-test.ps1` は触らない。
+- 完全な6灯描画には進めない。
+- 片切2/3/4 + 6灯には広げない。
+- 複数コンセント付き6灯には広げない。
+- 複数コンセント付き5灯には広げない。
+- 3路+コンセントには触らない。
+- 代表表示 + compatibility reason + ユーザー向け短文/警告の整合を維持する。
+- 実ブラウザ確認済みの合格状態を壊さない。
+- 次回も1ファイル最小差分を基本にする。
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは引き続き残っている。
+
 ## 2026-05-09 docs区切り: 片切1+照明5灯同時点灯 representative compatibility 完了後の次手
 
 ### 次にやるべき1手
