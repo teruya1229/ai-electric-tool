@@ -1,3 +1,47 @@
+## 2026-05-09 docs区切り: 片切1+照明5灯同時点灯 representative compatibility 完了後の次手
+
+### 次にやるべき1手
+- 5灯は 1/2/3/4 スイッチ同時点灯までを限定対応済みとして扱う。
+- 次回は `control_template_unmatched` / `simplified` / `unsupported` の残件から、新しい1ケースを選ぶ。
+- 6灯へ進む場合は、必ず1ケース限定で明示承認を取ってから進める。
+- 複数コンセント付き5灯・3路+コンセント・UIデバッグ欄の reasonCodes 表示差分は今は追わない。
+- `PROJECT_STATE.md` 更新は別タスクとして扱う。
+
+### 今回完了したこと
+- 片切スイッチ1個 + 照明5灯同時点灯を、既存の2灯代表図へ寄せる限定 compatibility 対応を完了扱いにした。
+- `js/diagram/index.js` に reasonCode `single_5lights_diagram_two` を追加済み。
+- 既存テンプレート `single_switch_2lights_same_time` を流用。
+- 今回は 5灯/6灯全体解禁ではなく、「片切1 + 5灯同時点灯」1ケース限定で対応した。
+- 実ブラウザ入力「片切スイッチ1個、照明5灯同時点灯」を確認済み。
+- 実装コミットは `fb7d935`。
+
+### 実ブラウザ確認結果
+- 判定結果: 解析成功
+- 回路種別: 片切 / 灯数: 5灯 / 同時点灯: あり / `controlCount: 1`
+- エラー: なし
+- `templateId: "single_switch_2lights_same_time"` を確認済み。
+- `compatibility.originalLightCount: 5` / `compatibility.renderLightCount: 2` を確認済み。
+- devices は `sw1` のみ記録、`light3〜light5` は補助情報扱い。
+- `sceneParseErrors: []` を確認済み。
+- UIデバッグ欄の `reasonCodes: n/a` は既知差分として今回は追わない。
+- 警告2件表示（照明2灯まで描画 / 3灯以上は2灯まで図示）を確認済み。
+- 図は2灯代表図で崩れなし。完全な5灯描画には進んでいない。
+
+### 判断基準
+- 代表表示 + compatibility reason + ユーザー向け短文/警告の整合を維持できるものを選ぶ。
+- 完全描画に進まず、既存テンプレ流用または reason 具体化で前進できるものを選ぶ。
+- parser / UI / warning / `wiring-diagram.js` まで広がる場合は、実装せず調査報告で止める。
+- 次回も `js/diagram/index.js` の1ファイル最小差分を優先する。
+
+### 注意点
+- `stability-test.ps1` は触らない。
+- 完全な5灯描画には進めない。
+- 6灯には広げない。
+- 複数コンセント付き5灯には広げない。
+- 3路+コンセントには触らない。
+- 実ブラウザ確認済みの合格状態を壊さない。
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは引き続き残っている。
+
 ## 2026-05-25 docs区切り: 片切4+照明5灯同時点灯 representative compatibility 完了後の次手
 
 ### 次にやるべき1手

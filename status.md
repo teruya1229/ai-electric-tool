@@ -1,5 +1,50 @@
 # status
 
+## 2026-05-09 片切1 + 照明5灯同時点灯 representative compatibility 完了
+
+### 完了したこと
+- 片切スイッチ1個 + 照明5灯同時点灯を、既存の2灯代表図へ寄せる限定 compatibility 対応を完了扱いにした。
+- `js/diagram/index.js` に reasonCode `single_5lights_diagram_two` を追加済み。
+- 使用テンプレートは既存の `single_switch_2lights_same_time` を流用。
+- 今回は 5灯/6灯全体解禁ではなく、「片切1 + 5灯同時点灯」1ケース限定で対応した。
+- 実ブラウザ入力「片切スイッチ1個、照明5灯同時点灯」を確認済み。
+
+### 実ブラウザ確認結果
+- 判定結果: 解析成功
+- 回路種別: 片切
+- 灯数: 5灯
+- 同時点灯: あり
+- `controlCount`: 1
+- エラー: なし
+- `templateId: "single_switch_2lights_same_time"` を確認済み。
+- `compatibility.originalLightCount: 5` / `compatibility.renderLightCount: 2` を確認済み。
+- devices は `sw1` のみ記録。
+- `light3〜light5` は完全描画せず補助情報扱い。
+- `sceneParseErrors: []` を確認済み。
+- UIデバッグ欄の `reasonCodes: n/a` は既知差分として今回は追わない。
+- 警告は「現行SVGは照明2灯まで描画対応。残り照明は補助情報扱いです。」「照明3灯以上は2灯まで図示し、残りは補助情報として扱います。」を確認済み。
+- 図は2灯代表図で崩れなし。完全な5灯描画には進んでいない。
+- ファイル変更なしの確認のみ（docs追記のみ実施）。
+
+### 主な到達コミット
+- `fb7d935`: `single_5lights_diagram_two` を追加した実装コミット
+
+### 現在の状態
+- 片切1/2/3/4 + 5灯同時点灯は限定対応として完了扱い。
+- 5灯/6灯全体拡張は未解禁。
+- 6灯は未対応のまま。
+- 複数コンセント付き5灯は未対応のまま。
+- 3路+コンセントは別タスクのまま。
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは継続して残っている。
+
+### 主な注意点
+- `stability-test.ps1` は触らない。
+- 完全な5灯描画には進めない。
+- 6灯には広げない。
+- 複数コンセント付き5灯には広げない。
+- 3路+コンセントには触らない。
+- 代表表示 + compatibility reason + ユーザー向け短文/警告の整合を維持する。
+
 ## 2026-05-25 docs区切り: 片切4+照明5灯同時点灯 representative compatibility 完了確認
 
 ### 完了したこと
