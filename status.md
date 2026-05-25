@@ -1,5 +1,64 @@
 # status
 
+## 2026-05-25 片切2 + 照明6灯同時点灯 representative compatibility 完了
+
+### 完了したこと
+- 片切スイッチ2個 + 照明6灯同時点灯を、既存の2灯代表図へ寄せる限定 compatibility 対応を完了扱いにした。
+- `js/diagram/index.js` に reasonCode `single_2switches_6lights_diagram_two` を追加済み。
+- 今回は 6灯全体解禁ではなく、「片切2 + 6灯同時点灯」1ケース限定で対応した。
+- 片切3/4 + 6灯には広げていない。
+- 複数コンセント付き6灯には広げていない。
+- 実ブラウザ入力「片切スイッチ2個、照明6灯同時点灯」を確認済み。
+
+### 実ブラウザ確認結果
+- 判定結果: 解析成功
+- 回路種別: 片切
+- 灯数: 6灯
+- 同時点灯: あり
+- コンセント数: なし
+- `controlCount`: 2
+- エラー: なし
+- `confidence`: 85
+- `matchedRules`: `circuit:single`, `control:single_switch_count`, `light:6`, `sameTime:true`
+- `templateId: "single_switch_2lights_same_time"` を確認済み。
+- `compatibility.originalLightCount: 6` / `compatibility.renderLightCount: 2` を確認済み。
+- devices は `sw1/sw2/light1/light2` の2灯代表として記録。
+- `light3〜light6` は完全描画されず補助情報扱い。
+- `outlet-extra-2` はコンセントなしのため存在しない。
+- `sceneParseErrors: []` を確認済み。
+- UIデバッグ欄の `reasonCodes: n/a` は既知差分として今回は追わない。
+- DOM上で `single_2switches_6lights_diagram_two` が表示されない件も、reasonCode表示未接続の既知差分として今回は追わない。
+- 警告は「現行SVGは照明2灯まで描画対応。残り照明は補助情報扱いです。」「照明3灯以上は2灯まで図示し、残りは補助情報として扱います。」を確認済み。
+- 図は2灯代表図で崩れなし。完全な6灯描画には進んでいない。
+- `sw2` は devices に記録されるが、描画は代表1個のまま（既存の代表表示方針どおり）。
+- 片切1 + 6灯ケースと同等の合格基準を満たしている。
+- `stability-test.ps1` は今回一切触っていない。
+
+### 主な到達コミット
+- `13e9c0b`: `single_2switches_6lights_diagram_two` を追加した実装コミット
+
+### 現在の状態
+- 片切2 + 6灯同時点灯は限定対応として完了扱い。
+- 片切1 + 6灯同時点灯も限定対応として完了扱い。
+- 片切1/2/3/4 + 5灯同時点灯は限定対応として完了扱い。
+- ただし、6灯全体拡張は未解禁。
+- 片切3/4 + 6灯は未対応のまま。
+- 複数コンセント付き5灯/6灯は未対応のまま。
+- 片切1/2/3/4系の複数コンセント partial は既存完了扱い。
+- 3路+コンセントは parser 側エラー停止として別タスク扱い。
+- `PROJECT_STATE.md` の既存変更と大量の未追跡ファイルは引き続き残っている。
+
+### 主な注意点
+- `stability-test.ps1` は触らない。
+- 完全な6灯描画には進めない。
+- 片切3/4 + 6灯には広げない。
+- 複数コンセント付き6灯には広げない。
+- 複数コンセント付き5灯には広げない。
+- 3路+コンセントには触らない。
+- 代表表示 + compatibility reason + ユーザー向け短文/警告の整合を維持する。
+- 実ブラウザ確認済みの合格状態を壊さない。
+- 次回も1ファイル最小差分を基本にする。
+
 ## 2026-05-25 片切1 + 照明6灯同時点灯 representative compatibility 完了
 
 ### 完了したこと
