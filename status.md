@@ -28,7 +28,7 @@
 - `stability-test.ps1` は今回一切触っていない。
 
 ### 主な到達コミット
-- `single_4switches_5lights_diagram_two` の実装コミットは、`git log --oneline -- js/diagram/index.js` では未確認（現時点では hash なし）。
+- `3aa8621`: `single_4switches_5lights_diagram_two` を追加した実装コミット
 
 ### 現在の状態
 - 片切4 + 5灯同時点灯は限定対応として完了扱い。
