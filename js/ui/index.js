@@ -600,6 +600,10 @@ export function initPlayground() {
     if (parsed.errors.length || !applied.circuitType) {
       state.inputErrors = [...parsed.errors];
       state.inputWarnings = [...parsed.warnings];
+      state.diagram = EMPTY_DIAGRAM;
+      state.error = "解析失敗（エラーあり）";
+      groupEl.textContent = "グループ化結果なし";
+      renderDiagram(state.diagram, state.error);
       return;
     }
     const group = getActiveGroup();
